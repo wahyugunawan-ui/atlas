@@ -1,0 +1,30 @@
+# Setelan editor yang berlaku di semua mesin.
+#
+# Ada karena timnya campuran Windows dan macOS, dan akhiran baris yang berbeda membuat
+# seluruh berkas tampak berubah di diff meski isinya sama — perubahan sungguhan jadi
+# tenggelam di antaranya. Didukung VS Code, JetBrains, dan Sublime tanpa plugin.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Berkas batch WAJIB CRLF. Dengan LF, cmd.exe salah membaca baris terakhir dan
+# start.bat gagal dengan pesan yang tidak menyebut sebabnya.
+[*.bat]
+end_of_line = crlf
+
+[*.md]
+# Dua spasi di akhir baris itu penanda ganti baris di Markdown, bukan spasi nyasar.
+trim_trailing_whitespace = false
+
+[*.{json,yml,yaml}]
+indent_size = 2
+
+[*.sql]
+indent_size = 2

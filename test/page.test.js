@@ -1,0 +1,300 @@
+/**
+ * Pemeriksaan statis halaman dashboard.
+ *
+ * Halaman versi rekan mati justru karena kelas bug yang diperiksa di sini: markup
+ * memanggil sesuatu yang tidak pernah ada, dan tidak ada yang menyadarinya sampai
+ * halamannya dibuka. Setelah dipecah jadi modul, ada satu kelas bug baru dengan
+ * gejala yang sama: import yang menunjuk nama yang tidak diekspor.
+ *
+ * Yang dijaga:
+ *   1. tiap berkas modul bisa di-parse
+ *   2. tiap import menunjuk berkas yang ada dan nama yang benar-benar diekspor
+ *   3. tiap handler on*="..." di markup terdaftar di window
+ *   4. tiap $('id') yang dirujuk modul ada di markup
+ *   5. tidak ada aset dari internet, tidak ada Google Maps
+ *   6. nilai dari Excel selalu lewat esc() sebelum masuk innerHTML
+ *   7. PII tetap bisa dicabut tanpa menyunting kode
+ */
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+
+const ROOT = path.join(__dirname, '..');
+const JS_DIR = path.join(ROOT, 'public', 'js');
+const html = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
+
+const files = fs.readdirSync(JS_DIR).filter((name) => name.endsWith('.js'));
+const source = {};
+files.forEach((name) => {
+  source[name] = fs.readFileSync(path.join(JS_DIR, name), 'utf8');
+});
+
+/**
+ * Buang sintaks import/export supaya isinya bisa diperiksa vm.Script.
+ *
+ * Berbasis baris, bukan regex multi-baris. Versi regexnya diam-diam melewatkan import
+ * yang memanjang beberapa baris dan menyisakan '}' menggantung, lalu melaporkan
+ * kesalahan sintaks yang sebenarnya tidak ada — kegagalan yang menyesatkan justru di
+ * dalam alat yang gunanya menemukan kegagalan.
+ */
+function stripModuleSyntax(code) {
+  const out = [];
+  const lines = code.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    if (/^import\s/.test(lines[i])) {
+      // Import berakhir di baris yang memuat ';' penutupnya.
+      while (i < lines.length && !/;\s*$/.test(lines[i])) i++;
+      out.push('');
+      continue;
+    }
+    out.push(lines[i].replace(/^export\s+/, ''));
+  }
+  return out.join('\n');
+}
+
+/** Nama yang diekspor satu modul. */
+function exportsOf(code) {
+  const names = [];
+  for (const m of code.matchAll(
+    /^export\s+(?:async\s+)?(?:function|const|let|class)\s+([A-Za-z_$][\w$]*)/gm)) {
+    names.push(m[1]);
+  }
+  return names;
+}
+
+/** Nama yang di-import satu modul, per berkas asal. */
+function importsOf(code) {
+  const found = [];
+  // [\s\S] bukan . — daftar import boleh memanjang beberapa baris.
+  for (const m of code.matchAll(/^import\s*\{([\s\S]*?)\}\s*from\s*'\.\/([^']+)'/gm)) {
+    found.push({
+      from: m[2],
+      names: m[1].split(',').map((s) => s.trim()).filter(Boolean),
+    });
+  }
+  return found;
+}
+
+function test() {
+  // 1. tiap modul bisa di-parse.
+  //
+  // vm.Script tidak menerima sintaks import/export, jadi dipakai SourceTextModule
+  // kalau tersedia; kalau tidak, importnya dilucuti dulu supaya yang diperiksa tetap
+  // isi modulnya. Yang dicari di sini kesalahan sintaks, bukan resolusi modul —
+  // resolusi diperiksa di langkah 2.
+  for (const name of files) {
+    const stripped = stripModuleSyntax(source[name]);
+    try {
+      new vm.Script(stripped, { filename: name });
+    } catch (error) {
+      throw new Error(`${name} tidak bisa di-parse: ${error.message}`);
+    }
+  }
+
+  // 2. import menunjuk berkas dan nama yang ada
+  const exported = {};
+  files.forEach((name) => { exported[name] = exportsOf(source[name]); });
+
+  const broken = [];
+  for (const name of files) {
+    for (const imported of importsOf(source[name])) {
+      if (!source[imported.from]) {
+        broken.push(`${name}: berkas './${imported.from}' tidak ada`);
+        continue;
+      }
+      for (const symbol of imported.names) {
+        if (!exported[imported.from].includes(symbol)) {
+          broken.push(`${name}: '${symbol}' tidak diekspor oleh ${imported.from}`);
+        }
+      }
+    }
+  }
+  assert.deepStrictEqual(broken, [],
+    `import menunjuk nama yang tidak ada:\n  ${broken.join('\n  ')}`);
+
+  // Sebuah modul tidak boleh mendeklarasikan nama yang juga di-import. Ini mematikan
+  // SELURUH halaman, bukan satu fungsi — modulnya gagal dievaluasi dan semua yang
+  // bergantung padanya ikut tidak jalan. Gejalanya cuma satu baris di konsol.
+  const clashes = [];
+  for (const name of files) {
+    const declared = new Set([
+      ...exportsOf(source[name]),
+      ...[...source[name].matchAll(
+        /^(?:async\s+)?(?:function|const|let|class)\s+([A-Za-z_$][\w$]*)/gm)].map((m) => m[1]),
+    ]);
+    for (const imported of importsOf(source[name])) {
+      for (const symbol of imported.names) {
+        if (declared.has(symbol)) {
+          clashes.push(`${name}: '${symbol}' di-import dari ${imported.from} ` +
+            'sekaligus dideklarasikan lagi di sini');
+        }
+      }
+    }
+  }
+  assert.deepStrictEqual(clashes, [],
+    `nama bentrok antara import dan deklarasi:\n  ${clashes.join('\n  ')}`);
+
+  // 3. handler harus terdaftar di window lewat HANDLERS di app.js.
+  //
+  // Dicari di DUA tempat, dan yang kedua justru yang lebih sering salah: markup
+  // statis di index.html, DAN markup yang dibangun JavaScript di dalam template
+  // literal. Versi awal tes ini cuma memindai index.html, dan tiga handler yang
+  // namanya berubah waktu modularisasi lolos begitu saja — klik kelurahan di peta,
+  // klik treemap, dan tombol Detail konsumen mati tanpa satu pun tes merah.
+  const handlerPattern =
+    /\bon(?:click|change|input|mouseenter|mouseleave|mousemove)=\\?["']\s*(?:if\s*\([^)]*\)\s*)?([A-Za-z_$][\w$]*)\s*\(/g;
+
+  const called = [...html.matchAll(handlerPattern)].map((m) => m[1]);
+  for (const name of files) {
+    for (const m of source[name].matchAll(handlerPattern)) called.push(m[1]);
+  }
+  const ignored = new Set(['if', 'event', 'namaFungsi']);   // contoh di komentar
+  const handlers = called.filter((name) => !ignored.has(name));
+
+  const block = source['app.js'].match(/const HANDLERS = \{([\s\S]*?)\n\};/);
+  assert.ok(block, 'app.js harus punya blok HANDLERS');
+  // Komentar dibuang dulu: blok HANDLERS dikelompokkan dengan komentar `//`, dan
+  // memecah begitu saja pada spasi akan menganggap tiap kata di komentar sebagai nama
+  // handler.
+  const registered = new Set(block[1]
+    .replace(/\/\/[^\n]*/g, '')
+    .split(/[,\s]+/).map((s) => s.trim()).filter(Boolean));
+
+  const unregistered = [...new Set(handlers)].filter((name) => !registered.has(name));
+  assert.deepStrictEqual(unregistered, [],
+    `markup memanggil fungsi yang tidak didaftarkan ke window: ${unregistered.join(', ')}`);
+
+  // Setiap yang didaftarkan harus benar-benar ada — kalau tidak, app.js gagal muat
+  // dan SELURUH halaman mati, bukan cuma satu tombol.
+  const allExports = new Set(Object.values(exported).flat());
+  const phantom = [...registered].filter((name) => !allExports.has(name));
+  assert.deepStrictEqual(phantom, [],
+    `HANDLERS mendaftarkan nama yang tidak ada di modul mana pun: ${phantom.join(', ')}`);
+
+  // 4. id yang dirujuk modul harus ada di markup
+  const usedIds = [];
+  files.forEach((name) => {
+    for (const m of source[name].matchAll(/\$\('([A-Za-z0-9_-]+)'\)/g)) usedIds.push(m[1]);
+  });
+  // Id dikumpulkan dari markup statis DAN dari markup yang dibangun JavaScript —
+  // panel rincian kelurahan membuat elemennya sendiri saat dibuka, dan id di situ
+  // sama sahnya dengan yang ditulis di index.html.
+  const presentIds = new Set([
+    ...[...html.matchAll(/id="([A-Za-z0-9_-]+)"/g)].map((m) => m[1]),
+    ...files.flatMap((name) =>
+      [...source[name].matchAll(/id="([A-Za-z0-9_-]+)"/g)].map((m) => m[1])),
+  ]);
+  const missingIds = [...new Set(usedIds)].filter((id) => !presentIds.has(id));
+  assert.deepStrictEqual(missingIds, [],
+    `modul merujuk id yang tidak ada di markup: ${missingIds.join(', ')}`);
+
+  // 5. tidak ada aset dari internet
+  //
+  // Bukan soal selera: jaringan kantor bisa memblokir CDN, dan halaman yang separuh
+  // jadi tidak akan memberi tahu siapa pun bahwa penyebabnya di luar aplikasi.
+  const external = [...html.matchAll(/(?:src|href)="(https?:\/\/[^"]+)"/g)].map((m) => m[1]);
+  assert.deepStrictEqual(external, [],
+    `markup masih memuat aset dari internet:\n  ${external.join('\n  ')}`);
+
+  for (const banned of ['maps.googleapis.com', 'google.maps', 'markerclusterer',
+    'HeatmapLayer', 'google.script.run', 'cdn.tailwindcss.com']) {
+    assert.ok(!html.includes(banned), `index.html masih memuat "${banned}"`);
+  }
+  for (const name of files) {
+    assert.ok(!/https?:\/\/(?!www\.openstreetmap\.org)/.test(
+      source[name].replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '')),
+    `${name} memuat URL keluar; hanya tautan atribusi OpenStreetMap yang boleh`);
+  }
+
+  // 6. nilai dari Excel harus lewat esc() sebelum masuk innerHTML.
+  //
+  // Pemeriksaannya per baris, jadi penugasan textContent yang dipecah dua baris akan
+  // dilaporkan sebagai pelanggaran. Itu disengaja: alarm palsu cuma bikin kamu
+  // melihat, sedangkan pemeriksa yang lebih pintar bisa melewatkan yang asli.
+  const fromExcel =
+    /(dealerNames\[[^\]]*\]|S\.villageName\[[^\]]*\]|S\.cityName\[[^\]]*\]|p\.nama[A-Za-z_]*|f\.nama[A-Za-z_]*)/g;
+  const leaks = [];
+  for (const name of files) {
+    source[name].split('\n').forEach((line, i) => {
+      if (!/innerHTML|setHTML|`</.test(line) && !/^\s*`/.test(line)) return;
+      if (/textContent/.test(line)) return;
+      for (const m of line.matchAll(fromExcel)) {
+        const before = line.slice(Math.max(0, m.index - 40), m.index);
+        if (!/esc\(/.test(before)) leaks.push(`${name}:${i + 1}: ${line.trim().slice(0, 60)}`);
+      }
+    });
+  }
+  assert.deepStrictEqual(leaks, [],
+    `nilai dari Excel masuk innerHTML tanpa escape:\n  ${leaks.join('\n  ')}`);
+
+  // 7. PII tidak boleh bisa diambil borongan dari halaman.
+  //
+  // Yang dijaga bukan "tidak ada PII" — nama dan alamat konsumen memang ditampilkan
+  // atas permintaan pemilik proyek. Yang dijaga: satu akun dipakai bersama, jadi
+  // tidak boleh ada satu permintaan pun yang mengembalikan seluruh basis data
+  // konsumen sekaligus.
+  //
+  // Ini pengganti penjaga lama yang memeriksa keberadaan berkas konsumen.json.
+  // Arsitekturnya berubah — konsumen sekarang datang dari API per kelurahan — tapi
+  // sifat yang dijaga persis sama.
+  const clientCalls = files.flatMap((name) =>
+    [...source[name].matchAll(/fetchCustomers\(([^)]*)\)/g)].map((m) => m[1].trim()));
+  assert.ok(clientCalls.length, 'tidak ada satu pun pemanggilan fetchCustomers');
+  clientCalls.forEach((args) => {
+    assert.ok(args && !args.startsWith(','),
+      `fetchCustomers dipanggil tanpa kode kelurahan: fetchCustomers(${args})`);
+  });
+  // fetchCustomers harus SELALU menyertakan kode kelurahan di query-nya.
+  const fetchBody = source['api.js'].slice(
+    source['api.js'].indexOf('export function fetchCustomers'));
+  const bodyEnd = fetchBody.indexOf('\n}');
+  assert.ok(/village['"]?\s*[:,]\s*villageCode/.test(fetchBody.slice(0, bodyEnd)),
+    'fetchCustomers tidak menyertakan kode kelurahan di permintaannya');
+
+  // Pintu KEDUA: halaman Data Konsumen. Penyaringnya bebas — tidak wajib menyebut
+  // kelurahan — jadi yang menjaganya bukan bentuk permintaan tapi batas di server.
+  //
+  // Di sini cuma dipastikan batasnya masih dipasang dan halaman tidak memanggil jalur
+  // lain. Bahwa batasnya benar-benar memotong diuji sungguhan di import.test.js
+  // terhadap database berisi lebih dari BROWSE_LIMIT baris — pemeriksaan teks saja
+  // tidak pernah bisa membuktikan itu.
+  const repoSource = fs.readFileSync(
+    path.join(ROOT, 'src', 'server', 'repository.js'), 'utf8');
+  const browseBody = repoSource.slice(repoSource.indexOf('async function browseCustomers'));
+  assert.ok(/LIMIT \?/.test(browseBody.slice(0, browseBody.indexOf('\n}'))),
+    'browseCustomers harus membatasi jumlah baris yang dikembalikan');
+  assert.ok(/const BROWSE_LIMIT = \d+;/.test(repoSource),
+    'BROWSE_LIMIT harus konstanta yang terlihat, bukan angka yang tersebar');
+
+  // Halaman harus tetap utuh kalau server tidak punya data konsumen sama sekali.
+  assert.ok(/S\.hasCustomers/.test(source['tables.js']),
+    'panel kelurahan harus memeriksa S.hasCustomers sebelum meminta data konsumen');
+  assert.ok(/if \(!S\.hasCustomers\)/.test(source['tables.js']),
+    'halaman Data Konsumen harus memeriksa S.hasCustomers sebelum meminta data');
+
+  const ignore = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8');
+  assert.ok(/^data\/$/m.test(ignore),
+    'folder data WAJIB ada di .gitignore — sekali ter-commit, PII ada di riwayat selamanya');
+
+  // 8. sumber data terpusat, supaya gampang dipindah waktu hosting berubah
+  assert.ok(/export const API = '[^']*';/.test(source['config.js']),
+    'alamat API harus satu konstanta di config.js');
+  assert.ok(/export const GEO_BASE = '[^']*';/.test(source['config.js']),
+    'alamat berkas geo harus satu konstanta di config.js');
+
+  // Hanya api.js yang boleh tahu bentuk URL server. Kalau modul lain memanggil fetch
+  // sendiri, penanganan sesi habis dan pesan errornya akan berbeda-beda.
+  const rogueFetch = files.filter((name) => name !== 'api.js' &&
+    /(?:^|[^\w.])fetch\s*\(/.test(
+      source[name].replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')));
+  assert.deepStrictEqual(rogueFetch, [],
+    `modul ini memanggil fetch() sendiri, bukan lewat api.js: ${rogueFetch.join(', ')}`);
+
+  const totalLines = files.reduce((sum, f) => sum + source[f].split('\n').length, 0);
+  console.log(`OK page — ${files.length} modul (${totalLines} baris), ` +
+    `${new Set(handlers).size} handler terdaftar, ${new Set(usedIds).size} id, ` +
+    'tanpa aset internet, semua ter-escape, PII terkurung');
+}
+
+test();

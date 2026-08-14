@@ -1,0 +1,4 @@
+{
+  "//": "Menandai public/js sebagai ES module. Tanpa berkas ini Node mewarisi \"type\": \"commonjs\" dari package.json akar, dan tes yang meng-import berkas frontend gagal parse. Browser tidak membacanya sama sekali.",
+  "type": "module"
+}

@@ -1,0 +1,30 @@
+# Akhiran baris ditentukan di sini, bukan diserahkan ke setelan git tiap orang.
+#
+# .editorconfig mengatur editor; berkas ini mengatur git. Keduanya perlu: tanpa
+# .gitattributes, `core.autocrlf` di mesin masing-masing bisa mengubah akhiran baris
+# saat clone dan membatalkan apa yang sudah diatur.
+
+# Semua berkas teks disimpan LF di dalam repositori.
+* text=auto eol=lf
+
+# KECUALI berkas batch. Dengan LF, cmd.exe salah membaca baris terakhir dan start.bat
+# gagal dengan pesan yang tidak menyebut sebabnya — persis berkas yang diklik dua kali
+# oleh tim yang tidak punya orang IT.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Biner: jangan disentuh sama sekali.
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.pmtiles binary
+*.xlsx binary
+*.pdf binary
+
+# Keluaran build dan data besar tidak perlu ikut dihitung sebagai "kode" di statistik
+# bahasa GitHub — kalau tidak, proyeknya tampak seperti proyek CSS.
+public/vendor/** linguist-vendored
+public/css/app.css linguist-generated
+prototype/index.html linguist-generated

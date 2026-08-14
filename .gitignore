@@ -1,0 +1,49 @@
+# ==========================================================================
+# Folder data. Memuat arsip Excel dari Astra dan berkas geo besar. Letak
+# sebenarnya diatur lewat DATA_DIR di .env dan sebaiknya di luar OneDrive.
+# Baris ini menjaga kalau ada yang terlanjur membuatnya di dalam proyek.
+#
+# Databasenya sendiri ada di PostgreSQL, bukan di sini — tapi arsip Excel yang
+# diunggah MEMUAT PII, jadi folder ini tidak boleh masuk git dalam keadaan apa pun.
+# ==========================================================================
+data/
+
+# ==========================================================================
+# Kredensial. Sekali ter-commit, sandi dan rahasia penanda tangan cookie ada di
+# riwayat git SELAMANYA — menghapusnya di commit berikutnya tidak menghapus apa pun.
+# Yang boleh masuk git cuma .env.example yang nilainya kosong.
+# ==========================================================================
+.env
+.env.*
+!.env.example
+
+# ==========================================================================
+# Dibangun dari sumber, bukan ditulis tangan. Semuanya dibuat ulang oleh
+# `npm install` (lewat postinstall) atau `npm run build`.
+# ==========================================================================
+node_modules/
+public/css/app.css
+public/vendor/
+
+# Hasil build prototipe (±5 MB). Dibangun ulang dengan: node prototype/build.js
+prototype/index.html
+
+# ==========================================================================
+# Keluaran sementara
+# ==========================================================================
+*.log
+*.tmp
+coverage/
+
+# ==========================================================================
+# Sampah sistem operasi dan editor. Tim memakai Windows dan macOS, dan berkas
+# ini muncul sendiri tanpa ada yang membuatnya.
+# ==========================================================================
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*.lnk
+.DS_Store
+.idea/
+.vscode/
+*.swp

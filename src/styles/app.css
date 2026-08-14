@@ -1,0 +1,99 @@
+/**
+ * Gaya aplikasi. Sumber untuk `npm run css` -> public/css/app.css
+ *
+ * Tailwind di-build di sini, BUKAN dimuat dari CDN. Selain karena jaringan kantor
+ * bisa memblokir CDN, versi CDN adalah kompiler yang jalan di browser: dia menerapkan
+ * CSS setelah render pertama, dan itu yang dulu membuat kanvas MapLibre salah ukuran
+ * dan butuh resize() manual.
+ */
+@import "tailwindcss";
+
+/* CSS vendor (font, ikon, maplibre, apexcharts) SENGAJA tidak di-@import ke sini.
+ * Tailwind menyatukan isinya tapi TIDAK menulis ulang url() di dalamnya, jadi
+ * ./fonts/x.woff2 yang tadinya relatif terhadap public/vendor/ akan dicari di
+ * public/css/ dan hilang tanpa error — halaman tetap tampil, cuma ikonnya jadi
+ * kotak kosong. Berkas-berkas itu ditautkan terpisah dari index.html. */
+
+@source "../../public/**/*.html";
+@source "../../public/js/**/*.js";
+
+    :root {
+      /* Astra Motor Corporate Identity */
+      --astra-navy: #0b2f6b;
+      --astra-navy-dark: #071c42;
+      --astra-navy-light: #123d8c;
+      --astra-red: #e2231a;
+      --astra-red-dark: #b91a13;
+
+      --ink: #0b1220; --panel: #0f1729; --line: #1e293b;
+      --accent: #3b82f6; --accent-2: #22d3ee;
+      --good: #10b981; --bad: var(--astra-red); --warn: #f59e0b;
+      --canvas: #f2f4f9;
+    }
+    * { box-sizing: border-box; }
+    body { font-family: 'Manrope', sans-serif; background: var(--canvas); }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    .hidden { display: none !important; }
+    ::-webkit-scrollbar { width: 7px; height: 7px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    .loader { border: 3px solid rgba(11,47,107,0.12); border-top: 3px solid var(--astra-navy); border-radius: 50%; width: 36px; height: 36px; animation: spin 0.9s linear infinite; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .stat-number { font-variant-numeric: tabular-nums; transition: color 0.3s; letter-spacing: -0.02em; }
+    @keyframes riseIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .rise-in { animation: riseIn 0.45s cubic-bezier(0.16,1,0.3,1) both; }
+
+    /* Top Navbar */
+    #topnav { background: linear-gradient(90deg, var(--astra-navy-dark), var(--astra-navy) 55%, var(--astra-navy-light)); }
+    .nav-btn { color: rgba(255,255,255,0.62); transition: all 0.2s ease; }
+    .nav-btn:hover { background: rgba(255,255,255,0.08); color: #fff; transform: translateY(-1px); }
+    .nav-btn.active { background: #ffffff; color: var(--astra-navy); box-shadow: 0 6px 16px rgba(0,0,0,0.18); }
+
+    .tm-btn { color: #64748b; transition: all 0.2s ease; }
+    .tm-btn:hover { color: #1e293b; }
+    .tm-btn.active { background: white; color: var(--astra-navy); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+
+    .map-container { height: calc(100vh - 300px); min-height: 500px; }
+
+    /* Glassmorphism panel + tooltip */
+    .map-panel { background: rgba(255,255,255,0.72); backdrop-filter: blur(14px) saturate(160%); -webkit-backdrop-filter: blur(14px) saturate(160%); border: 1px solid rgba(255,255,255,0.55); border-radius: 16px; box-shadow: 0 16px 40px rgba(11,47,107,0.14); }
+    .float-tooltip { position: fixed; z-index: 400; pointer-events: none; background: rgba(7,28,66,0.88); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); color: #e2e8f0; border-radius: 10px; padding: 10px 12px; font-size: 12.5px; box-shadow: 0 14px 34px rgba(0,0,0,0.30); transform: translate(-50%, -120%); max-width: 240px; opacity: 0; transition: opacity 0.15s ease; border: 1px solid rgba(255,255,255,0.12); }
+    .float-tooltip.show { opacity: 1; }
+
+    .switch { position: relative; width: 34px; height: 19px; flex-shrink:0; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .switch .track { position: absolute; inset: 0; background: #cbd5e1; border-radius: 999px; transition: background 0.2s ease; cursor: pointer; }
+    .switch .track:before { content: ''; position: absolute; width: 15px; height: 15px; left: 2px; top: 2px; background: white; border-radius: 50%; transition: transform 0.2s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+    .switch input:checked + .track { background: var(--astra-navy); }
+    .switch input:checked + .track:before { transform: translateX(15px); }
+    .toggle-row { display:flex; align-items:center; justify-content:space-between; gap: 10px; padding: 8px 2px; transition: background 0.15s ease; border-radius: 8px; }
+    .toggle-row:hover { background: rgba(11,47,107,0.04); }
+
+    .stat-card { transition: all 0.25s cubic-bezier(0.16,1,0.3,1); }
+    .stat-card:hover { transform: translateY(-3px); box-shadow: 0 16px 32px rgba(15,23,42,0.10); }
+
+    .filter-select { transition: all 0.2s ease; }
+    .cari-opsi { outline: none; }
+    .cari-opsi:focus { background: rgba(11,47,107,0.05); border-radius: 6px; }
+    .filter-select:hover { background: rgba(11,47,107,0.05); }
+
+    tbody tr { transition: background-color 0.15s ease, transform 0.15s ease; }
+    tbody tr:hover td { background-color: rgba(11,47,107,0.035); }
+
+    #sync-btn { transition: all 0.2s ease; }
+    #sync-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(16,185,129,0.25); }
+
+    .pos-analysis-row { cursor: pointer; }
+    .pos-analysis-row.selected { border-color: var(--astra-navy) !important; box-shadow: 0 6px 16px rgba(11,47,107,0.12); background: rgba(11,47,107,0.03); }
+
+    .marker-outlet { cursor: pointer; display: flex; align-items: center; justify-content: center;
+      border-radius: 999px; color: #fff; border: 2px solid #fff;
+      box-shadow: 0 2px 6px rgba(11,47,107,.35); transition: transform .15s ease; }
+    .marker-outlet:hover { transform: scale(1.15); }
+    .marker-outlet.dealer { width: 30px; height: 30px; font-size: 16px; }
+    .marker-outlet.pos { width: 22px; height: 22px; font-size: 12px; }
+    .marker-outlet.redup { opacity: .35; }
+    #kelurahanDetailPanel { transition: transform 0.3s cubic-bezier(0.16,1,0.3,1); }
+    #konsumenDetailModal .modal-card { animation: riseIn 0.25s cubic-bezier(0.16,1,0.3,1) both; }

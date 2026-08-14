@@ -1,0 +1,408 @@
+/**
+ * Peta: basemap, lapisan choropleth, batas kabupaten, radius, dan titik penjualan.
+ */
+import {
+  ATTRIBUTION, ATTRIBUTION_SATELLITE, BASEMAP_PMTILES, BASEMAP_SATELLITE,
+  RADIUS_METERS,
+} from './config.js';
+import { classOf, dealerColor, percentileBreaks, RAMP, COLOR_EMPTY } from './colors.js';
+import { $, bbox, sumBy, toast } from './dom.js';
+import { activeRows, filterValue } from './filters.js';
+import { circle, EMPTY_COLLECTION } from './geo.js';
+import { S } from './state.js';
+
+export function setupMap() {
+  // Protokol pmtiles harus terdaftar SEBELUM Map dibuat, kalau tidak MapLibre tidak
+  // tahu cara membaca url 'pmtiles://' dan basemapnya kosong tanpa pesan apa pun.
+  maplibregl.addProtocol('pmtiles', new pmtiles.Protocol().tile);
+
+  S.map = new maplibregl.Map({
+    container: 'map',
+    center: [109.9, -7.7],
+    zoom: 7.6,
+    style: {
+      version: 8,
+      glyphs: '/vendor/glyphs/{fontstack}/{range}.pbf',
+      sources: {
+        protomaps: { type: 'vector', url: 'pmtiles://' + BASEMAP_PMTILES,
+          attribution: ATTRIBUTION },
+        satelit: { type: 'raster', tiles: [BASEMAP_SATELLITE], tileSize: 256,
+          maxzoom: 19, attribution: ATTRIBUTION_SATELLITE },
+      },
+      layers: [
+        { id: 'polos', type: 'background', paint: { 'background-color': '#eef1f6' } },
+        { id: 'bm-satelit', type: 'raster', source: 'satelit',
+          layout: { visibility: 'none' } },
+        // noLabels: jalan/air/tutupan lahan saja. Nama tempat bawaan dimatikan supaya
+        // tidak berebut dengan label kelurahan.
+        ...protomaps_themes_base.noLabels('protomaps', 'grayscale'),
+      ],
+    },
+  });
+
+  S.map.addControl(new maplibregl.NavigationControl(), 'top-right');
+  S.map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }));
+
+  // Citra satelit datang dari internet. Kalau jaringan kantor menutupnya, petanya
+  // akan diam-diam kosong; lebih baik memberi tahu daripada membiarkan orang mengira
+  // datanya yang hilang.
+  S.map.on('error', (e) => {
+    const url = (e && e.error && e.error.url) || '';
+    if (S.basemap === 'satelit' && url.includes('arcgisonline')) {
+      toast('Citra satelit tidak bisa diambil — jaringan ini sepertinya menutup akses keluar.',
+        'error');
+    }
+  });
+
+  // Tinggi kontainer datang dari CSS dan berubah waktu jendela diubah ukurannya.
+  // MapLibre menyimpan ukuran kanvas saat dibuat dan tidak mengikutinya sendiri.
+  let lastSize = '';
+  new ResizeObserver((entries) => {
+    const r = entries[0].contentRect;
+    const key = Math.round(r.width) + 'x' + Math.round(r.height);
+    if (key === lastSize || !r.width) return;
+    lastSize = key;
+    S.map.resize();
+  }).observe($('map'));
+}
+
+const PROTOMAPS_LAYERS = () =>
+  S.map.getStyle().layers.filter((l) => l.source === 'protomaps').map((l) => l.id);
+
+export function setBasemap(which) {
+  S.basemap = which;
+  ['lokal', 'satelit', 'polos'].forEach((name) => {
+    const button = $('bm-' + name);
+    if (!button) return;
+    button.className = 'flex-1 px-2 py-1.5 rounded-md ' +
+      (name === which ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500');
+  });
+
+  PROTOMAPS_LAYERS().forEach((id) => {
+    S.map.setLayoutProperty(id, 'visibility', which === 'lokal' ? 'visible' : 'none');
+  });
+  S.map.setLayoutProperty('bm-satelit', 'visibility',
+    which === 'satelit' ? 'visible' : 'none');
+
+  if (S.layersReady) redrawMap();
+}
+
+export function addLayers() {
+  S.map.addSource('kel', { type: 'geojson', data: S.geo, promoteId: 'kode' });
+
+  S.map.addLayer({
+    id: 'kel-isi', type: 'fill', source: 'kel',
+    paint: {
+      'fill-color': ['coalesce', ['feature-state', 'warna'], COLOR_EMPTY],
+      'fill-opacity': 0.85,
+    },
+  });
+  S.map.addLayer({
+    id: 'kel-garis', type: 'line', source: 'kel',
+    paint: { 'line-color': '#ffffff', 'line-width': 0.5, 'line-opacity': 0.7 },
+  });
+  S.map.addLayer({
+    id: 'kel-terpilih', type: 'line', source: 'kel',
+    filter: ['==', ['get', 'kode'], ''],
+    paint: { 'line-color': '#0b2f6b', 'line-width': 2.5 },
+  });
+  S.map.addLayer({
+    id: 'kel-nama', type: 'symbol', source: 'kel', minzoom: 10.5,
+    layout: {
+      'text-field': ['get', 'nama'], 'text-font': ['Noto Sans Regular'],
+      'text-size': 11, 'text-allow-overlap': false,
+    },
+    paint: { 'text-color': '#1e293b', 'text-halo-color': '#ffffff', 'text-halo-width': 1.4 },
+  });
+
+  S.map.addSource('kota', { type: 'geojson', data: S.cityGeo });
+  S.map.addLayer({
+    id: 'kota-garis', type: 'line', source: 'kota',
+    paint: { 'line-color': '#e2231a', 'line-width': 1.6, 'line-opacity': 0.85 },
+  });
+
+  S.map.addSource('radius', { type: 'geojson', data: EMPTY_COLLECTION });
+  S.map.addLayer({
+    id: 'radius-isi', type: 'fill', source: 'radius',
+    paint: { 'fill-color': '#0b2f6b', 'fill-opacity': 0.05 },
+  });
+  S.map.addLayer({
+    id: 'radius-garis', type: 'line', source: 'radius',
+    paint: { 'line-color': '#0b2f6b', 'line-width': 1.6, 'line-dasharray': [2, 2] },
+  });
+
+  // Titik penjualan: lapisan circle, BUKAN marker DOM. Delapan belas ribu elemen DOM
+  // akan membekukan halaman begitu petanya digeser.
+  S.map.addSource('jual', { type: 'geojson', data: EMPTY_COLLECTION });
+  S.map.addLayer({
+    id: 'jual-titik', type: 'circle', source: 'jual',
+    layout: { visibility: 'none' },
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 7, 1.4, 11, 2.6, 14, 4.5],
+      'circle-color': ['get', 'warna'],
+      'circle-opacity': 0.75,
+      'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 11, 0, 13, 0.5],
+      'circle-stroke-color': '#ffffff',
+    },
+  });
+}
+
+/** Warnai kelurahan menurut kelas persentil sebaran yang sedang tampil. */
+export function paintChoropleth(rows) {
+  const perVillage = sumBy(rows, 'village');
+  const breaks = percentileBreaks(Object.values(perVillage));
+
+  S.geo.features.forEach((f) => {
+    const value = perVillage[f.properties.kode] || 0;
+    const cls = classOf(value, breaks);
+    S.map.setFeatureState({ source: 'kel', id: f.properties.kode },
+      { warna: cls < 0 ? COLOR_EMPTY : RAMP[cls] });
+  });
+
+  return { perVillage, breaks };
+}
+
+export function redrawMap() {
+  if (!S.layersReady) return;
+  const on = (id) => ($(id) ? $(id).checked : false);
+
+  S.map.setLayoutProperty('kel-garis', 'visibility', on('opt-batas') ? 'visible' : 'none');
+  S.map.setLayoutProperty('kel-nama', 'visibility', on('opt-nama') ? 'visible' : 'none');
+  S.map.setLayoutProperty('kota-garis', 'visibility', on('opt-kota') ? 'visible' : 'none');
+
+  const showPoints = on('opt-jual');
+  if (showPoints) S.map.getSource('jual').setData(buildSalePoints());
+  S.map.setLayoutProperty('jual-titik', 'visibility', showPoints ? 'visible' : 'none');
+  if ($('map-note')) $('map-note').classList.toggle('hidden', !showPoints);
+
+  // Titik penjualan ikut ruang lingkup.
+  //
+  // Yang disaring lapisan MapLibre, bukan datanya. Membangun ulang belasan ribu titik
+  // tiap kali dropdown disentuh terasa berat, dan titiknya akan melompat-lompat
+  // sehingga orang mengira datanya berubah.
+  if (showPoints) S.map.setFilter('jual-titik', salePointFilter());
+
+  // Di atas citra satelit, isian pekat menutupi apa pun yang membuat satelit berguna.
+  const satellite = S.basemap === 'satelit';
+  S.map.setPaintProperty('kel-isi', 'fill-opacity', satellite ? 0.5 : 0.85);
+  S.map.setPaintProperty('kel-garis', 'line-opacity', satellite ? 0.45 : 0.7);
+  S.map.setPaintProperty('kel-nama', 'text-color', satellite ? '#ffffff' : '#1e293b');
+  S.map.setPaintProperty('kel-nama', 'text-halo-color', satellite ? '#000000' : '#ffffff');
+
+  const showMarkers = on('opt-titik');
+  S.markers.forEach((m) => { m.getElement().style.display = showMarkers ? '' : 'none'; });
+
+  const outlet = S.selectedOutlet ? S.outletByCode[S.selectedOutlet] : null;
+  S.map.getSource('radius').setData(
+    outlet && outlet.lat != null && on('opt-radius')
+      ? circle(outlet.lng, outlet.lat, RADIUS_METERS) : EMPTY_COLLECTION);
+}
+
+/* ==========================================================================
+   TITIK PENJUALAN
+   ==========================================================================
+   Alamat konsumen tidak punya koordinat, jadi titiknya disebar acak DI DALAM
+   kelurahannya masing-masing. Yang ditunjukkan sebaran, bukan lokasi rumah — dan
+   halaman menyebutkannya di sudut peta waktu lapisan ini menyala.
+   ========================================================================== */
+
+function pointInRing(lng, lat, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if ((yi > lat) !== (yj > lat) &&
+        lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * Dibangkitkan sekali lalu dipakai ulang.
+ *
+ * Mengacak ulang tiap kali filter berubah akan membuat titiknya melompat-lompat, dan
+ * orang akan mengira datanya yang berubah. Benihnya tetap, jadi titik yang sama selalu
+ * muncul di tempat yang sama.
+ */
+export function buildSalePoints() {
+  if (S.salePoints) return S.salePoints;
+
+  const period = filterValue('filter-periode');
+  const rows = S.sales.filter((r) => period === 'ALL' || r.period === period);
+
+  const byVillage = {};
+  rows.forEach((r) => { (byVillage[r.village] ||= []).push(r); });
+
+  const ringByVillage = {};
+  S.geo.features.forEach((f) => {
+    const rings = f.geometry.type === 'Polygon'
+      ? [f.geometry.coordinates[0]]
+      : f.geometry.coordinates.map((p) => p[0]);
+    ringByVillage[f.properties.kode] = rings.reduce((a, b) => (b.length > a.length ? b : a));
+  });
+
+  let seed = 991;
+  const rand = () => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  };
+
+  const features = [];
+  Object.keys(byVillage).forEach((code) => {
+    const ring = ringByVillage[code];
+    if (!ring) return;
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    ring.forEach(([x, y]) => {
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    });
+
+    byVillage[code].forEach((row) => {
+      for (let i = 0; i < row.units; i++) {
+        let lng = 0;
+        let lat = 0;
+        let ok = false;
+        for (let tries = 0; tries < 24 && !ok; tries++) {
+          lng = minX + rand() * (maxX - minX);
+          lat = minY + rand() * (maxY - minY);
+          ok = pointInRing(lng, lat, ring);
+        }
+        if (!ok) continue;               // poligon terlalu tipis: lewati saja
+        const village = S.villageByCode[code] || {};
+        features.push({
+          type: 'Feature',
+          properties: {
+            warna: dealerColor(S.registry, row.dealer), dealer: row.dealer,
+            outlet: row.outlet, village: code,
+            kota: village.cityCode || '', prov: village.provinceCode || '',
+          },
+          geometry: { type: 'Point', coordinates: [lng, lat] },
+        });
+      }
+    });
+  });
+
+  S.salePoints = { type: 'FeatureCollection', features };
+  return S.salePoints;
+}
+
+/** Titik penjualan dibangun ulang kalau periodenya berganti. */
+export function invalidateSalePoints() { S.salePoints = null; }
+
+/** Ekspresi filter lapisan titik penjualan, mengikuti ruang lingkup aktif. */
+function salePointFilter() {
+  const clauses = ['all'];
+  const outlet = filterValue('filter-pos');
+  const dealer = filterValue('filter-dealer');
+  const city = filterValue('filter-kota');
+  const province = filterValue('filter-provinsi');
+
+  if (outlet !== 'ALL') clauses.push(['==', ['get', 'outlet'], outlet]);
+  else if (dealer !== 'ALL') clauses.push(['==', ['get', 'dealer'], dealer]);
+
+  if (city !== 'ALL') clauses.push(['==', ['get', 'kota'], city]);
+  else if (province !== 'ALL') clauses.push(['==', ['get', 'prov'], province]);
+
+  return clauses.length === 1 ? null : clauses;
+}
+
+/* ==========================================================================
+   LAYAR PENUH DAN PAS-KAN
+   ========================================================================== */
+
+/**
+ * Layar penuh dengan posisi tetap, bukan Fullscreen API browser.
+ *
+ * Hasilnya sama tapi tanpa banner browser yang muncul di tengah presentasi, dan panel
+ * melayangnya tetap bisa diatur.
+ */
+export function toggleFullscreen(force) {
+  S.fullscreen = force === undefined ? !S.fullscreen : Boolean(force);
+  $('map-shell').classList.toggle('penuh', S.fullscreen);
+  $('label-penuh').textContent = S.fullscreen ? 'Keluar' : 'Layar penuh';
+  $('btn-penuh').querySelector('i').className =
+    S.fullscreen ? 'ph-fill ph-arrows-in' : 'ph-fill ph-arrows-out';
+  document.body.style.overflow = S.fullscreen ? 'hidden' : '';
+
+  // MapLibre menyimpan ukuran kanvas saat dibuat dan tidak mengikutinya sendiri.
+  // Tanpa resize() peta tergambar di ukuran lama sampai jendelanya digeser.
+  setTimeout(() => S.map.resize(), 60);
+  setTimeout(() => S.map.resize(), 400);
+}
+
+/**
+ * Bawa peta ke data yang SEDANG TAMPIL, bukan selalu ke seluruh wilayah.
+ *
+ * Kalau satu pos dipilih, yang dipas-kan adalah pos itu beserta seluruh kelurahan yang
+ * dilayaninya — sekali klik langsung kelihatan seberapa jauh pelanggannya menyebar, dan
+ * itu justru pertanyaan pokoknya. Zoom ke titik posnya saja malah membuang yang di luar
+ * radius keluar layar.
+ */
+export function fitToScope() {
+  const points = [];
+  const perVillage = sumBy(activeRows(), 'village');
+  Object.keys(perVillage).forEach((code) => {
+    const village = S.villageByCode[code];
+    if (village && village.lat != null) points.push([village.lng, village.lat]);
+  });
+
+  const outlet = filterValue('filter-pos');
+  const dealer = filterValue('filter-dealer');
+  S.outlets.forEach((o) => {
+    if (o.lat == null) return;
+    const included = outlet !== 'ALL' ? o.code === outlet
+      : dealer !== 'ALL' ? o.dealerCode === dealer : false;
+    if (included) points.push([o.lng, o.lat]);
+  });
+
+  if (!points.length) {
+    // Peta kosong yang di-zoom ke tempat entah di mana lebih membingungkan daripada
+    // peta utuh.
+    S.map.fitBounds(bbox(S.geo), { padding: 40, duration: 700 });
+    toast('Tidak ada data pada filter ini — peta dikembalikan ke seluruh wilayah');
+    return;
+  }
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  points.forEach(([x, y]) => {
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  });
+
+  // Satu kelurahan saja menghasilkan kotak seluas nol dan fitBounds akan memperbesar
+  // sampai maksimum. Diberi kelonggaran ~2,5 km supaya tetap ada konteks.
+  const minSpan = 0.022;
+  if (maxX - minX < minSpan) { const c = (maxX + minX) / 2; minX = c - minSpan / 2; maxX = c + minSpan / 2; }
+  if (maxY - minY < minSpan) { const c = (maxY + minY) / 2; minY = c - minSpan / 2; maxY = c + minSpan / 2; }
+
+  S.map.fitBounds([[minX, minY], [maxX, maxY]],
+    { padding: S.fullscreen ? 90 : 50, duration: 700, maxZoom: 13 });
+}
+
+/** Ganti radius jangkauan. Hanya nilai yang benar-benar dihitung server. */
+export function setRadius(meters) {
+  const m = Number(meters);
+  if (!S.coverageAll[m]) return;
+  S.radiusM = m;
+  $('label-radius').textContent = (m / 1000).toFixed(0) + ' km';
+  S.coverage = S.coverageAll[m];
+  S.radiiM.forEach((r) => {
+    const button = $('radius-' + r);
+    if (button) {
+      button.className = 'flex-1 px-2 py-1.5 rounded-md text-[11px] font-bold ' +
+        (r === m ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500');
+    }
+  });
+  window.renderAll();
+}

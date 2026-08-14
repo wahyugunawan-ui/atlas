@@ -1,0 +1,259 @@
+/**
+ * Rute API. Semuanya di bawah /api dan semuanya butuh sesi yang sah — penjaganya
+ * dipasang di app.js sebelum modul ini dipakai.
+ */
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const repo = require('./repository');
+const { runImport, isRunning } = require('./importer');
+
+/** Batas ukuran unggahan. Berkas Astra ±2,5 MB; 25 MB memberi ruang lega. */
+const MAX_UPLOAD = 25 * 1024 * 1024;
+
+const PERIOD = /^\d{4}-(0[1-9]|1[0-2])$/;
+const VILLAGE = /^\d{2}\.\d{2}\.\d{2}\.\d{4}$/;
+const CITY = /^\d{2}\.\d{2}$/;
+const OUTLET = /^[A-Za-z0-9._-]{1,32}$/;
+
+function build(config) {
+  const api = express.Router();
+
+  // Express 5 meneruskan penolakan promise dari handler async ke penangan error,
+  // jadi tidak perlu try/catch di tiap rute.
+  api.get('/summary', async (req, res) => {
+    const data = await repo.summary();
+    data.hasCustomers = repo.hasCustomers();
+    res.json(data);
+  });
+
+  api.get('/periods', async (req, res) => {
+    res.json({ periods: await repo.periodSummary() });
+  });
+
+  api.get('/imports', async (req, res) => {
+    res.json({ imports: await repo.imports(20), running: isRunning() });
+  });
+
+  api.get('/unmatched', async (req, res) => {
+    const period = String(req.query.period || '');
+    if (!PERIOD.test(period)) {
+      return res.status(400).json({ error: 'Periode harus format YYYY-MM.' });
+    }
+    res.json({ unmatched: await repo.unmatched(period) });
+  });
+
+  /**
+   * Telusuri konsumen untuk halaman Data Konsumen.
+   *
+   * Rute TERPISAH dari /customers, bukan penambahan parameter di sana. /customers
+   * tetap mewajibkan satu kode kelurahan dan tetap diuji begitu — jaminan itu tidak
+   * dilonggarkan, cuma didampingi jalur kedua yang batasnya berbeda dan tertulis.
+   *
+   * Di sini penyaringnya bebas, tapi hasilnya selalu dipotong repo.BROWSE_LIMIT dan
+   * jumlah sebenarnya dikirim terpisah — halaman menampilkan "500 dari 18.512", tidak
+   * diam-diam memotong. Tiap akses dicatat, sama seperti jalur satunya.
+   *
+   * Penyaring yang bentuknya salah DIABAIKAN, bukan bikin 400: halaman ini dipakai
+   * sambil mengetik, dan menolak seluruh permintaan karena satu dropdown belum diisi
+   * akan terasa seperti aplikasinya rusak.
+   */
+  api.get('/customers/browse', async (req, res) => {
+    const q = req.query;
+    const period = String(q.period || '');
+    const village = String(q.village || '');
+    const city = String(q.city || '');
+    const outlet = String(q.outlet || '');
+    const search = String(q.q || '').trim().slice(0, 80);
+
+    const result = await repo.browseCustomers({
+      period: PERIOD.test(period) ? period : null,
+      village: VILLAGE.test(village) ? village : null,
+      city: CITY.test(city) ? city : null,
+      outlet: OUTLET.test(outlet) ? outlet : null,
+      // Daftar pos dikirim halaman waktu yang dipilih adalah DEALER: satu dealer punya
+      // beberapa pos, dan tabel customers tidak menyimpan kode dealer — itu milik
+      // tabel outlets di database yang lain, jadi tidak bisa di-JOIN dari sini.
+      outlets: Array.isArray(q.outlets)
+        ? q.outlets.filter((c) => OUTLET.test(String(c))).slice(0, 200)
+        : (typeof q.outlets === 'string'
+          ? q.outlets.split(',').filter((c) => OUTLET.test(c)).slice(0, 200)
+          : null),
+      query: search || null,
+      offset: Number(q.offset) || 0,
+    });
+
+    if (result === null) {
+      return res.status(404).json({ error: 'Data konsumen tidak tersedia di server ini.' });
+    }
+    await repo.logCustomerAccess(req.ip, village || city || 'telusur', result.rows.length);
+    res.json(result);
+  });
+
+  /**
+   * Konsumen di SATU kelurahan.
+   *
+   * Parameter `village` WAJIB. Tanpa itu 400, bukan dikembalikan semuanya — ini
+   * satu-satunya hal yang mencegah satu akun bersama menyedot seluruh basis data
+   * konsumen dalam satu permintaan. Tiap akses dicatat.
+   */
+  api.get('/customers', async (req, res) => {
+    const village = String(req.query.village || '');
+    if (!VILLAGE.test(village)) {
+      return res.status(400).json({
+        error: 'Sebutkan satu kode kelurahan, misalnya village=34.04.01.2001.',
+      });
+    }
+    const period = String(req.query.period || '');
+    const rows = await repo.customersInVillage(village,
+      PERIOD.test(period) ? period : null);
+    if (rows === null) {
+      return res.status(404).json({ error: 'Data konsumen tidak tersedia di server ini.' });
+    }
+    await repo.logCustomerAccess(req.ip, village, rows.length);
+    res.json({ village, customers: rows });
+  });
+
+  api.put('/outlets/:code', async (req, res) => {
+    const patch = req.body || {};
+    const lat = patch.lat === null || patch.lat === undefined ? undefined : Number(patch.lat);
+    const lng = patch.lng === null || patch.lng === undefined ? undefined : Number(patch.lng);
+    if ((lat !== undefined && !Number.isFinite(lat)) ||
+        (lng !== undefined && !Number.isFinite(lng))) {
+      return res.status(400).json({ error: 'Koordinat harus angka.' });
+    }
+    // Cakupan proyek: DIY + Jawa Tengah. Koordinat di luar ini hampir pasti salah
+    // ketik atau lintang dan bujur tertukar, dan pin yang melompat ke Afrika lebih
+    // membingungkan daripada penolakan.
+    if ((lat !== undefined && (lat < -9 || lat > -5)) ||
+        (lng !== undefined && (lng < 107 || lng > 113))) {
+      return res.status(400).json({
+        error: 'Koordinat di luar wilayah cakupan. Lintang dan bujur tertukar?',
+      });
+    }
+
+    const hasil = await repo.updateOutlet(String(req.params.code), {
+      dealerCode: patch.dealerCode,
+      dealerName: patch.dealerName,
+      address: typeof patch.address === 'string' ? patch.address.trim() : undefined,
+      lat,
+      lng,
+    }, config);
+    if (!hasil) return res.status(404).json({ error: 'Outlet tidak ditemukan.' });
+    res.json(hasil);
+  });
+
+  /**
+   * Unggah berkas bulanan.
+   *
+   * Multipart di-parse sendiri, bukan dengan multer: yang dibutuhkan cuma satu berkas
+   * dan dua field teks, dan menambah dependensi untuk itu tidak sepadan. Yang penting
+   * dijaga: batas ukuran, dan nama berkas dari pengguna TIDAK PERNAH dipakai sebagai
+   * nama berkas di disk.
+   */
+  api.post('/import', express.raw({ type: 'multipart/form-data', limit: MAX_UPLOAD }),
+    async (req, res) => {
+      if (isRunning()) {
+        return res.status(409).json({
+          error: 'Sedang ada impor yang berjalan. Tunggu sampai selesai, lalu coba lagi.',
+        });
+      }
+
+      let parsed;
+      try {
+        parsed = parseMultipart(req.body, req.headers['content-type']);
+      } catch (error) {
+        return res.status(400).json({ error: error.message });
+      }
+
+      const period = String(parsed.fields.period || '');
+      if (!PERIOD.test(period)) {
+        return res.status(400).json({ error: 'Pilih bulan dan tahun dulu.' });
+      }
+      if (!parsed.file) {
+        return res.status(400).json({ error: 'Tidak ada berkas yang terkirim.' });
+      }
+
+      const original = String(parsed.file.filename || 'unggahan');
+      const ext = path.extname(original).toLowerCase();
+      if (!['.xlsx', '.xlsm', '.csv', '.txt'].includes(ext)) {
+        return res.status(400).json({
+          error: `Format ${ext || 'itu'} tidak bisa dibaca. Kirim .xlsx atau .csv.`,
+        });
+      }
+
+      // Nama di disk dibuat server, bukan diambil dari pengguna. Nama seperti
+      // "..\..\.env" tidak akan pernah punya kesempatan.
+      const dir = path.join(config.dataDir, 'uploads');
+      fs.mkdirSync(dir, { recursive: true });
+      const safe = path.join(dir,
+        `${period}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`);
+      fs.writeFileSync(safe, parsed.file.data);
+
+      try {
+        const result = await runImport({
+          file: safe,
+          period,
+          fileName: path.basename(original),
+          ip: req.ip,
+          withCustomers: String(parsed.fields.withCustomers) === '1',
+          config,
+        });
+        res.json(result);
+      } catch (error) {
+        const status = error.code === 'SEDANG_BERJALAN' ? 409 : 400;
+        res.status(status).json({ error: error.message });
+      }
+    });
+
+  return api;
+}
+
+/**
+ * Parser multipart/form-data seadanya: satu berkas, beberapa field teks.
+ *
+ * Bekerja di atas Buffer, bukan string — mengubah .xlsx jadi string akan merusak
+ * byte-nya, dan kerusakannya baru terlihat waktu Excel gagal dibuka.
+ */
+function parseMultipart(body, contentType) {
+  const match = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(contentType || '');
+  if (!match) throw new Error('Permintaan unggahan tidak lengkap.');
+  const boundary = Buffer.from('--' + (match[1] || match[2]).trim());
+
+  const parts = [];
+  let start = body.indexOf(boundary);
+  if (start < 0) throw new Error('Permintaan unggahan tidak lengkap.');
+
+  while (start >= 0) {
+    const next = body.indexOf(boundary, start + boundary.length);
+    if (next < 0) break;
+    parts.push(body.subarray(start + boundary.length, next));
+    start = next;
+  }
+
+  const fields = {};
+  let file = null;
+
+  for (const part of parts) {
+    const split = part.indexOf('\r\n\r\n');
+    if (split < 0) continue;
+    const head = part.subarray(0, split).toString('utf8');
+    // Buang CRLF penutup sebelum boundary berikutnya.
+    const data = part.subarray(split + 4, part.length - 2);
+
+    const name = /name="([^"]*)"/i.exec(head);
+    if (!name) continue;
+    const filename = /filename="([^"]*)"/i.exec(head);
+
+    if (filename) {
+      if (filename[1]) file = { filename: filename[1], data };
+    } else {
+      fields[name[1]] = data.toString('utf8');
+    }
+  }
+
+  return { fields, file };
+}
+
+module.exports = { build, parseMultipart, MAX_UPLOAD };

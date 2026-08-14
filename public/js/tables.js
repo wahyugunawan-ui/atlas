@@ -1,0 +1,518 @@
+/**
+ * Panel rincian kelurahan, tabel master, dan perpindahan tab.
+ */
+import { browseCustomers, fetchCustomers, saveOutlet } from './api.js';
+import { dealerColor } from './colors.js';
+import {
+  CUSTOMER_PANEL_LIMIT, PROVINCE_NAMES, SHOW_ENGINE_NUMBER, SHOW_HOUSE_PHOTO,
+  TABLE_ROW_LIMIT,
+} from './config.js';
+import { $, esc, formatNumber, sumBy, toast } from './dom.js';
+import { activeRows, filterValue } from './filters.js';
+import { selectOutlet } from './outlets.js';
+import { S } from './state.js';
+
+/* ==========================================================================
+   PANEL RINCIAN KELURAHAN
+   ==========================================================================
+   Diminta di meeting 12 Agustus: daftar pos dan daftar konsumen dipisah dengan judul
+   sendiri supaya tidak menyatu dan susah dibaca. Porsinya tetap sama.
+   ========================================================================== */
+
+function sectionHeader(icon, title, count) {
+  return `<div class="flex items-center gap-1.5 text-[11px] uppercase font-bold ` +
+    `text-slate-500 bg-slate-100 rounded-lg px-2.5 py-1.5 mt-4 mb-2">` +
+    `<i class="ph-fill ph-${icon}"></i>${title}` +
+    `<span class="ml-auto mono text-slate-400">${esc(formatNumber(count))}</span></div>`;
+}
+
+export function openVillageDetail(code) {
+  S.selectedVillage = code;
+  const village = S.villageByCode[code] || {};
+  const rows = activeRows().filter((r) => r.village === code);
+  const perOutlet = sumBy(rows, 'outlet');
+  const total = Object.values(perOutlet).reduce((sum, n) => sum + n, 0);
+  const order = Object.keys(perOutlet).sort((a, b) => perOutlet[b] - perOutlet[a]);
+
+  $('kelurahanDetailTitle').textContent = village.name || code;
+  $('kelurahanDetailMeta').textContent =
+    `${village.district || ''} · ${village.cityName || ''} · ${code}`;
+
+  $('kelurahanDetailList').innerHTML =
+    `<div class="pb-3 border-b border-slate-200">` +
+    `<div class="text-[11px] uppercase font-bold text-slate-400">Total penjualan</div>` +
+    `<div class="text-3xl font-extrabold text-slate-900 mono">${esc(formatNumber(total))}</div></div>` +
+
+    sectionHeader('storefront', 'Penjualan per Pos', order.length) +
+    (order.length ? order.map((outletCode) => {
+      const outlet = S.outletByCode[outletCode] || {};
+      return `<div class="flex items-start gap-2 px-2 py-2 rounded-lg hover:bg-slate-50 cursor-pointer" onclick="selectOutlet('${esc(outletCode)}')">` +
+        `<span class="w-2.5 h-2.5 rounded-full shrink-0 mt-1.5" style="background:${esc(dealerColor(S.registry, outlet.dealerCode))}"></span>` +
+        `<div class="flex-1 min-w-0">` +
+        `<div class="text-sm text-slate-800 font-semibold truncate">${esc(outlet.name || outletCode)}</div>` +
+        `<div class="text-[11px] text-slate-400 truncate">${esc(outlet.dealerName || '')}` +
+        ` <button onclick="event.stopPropagation(); openOutletEditor('${esc(outletCode)}')" ` +
+        `class="text-slate-400 hover:text-slate-700" title="Sunting alamat dan koordinat">` +
+        `<i class="ph ph-pencil-simple"></i></button></div></div>` +
+        `<div class="text-right shrink-0">` +
+        `<div class="text-sm font-bold text-slate-900 mono">${esc(formatNumber(perOutlet[outletCode]))}</div>` +
+        `<div class="text-[10px] text-slate-400 mono">${esc((perOutlet[outletCode] / total * 100).toFixed(0))}%</div>` +
+        `</div></div>`;
+    }).join('')
+      : '<p class="text-xs text-slate-400 text-center py-4">Tidak ada penjualan pada filter ini.</p>') +
+
+    (S.hasCustomers
+      ? sectionHeader('users-three', 'Konsumen', 0).replace('>0<', '>…<') +
+        '<p class="text-xs text-slate-400 text-center py-3" id="village-customers">memuat…</p>'
+      : '');
+
+  const panel = $('kelurahanDetailPanel');
+  panel.classList.remove('hidden');
+  requestAnimationFrame(() => panel.classList.remove('translate-x-full'));
+
+  if (S.hasCustomers) loadVillageCustomers(code);
+}
+
+/**
+ * Konsumen diambil per kelurahan, saat dibuka.
+ *
+ * Bukan sekaligus di awal seperti versi sebelumnya. Bedanya bukan kecepatan: satu akun
+ * dipakai bersama, dan tidak boleh ada satu permintaan yang bisa menyedot seluruh
+ * basis data konsumen. Server juga menolak permintaan tanpa kode kelurahan.
+ */
+async function loadVillageCustomers(code) {
+  const holder = $('village-customers');
+  if (!holder) return;
+  try {
+    const { customers } = await fetchCustomers(code, filterValue('filter-periode'));
+    // Kalau orangnya sudah pindah ke kelurahan lain sebelum ini selesai, jangan timpa.
+    if (S.selectedVillage !== code) return;
+
+    const outletFilter = filterValue('filter-pos');
+    const dealerFilter = filterValue('filter-dealer');
+    const list = customers.filter((c) => {
+      const outlet = S.outletByCode[c.outlet] || {};
+      if (outletFilter !== 'ALL' && c.outlet !== outletFilter) return false;
+      if (dealerFilter !== 'ALL' && outlet.dealerCode !== dealerFilter) return false;
+      return true;
+    });
+
+    const header = holder.previousElementSibling;
+    if (header) header.querySelector('span:last-child').textContent = formatNumber(list.length);
+
+    holder.outerHTML = list.length
+      ? list.slice(0, CUSTOMER_PANEL_LIMIT).map((c) => {
+        const outlet = S.outletByCode[c.outlet] || {};
+        return `<div class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50">` +
+          `<span class="w-2 h-2 rounded-full shrink-0" style="background:${esc(dealerColor(S.registry, outlet.dealerCode))}"></span>` +
+          `<div class="min-w-0 flex-1"><div class="text-sm text-slate-700 truncate">${esc(c.name)}</div>` +
+          `<div class="text-[11px] text-slate-400 truncate">${esc(c.address)}</div></div></div>`;
+      }).join('') +
+        (list.length > CUSTOMER_PANEL_LIMIT
+          ? `<div class="text-[11px] text-slate-400 px-2 pt-1">Menampilkan ${CUSTOMER_PANEL_LIMIT} dari ${esc(formatNumber(list.length))}.</div>`
+          : '')
+      : '<p class="text-xs text-slate-400 text-center py-3">Tidak ada konsumen pada filter ini.</p>';
+  } catch (error) {
+    if (S.selectedVillage !== code) return;
+    holder.textContent = 'Data konsumen tidak bisa dimuat: ' + error.message;
+    holder.className = 'text-xs text-slate-400 text-center py-3';
+  }
+}
+
+export function closeVillageDetail() {
+  const panel = $('kelurahanDetailPanel');
+  panel.classList.add('translate-x-full');
+  setTimeout(() => panel.classList.add('hidden'), 300);
+  S.selectedVillage = null;
+  if (S.layersReady) S.map.setFilter('kel-terpilih', ['==', ['get', 'kode'], '']);
+}
+
+/* ==========================================================================
+   MASTER POS DEALER
+   ========================================================================== */
+
+export function renderOutletTable() {
+  const query = ($('mpos-search').value || '').toLowerCase();
+  const dealer = $('mpos-filter-dealer').value;
+  const perOutlet = sumBy(activeRows(), 'outlet');
+
+  const list = S.outlets.filter((o) =>
+    (dealer === 'ALL' || o.dealerCode === dealer) &&
+    (!query || o.name.toLowerCase().includes(query) || o.code.includes(query)))
+    .sort((a, b) => (perOutlet[b.code] || 0) - (perOutlet[a.code] || 0));
+
+  $('table-pos-body').innerHTML = list.length ? list.map((o) =>
+    `<tr>` +
+    `<td class="px-3 py-2 mono text-xs text-slate-500">${esc(o.code)}</td>` +
+    `<td class="px-3 py-2"><div class="flex items-center gap-2">` +
+    `<span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${esc(dealerColor(S.registry, o.dealerCode))}"></span>` +
+    `<span class="font-semibold text-slate-800">${esc(o.name)}</span></div></td>` +
+    `<td class="px-3 py-2 text-slate-600">${esc(o.dealerName)}</td>` +
+    `<td class="px-3 py-2"><div class="text-slate-600 text-xs">${esc(o.address || '—')}</div>` +
+    `<div class="mono text-[10px] text-slate-400">` +
+    (o.lat == null ? 'belum di-pin'
+      : `${esc(o.lat.toFixed(5))}, ${esc(o.lng.toFixed(5))}`) + `</div></td>` +
+    `<td class="px-3 py-2 text-right font-bold mono ${perOutlet[o.code] ? 'text-slate-900' : 'text-slate-300'}">` +
+    `${esc(formatNumber(perOutlet[o.code] || 0))}</td>` +
+    `<td class="px-3 py-2 text-center whitespace-nowrap">` +
+    (o.lat == null
+      ? `<button onclick="promptPin('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-map-pin"></i> Pin</button> `
+      : `<button onclick="showOnMap('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-white" style="background:var(--astra-navy)"><i class="ph-fill ph-map-trifold"></i> Peta</button> `) +
+    `<button onclick="openOutletEditor('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-pencil-simple"></i> Sunting</button>` +
+    `</td></tr>`).join('')
+    : '<tr><td colspan="6" class="text-center py-8 text-slate-400 text-sm">Tidak ada pos yang cocok.</td></tr>';
+}
+
+/** Tombol "Lihat Peta": pindah tab, pilih pos, heatmap ikut dihitung ulang. */
+export function showOnMap(code) {
+  switchTab('peta');
+  setTimeout(() => {
+    S.selectedOutlet = null;               // paksa selectOutlet menyalakan, bukan mematikan
+    selectOutlet(code);
+    toast('Heatmap dihitung ulang untuk ' + ((S.outletByCode[code] || {}).name || code), 'ok');
+  }, 120);
+}
+
+/* ==========================================================================
+   SUNTING POS DEALER
+   ==========================================================================
+   Alamat dan koordinat. Memindahkan koordinat membuat jangkauan pos itu dihitung
+   ulang di server — kalau tidak, angkanya masih menggambarkan lokasi yang sudah
+   tidak dipakai, dan itu salah tanpa gejala apa pun.
+   ========================================================================== */
+
+function editorMessage(text, kind) {
+  const box = $('sp-pesan');
+  box.textContent = text || '';
+  box.className = text
+    ? `mt-3 text-xs px-3 py-2 rounded-xl ${kind === 'error'
+      ? 'bg-red-50 border border-red-200 text-red-700'
+      : 'bg-emerald-50 border border-emerald-200 text-emerald-700'}`
+    : 'hidden';
+}
+
+export function openOutletEditor(code) {
+  const outlet = S.outletByCode[code];
+  if (!outlet) return;
+  S.editing = code;
+  $('sp-nama').textContent = outlet.name;
+  $('sp-kode').textContent = `${outlet.code} · ${outlet.dealerName}`;
+  $('sp-alamat').value = outlet.address || '';
+  $('sp-lat').value = outlet.lat == null ? '' : outlet.lat;
+  $('sp-lng').value = outlet.lng == null ? '' : outlet.lng;
+  editorMessage('');
+  $('modal-pos').classList.remove('hidden');
+}
+
+export function closeOutletEditor() {
+  $('modal-pos').classList.add('hidden');
+  S.editing = null;
+  S.pickingOnMap = false;
+  if (S.map) S.map.getCanvas().style.cursor = '';
+}
+
+/** Modal menutup sementara; klik berikutnya di peta jadi koordinatnya. */
+export function pickFromMap() {
+  if (!S.editing) return;
+  S.pickingOnMap = true;
+  $('modal-pos').classList.add('hidden');
+  if (!S.fullscreen) $('map').scrollIntoView({ block: 'center' });
+  S.map.getCanvas().style.cursor = 'crosshair';
+  toast('Klik titik yang benar di peta', 'ok');
+}
+
+/** Dipanggil map click handler waktu sedang menunggu titik. */
+export function acceptMapPoint(lngLat) {
+  S.pickingOnMap = false;
+  S.map.getCanvas().style.cursor = '';
+  $('sp-lat').value = lngLat.lat.toFixed(6);
+  $('sp-lng').value = lngLat.lng.toFixed(6);
+  $('modal-pos').classList.remove('hidden');
+}
+
+export async function saveOutletEditor() {
+  const code = S.editing;
+  const outlet = S.outletByCode[code];
+  if (!outlet) return;
+
+  const lat = Number(String($('sp-lat').value).trim());
+  const lng = Number(String($('sp-lng').value).trim());
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    editorMessage('Koordinat harus angka. Contoh: -7.79558', 'error');
+    return;
+  }
+
+  const button = $('sp-simpan');
+  button.disabled = true;
+  button.textContent = 'Menyimpan...';
+  editorMessage('');
+
+  try {
+    const { outlet: saved, coverageRebuilt } = await saveOutlet(code, {
+      address: $('sp-alamat').value.trim(), lat, lng,
+    });
+    Object.assign(outlet, saved);
+    const index = S.outlets.findIndex((o) => o.code === code);
+    if (index >= 0) S.outlets[index] = outlet;
+
+    closeOutletEditor();
+    // Jangkauan yang dihitung ulang mengubah angka di panel performa, jadi datanya
+    // harus diambil ulang — bukan sekadar menggambar ulang dari yang lama.
+    if (coverageRebuilt) {
+      toast('Tersimpan. Jangkauan pos ini dihitung ulang.', 'ok');
+      await window.reloadSummary();
+    } else {
+      toast('Tersimpan', 'ok');
+      window.renderAll();
+    }
+    renderOutletTable();
+  } catch (error) {
+    editorMessage(error.message, 'error');
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Simpan';
+  }
+}
+
+/**
+ * Pin cepat untuk outlet yang belum punya koordinat.
+ *
+ * Tetap ada di samping modal sunting: outlet baru dari impor bulanan sering perlu
+ * di-pin berurutan, dan membuka modal untuk tiap satu lebih lambat daripada menempel
+ * koordinat dari Google Maps.
+ */
+export async function promptPin(code) {
+  const outlet = S.outletByCode[code] || {};
+  const input = prompt(
+    `Koordinat untuk ${outlet.name || code}\n\n` +
+    'Salin dari Google Maps: klik kanan di lokasinya, lalu klik angka yang muncul.\n' +
+    'Tulis di sini sebagai: lintang, bujur', '');
+  if (!input) return;
+
+  const [lat, lng] = input.split(',').map((n) => Number(String(n).trim()));
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    toast('Formatnya belum benar. Contoh: -7.79558, 110.36949', 'error');
+    return;
+  }
+  try {
+    const { outlet: saved } = await saveOutlet(code, { lat, lng });
+    Object.assign(S.outletByCode[code], saved);
+    const index = S.outlets.findIndex((o) => o.code === code);
+    if (index >= 0) S.outlets[index] = S.outletByCode[code];
+    toast('Koordinat tersimpan', 'ok');
+    window.renderAll();
+    renderOutletTable();
+  } catch (error) {
+    toast('Gagal menyimpan: ' + error.message, 'error');
+  }
+}
+
+/* ==========================================================================
+   MASTER KELURAHAN
+   ========================================================================== */
+
+export function renderVillageTable() {
+  const query = ($('mkel-search').value || '').toLowerCase();
+  const province = $('mkel-filter-provinsi').value;
+  const city = $('mkel-filter-kota').value;
+  const perVillage = sumBy(activeRows(), 'village');
+
+  // Sudah datang terurut dari server (provinsi -> kabupaten -> kecamatan ->
+  // kelurahan). Diminta di meeting: urutan sebelumnya mengikuti volume, jadi
+  // kelurahan dari kabupaten berbeda berselang-seling dan tidak bisa ditelusuri.
+  const list = S.villages.filter((v) =>
+    (city === 'ALL' || v.cityCode === city) &&
+    (province === 'ALL' || v.provinceCode === province) &&
+    (!query || v.name.toLowerCase().includes(query) || v.code.includes(query)));
+
+  const shown = list.slice(0, TABLE_ROW_LIMIT);
+  $('table-kelurahan-body').innerHTML = shown.length ? shown.map((v) => {
+    const total = perVillage[v.code] || 0;
+    return `<tr class="cursor-pointer" onclick="jumpToVillage('${esc(v.code)}')">` +
+      `<td class="px-3 py-2 mono text-xs text-slate-500">${esc(v.code)}</td>` +
+      `<td class="px-3 py-2"><div class="font-semibold text-slate-800">${esc(v.name)}</div>` +
+      `<div class="mono text-[10px] text-slate-400">` +
+      (v.lat == null ? '—' : `${esc(v.lat.toFixed(5))}, ${esc(v.lng.toFixed(5))}`) +
+      `</div></td>` +
+      `<td class="px-3 py-2 text-slate-600">${esc(v.district || '—')}</td>` +
+      `<td class="px-3 py-2 text-slate-600">${esc(v.cityName)}</td>` +
+      `<td class="px-3 py-2 text-slate-500 text-xs">${esc(PROVINCE_NAMES[v.provinceCode] || v.provinceCode)}</td>` +
+      `<td class="px-3 py-2 text-right font-bold mono ${total ? 'text-slate-900' : 'text-slate-300'}">${esc(formatNumber(total))}</td>` +
+      `</tr>`;
+  }).join('')
+    : '<tr><td colspan="6" class="text-center py-8 text-slate-400 text-sm">Tidak ada kelurahan yang cocok.</td></tr>';
+
+  if (list.length > shown.length) {
+    $('table-kelurahan-body').innerHTML +=
+      `<tr><td colspan="6" class="text-center py-2.5 bg-slate-50 text-slate-500 text-xs">` +
+      `Menampilkan ${esc(formatNumber(shown.length))} dari ${esc(formatNumber(list.length))} kelurahan.</td></tr>`;
+  }
+}
+
+export function jumpToVillage(code) {
+  const village = S.villageByCode[code];
+  if (!village || village.lat == null) return;
+  switchTab('peta');
+  setTimeout(() => {
+    S.map.flyTo({ center: [village.lng, village.lat], zoom: 12, duration: 800 });
+    S.map.setFilter('kel-terpilih', ['==', ['get', 'kode'], code]);
+    openVillageDetail(code);
+  }, 140);
+}
+
+/* ==========================================================================
+   TAB
+   ========================================================================== */
+
+/** Escape menutup modal dulu, baru keluar dari layar penuh. */
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  if (!$('modal-pos').classList.contains('hidden')) { closeOutletEditor(); return; }
+  if (S.fullscreen) window.toggleFullscreen(false);
+});
+
+/* ==========================================================================
+   DATA KONSUMEN
+   ==========================================================================
+   Isi berkas Excel yang sudah diimpor, apa adanya. Beda dari tabel master lain:
+   penyaringannya dikerjakan SERVER, bukan di sini.
+
+   Alasannya bukan kecepatan. Kelurahan dan pos memang seluruhnya dikirim ke browser
+   sejak awal — jumlahnya ribuan dan tidak ada PII di dalamnya. Konsumen tidak: 18 ribu
+   nama dan alamat tidak pernah dikirim sekaligus, tiap permintaan dipotong di server
+   dan dicatat. Yang butuh seluruh isinya masih punya berkas Excel aslinya.
+   ========================================================================== */
+
+let customerSearchTimer = null;
+
+/** Baris pertama yang sedang ditampilkan. Berubah hanya lewat customerPage(). */
+let customerOffset = 0;
+
+/** Ketikan ditunda 300 ms supaya tiap huruf tidak jadi satu permintaan ke server. */
+export function searchCustomers() {
+  clearTimeout(customerSearchTimer);
+  customerSearchTimer = setTimeout(renderCustomerTable, 300);
+}
+
+/**
+ * Maju atau mundur satu halaman.
+ *
+ * @param {number} direction  +1 berikutnya, -1 sebelumnya
+ */
+export function customerPage(direction) {
+  customerOffset = Math.max(0, customerOffset + direction * customerPageSize);
+  renderCustomerTable(true);
+}
+
+/** Diisi dari balasan server, bukan ditebak — batasnya milik server. */
+let customerPageSize = 500;
+
+/** Permintaan terakhir yang dikirim; balasan yang datang terlambat dibuang. */
+let customerRequest = 0;
+
+/**
+ * @param {boolean} keepOffset  true kalau dipanggil tombol halaman. Mengubah penyaring
+ *                              SELALU kembali ke halaman pertama — kalau tidak, hasil
+ *                              baru yang cuma 30 baris akan tampak kosong karena
+ *                              offsetnya masih di baris 1.500.
+ */
+export async function renderCustomerTable(keepOffset) {
+  if (!keepOffset) customerOffset = 0;
+  const body = $('table-konsumen-body');
+  const note = $('mkon-note');
+  if (!body) return;
+
+  if (!S.hasCustomers) {
+    body.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400 text-sm">' +
+      'Server ini tidak menyimpan data konsumen.</td></tr>';
+    note.textContent = 'Impor dengan pilihan "simpan data konsumen" dicentang supaya ' +
+      'nama dan alamat ikut tersimpan.';
+    $('mkon-prev').disabled = true;
+    $('mkon-next').disabled = true;
+    return;
+  }
+
+  const dealer = $('mkon-filter-dealer').value;
+  const filters = {
+    period: $('mkon-filter-periode').value,
+    city: $('mkon-filter-kota').value,
+    query: ($('mkon-search').value || '').trim(),
+    // Tabel konsumen tidak menyimpan kode dealer — itu milik tabel outlets di database
+    // yang berbeda, jadi tidak bisa di-JOIN. Dealer diterjemahkan di sini jadi daftar
+    // kode pos miliknya.
+    outlets: dealer === 'ALL' ? null
+      : S.outlets.filter((o) => o.dealerCode === dealer).map((o) => o.code),
+    offset: customerOffset,
+  };
+
+  const ticket = ++customerRequest;
+  note.textContent = 'Memuat...';
+
+  try {
+    const { rows, total, limit, offset } = await browseCustomers(filters);
+    if (ticket !== customerRequest) return;      // sudah ada permintaan yang lebih baru
+
+    // Server yang menentukan batas dan offset sebenarnya — dia menjepit offset yang
+    // sudah lewat ujung. Kalau halaman menyimpan tebakannya sendiri, tombolnya akan
+    // menghitung dari angka yang tidak pernah dipakai server.
+    customerPageSize = limit;
+    customerOffset = offset;
+
+    body.innerHTML = rows.length ? rows.map((c) => {
+      const village = S.villageByCode[c.village] || {};
+      const outlet = S.outletByCode[c.outlet] || {};
+      return `<tr class="hover:bg-slate-50">` +
+        `<td class="px-3 py-2 font-semibold text-slate-800">${esc(c.name)}</td>` +
+        `<td class="px-3 py-2 text-slate-600">${esc(c.address)}</td>` +
+        `<td class="px-3 py-2 text-slate-600">${esc(village.name || c.village)}` +
+        `<div class="mono text-[10px] text-slate-400">${esc(c.village)}</div></td>` +
+        `<td class="px-3 py-2 text-slate-500 text-xs">${esc(village.cityName || '—')}</td>` +
+        `<td class="px-3 py-2"><div class="flex items-center gap-2">` +
+        `<span class="w-2 h-2 rounded-full shrink-0" style="background:${esc(dealerColor(S.registry, outlet.dealerCode))}"></span>` +
+        `<div class="min-w-0"><div class="text-slate-700 truncate">${esc(outlet.name || c.outlet)}</div>` +
+        `<div class="text-[10px] text-slate-400 truncate">${esc(S.dealerNames[outlet.dealerCode] || '—')}</div>` +
+        `</div></div></td>` +
+        `<td class="px-3 py-2 mono text-xs text-slate-500 whitespace-nowrap">${esc(c.period)}</td>` +
+        `</tr>`;
+    }).join('')
+      : '<tr><td colspan="6" class="text-center py-8 text-slate-400 text-sm">' +
+        'Tidak ada konsumen yang cocok dengan penyaring ini.</td></tr>';
+
+    // Jumlah sebenarnya SELALU disebut, bukan cuma yang tampil. Tabel yang diam-diam
+    // terpotong membuat orang menyimpulkan dari sebagian data tanpa tahu.
+    note.textContent = total > rows.length
+      ? `Menampilkan ${formatNumber(offset + 1)}–${formatNumber(offset + rows.length)} ` +
+        `dari ${formatNumber(total)} konsumen.`
+      : `${formatNumber(total)} konsumen.`;
+
+    $('mkon-prev').disabled = offset === 0;
+    $('mkon-next').disabled = offset + rows.length >= total;
+  } catch (error) {
+    if (ticket !== customerRequest) return;
+    body.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400 text-sm">' +
+      `Tidak bisa memuat: ${esc(error.message)}</td></tr>`;
+    note.textContent = '';
+    $('mkon-prev').disabled = true;
+    $('mkon-next').disabled = true;
+  }
+}
+
+export function switchTab(name) {
+  ['peta', 'import', 'pos', 'konsumen', 'kelurahan'].forEach((tab) => {
+    const section = $('tab-' + tab);
+    const nav = $('nav-' + tab);
+    if (section) section.classList.toggle('hidden', tab !== name);
+    if (nav) nav.classList.toggle('active', tab === name);
+  });
+
+  if (name === 'peta' && S.map) setTimeout(() => S.map.resize(), 60);
+  if (name === 'pos') renderOutletTable();
+  if (name === 'konsumen') renderCustomerTable();
+  if (name === 'kelurahan') renderVillageTable();
+  if (name === 'import') window.refreshImportTab();
+}
+
+// Kolom nomor mesin dan bukti foto belum dinyalakan karena datanya memang tidak ada
+// di berkas bulanan Astra. Dibaca di sini supaya lint tidak menganggapnya tak terpakai
+// dan supaya jelas di mana nanti dipasang.
+export const PENDING_COLUMNS = { SHOW_ENGINE_NUMBER, SHOW_HOUSE_PHOTO };

@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Masuk &middot; Astra Command Center</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231f3a8c'/%3E%3Ccircle cx='11' cy='21' r='4.5' fill='none' stroke='white' stroke-width='2'/%3E%3Ccircle cx='23' cy='21' r='4.5' fill='none' stroke='white' stroke-width='2'/%3E%3Cpath d='M11 21l5-8h6' fill='none' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+<!--
+  Halaman ini sengaja berdiri sendiri: CSS-nya di dalam berkas, tanpa Tailwind dan
+  tanpa font dari internet. Halaman login harus tetap tampil benar meskipun build CSS
+  belum pernah dijalankan atau jaringan kantor memblokir apa pun — orang tidak bisa
+  memperbaiki sesuatu yang tidak bisa mereka masuki.
+-->
+<style>
+  :root {
+    --astra-navy: #0b2f6b;
+    --astra-navy-dark: #071c42;
+    --astra-navy-light: #123d8c;
+    --astra-red: #e2231a;
+    --canvas: #f2f4f9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: var(--canvas);
+    font-family: 'Manrope', 'Segoe UI', system-ui, sans-serif;
+    color: #0b1220;
+  }
+  .card {
+    width: 100%;
+    max-width: 380px;
+    background: #fff;
+    border-radius: 18px;
+    box-shadow: 0 18px 48px rgba(11, 47, 107, 0.14);
+    overflow: hidden;
+  }
+  .card-top {
+    background: linear-gradient(90deg, var(--astra-navy-dark), var(--astra-navy) 55%, var(--astra-navy-light));
+    color: #fff;
+    padding: 28px 28px 24px;
+  }
+  .card-top h1 { margin: 0; font-size: 19px; font-weight: 800; letter-spacing: -0.01em; }
+  .card-top p { margin: 6px 0 0; font-size: 13px; color: rgba(255, 255, 255, 0.72); }
+  .card-body { padding: 26px 28px 28px; }
+  label { display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 7px; }
+  input {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 15px;
+    font-family: inherit;
+    border: 1.5px solid #dbe1ea;
+    border-radius: 11px;
+    background: #fbfcfe;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  input:focus {
+    outline: none;
+    border-color: var(--astra-navy);
+    box-shadow: 0 0 0 3px rgba(11, 47, 107, 0.12);
+  }
+  button {
+    width: 100%;
+    margin-top: 18px;
+    padding: 13px;
+    font-size: 15px;
+    font-weight: 700;
+    font-family: inherit;
+    color: #fff;
+    background: var(--astra-navy);
+    border: 0;
+    border-radius: 11px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  button:hover:not(:disabled) { background: var(--astra-navy-light); }
+  button:disabled { opacity: 0.6; cursor: default; }
+  .message {
+    margin-top: 14px;
+    padding: 11px 13px;
+    font-size: 13px;
+    line-height: 1.45;
+    border-radius: 10px;
+    background: #fdeceb;
+    color: #8f1610;
+    border: 1px solid #f6c9c6;
+  }
+  .hidden { display: none; }
+  .note {
+    margin: 20px 0 0;
+    font-size: 11.5px;
+    line-height: 1.55;
+    color: #94a3b8;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+  <main class="card">
+    <div class="card-top">
+      <h1>Astra Command Center</h1>
+      <p>Analisis distribusi dealer &middot; tim channel</p>
+    </div>
+    <div class="card-body">
+      <form id="login-form" autocomplete="on">
+        <!--
+          Akunnya cuma satu, jadi tidak ada yang perlu diketik di sini. Field ini tetap
+          ada dan tersembunyi karena tanpanya password manager browser menolak
+          menyimpan sandinya — dan tim yang tidak bisa mengandalkan browser untuk
+          mengingat sandi akan menuliskannya di tempat yang lebih buruk.
+        -->
+        <input type="text" name="username" value="tim-channel" autocomplete="username"
+               readonly hidden aria-hidden="true" tabindex="-1">
+        <label for="password">Sandi</label>
+        <input id="password" name="password" type="password" required autofocus
+               autocomplete="current-password" placeholder="Masukkan sandi tim">
+        <button id="submit" type="submit">Masuk</button>
+        <div id="message" class="message hidden" role="alert"></div>
+      </form>
+      <p class="note">
+        Satu sandi dipakai bersama seluruh tim.<br>
+        Jangan diteruskan ke luar tim channel.
+      </p>
+    </div>
+  </main>
+
+<script>
+  const form = document.getElementById('login-form');
+  const field = document.getElementById('password');
+  const button = document.getElementById('submit');
+  const message = document.getElementById('message');
+
+  function showError(text) {
+    // textContent, bukan innerHTML: pesan dari server tidak pernah jadi markup.
+    message.textContent = text;
+    message.classList.remove('hidden');
+  }
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    message.classList.add('hidden');
+    button.disabled = true;
+    button.textContent = 'Memeriksa...';
+
+    try {
+      const response = await fetch('/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: field.value }),
+      });
+      if (response.ok) {
+        location.replace('/');
+        return;
+      }
+      const body = await response.json().catch(() => ({}));
+      showError(body.error || 'Tidak bisa masuk. Coba lagi.');
+    } catch {
+      // Kegagalan jaringan dan sandi salah butuh tindakan yang sangat berbeda, jadi
+      // pesannya tidak boleh sama.
+      showError('Tidak bisa menghubungi server. Pastikan servernya masih berjalan.');
+    }
+
+    button.disabled = false;
+    button.textContent = 'Masuk';
+    field.select();
+  });
+</script>
+</body>
+</html>
