@@ -172,14 +172,78 @@ Tanpa nomor 1, sandi dan cookie sesi lewat sebagai teks polos.
 
 ---
 
+## Kalau tidak ada yang pernah login (server sungguhan)
+
+`ops/install-tasks.ps1` memasang tugas yang jalan saat **pengguna login**. Itu
+cukup untuk laptop yang memang dipakai orang. Untuk komputer yang dibiarkan
+menyala tanpa ada yang login, PostgreSQL dan aplikasi harus jadi **Windows
+service** — dan itu butuh hak admin sekali di awal.
+
+PostgreSQL punya perintahnya sendiri:
+
+```
+pg_ctl register -N postgresql-astra -D C:stra-data\pgdata -o "-p 5433"
+sc start postgresql-astra
+```
+
+Untuk aplikasinya, Node tidak punya padanannya. Yang biasa dipakai:
+[NSSM](https://nssm.cc) — unduh, lalu:
+
+```
+nssm install AstraCommandCenter "C:\Program Files
+odejs
+ode.exe" src\server\index.js
+nssm set AstraCommandCenter AppDirectory C:stra-command-center
+nssm set AstraCommandCenter AppEnvironmentExtra ACC_ENV_FILE=C:stra-data\.env
+nssm start AstraCommandCenter
+```
+
+Setelah keduanya jadi service, buang tugas terjadwalnya supaya tidak ada dua yang
+berebut port yang sama:
+
+```
+powershell -ExecutionPolicy Bypass -File ops\install-tasks.ps1 -Uninstall
+```
+
+---
+
 ## Backup rutin
 
+Sudah otomatis kalau `ops/install-tasks.ps1` dipasang: tiap hari jam 19:00,
+disimpan 14 hari di `C:/astra-data/backup`. Menjalankannya sekarang juga:
+
 ```
-pg_dump -U astra -Fc astra > astra-YYYY-MM-DD.dump
+opsackup.bat
 ```
 
-Sebulan sekali, atau setiap habis impor. Simpan di tempat lain, bukan di komputer yang
-sama — backup yang ikut hilang bersama komputernya bukan backup.
+Perintah dumpnya memakai tiga hal yang penting dan gampang terlewat:
+
+- `--exclude-table=spatial_ref_sys` — tabel milik PostGIS yang tidak boleh ditulis
+  pengguna aplikasi. Kalau ikut, tiap pemulihan berakhir dengan baris merah
+  "permission denied" yang membuat orang mengira pemulihannya gagal.
+- `--no-comments` — membuang `COMMENT ON EXTENSION postgis` yang hanya boleh
+  diubah superuser. Skema proyek ini tidak memakai `COMMENT ON` sama sekali.
+- `pg_restore --list` setelahnya — membaca daftar isi dump tanpa memulihkan apa
+  pun. Dump yang cacat ketahuan hari itu, bukan waktu benar-benar dibutuhkan.
+
+**Salin keluar dari komputer itu.** Backup yang ikut hilang bersama komputernya
+bukan backup. Yang benar-benar tidak bisa dibuat ulang dari Excel: koordinat pos
+dan pengelompokan dealer hasil kurasi manusia.
+
+### Uji pemulihannya, jangan cuma percaya
+
+Backup yang belum pernah dipulihkan itu harapan, bukan backup. Sekali sebulan:
+
+```
+createdb -U astra astra_uji_pulih
+pg_restore -U astra -d astra_uji_pulih --no-owner astra-YYYY-MM-DD.dump
+psql -U astra -d astra_uji_pulih -c "SELECT COUNT(*) FROM sales; SELECT COUNT(*) FROM villages WHERE geom_m IS NOT NULL"
+dropdb -U astra astra_uji_pulih
+```
+
+Angkanya harus sama dengan database asli, dan `pg_restore` tidak boleh
+mengeluarkan satu baris pun. Sudah diuji: 3.466 kelurahan, 9.609 penjualan,
+21.336 baris jangkauan, geometri utuh 14.272 km².
 
 `astra_customers` sengaja **tidak** ikut di backup rutin. Kalau memang perlu, buat
 terpisah dan perlakukan seperti berkas rahasia. Itu alasan kedua database ini dipisah.

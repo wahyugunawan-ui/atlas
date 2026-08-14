@@ -90,6 +90,11 @@ npm install
 copy .env.example .env
 ```
 
+**Letakkan `.env` di luar folder proyek** kalau proyeknya ada di dalam
+OneDrive/Google Drive — berkas itu memuat sandi. Yang disarankan
+`C:/astra-data/.env`, lalu buat berkas `.env.path` di folder proyek yang isinya
+satu baris: `C:/astra-data/.env`.
+
 Buka `.env`, isi `DB_PASSWORD` dengan sandi yang tadi dibuat. Lalu:
 
 ```
@@ -101,6 +106,26 @@ npm run seed-coverage       hitung rasio jangkauan, ±3 detik
 ```
 
 Selesai. Jalankan `start.bat`.
+
+### 5. Supaya jalan sendiri (disarankan)
+
+```
+powershell -ExecutionPolicy Bypass -File ops\install-tasks.ps1
+```
+
+Memasang dua tugas terjadwal, **tanpa perlu hak admin**:
+
+- **Astra Command Center** — menyalakan PostgreSQL lalu aplikasinya setiap kali
+  pengguna ini login, dan menghidupkannya ulang (sampai 3x) kalau prosesnya mati.
+- **Astra Command Center - Backup** — `pg_dump` tiap hari jam 19:00 ke
+  `C:/astra-data/backup`, disimpan 14 hari, dan tiap hasilnya diperiksa dengan
+  `pg_restore --list` supaya berkas yang cacat ketahuan hari itu juga.
+
+Membatalkan: tambahkan `-Uninstall` di perintah yang sama.
+
+Keduanya jalan saat **pengguna login**, bukan saat komputer menyala. Untuk server
+yang tidak pernah ada yang login, PostgreSQL dan aplikasi harus didaftarkan sebagai
+Windows service — itu butuh hak admin sekali, langkahnya di [PINDAH.md](docs/PINDAH.md).
 
 ---
 
@@ -131,6 +156,8 @@ dan tidak menyentuh bulan lain. Suntingan yang dibuat lewat halaman Master Pos D
 ```
 npm start                  jalankan server (sama dengan start.bat)
 npm test                   semua tes — butuh PostgreSQL jalan
+opsackup.bat             backup sekarang juga
+ops\install-tasks.ps1      pasang auto-start + backup harian
 npm run set-password       ganti sandi login
 npm run import -- <berkas> <YYYY-MM> [--konsumen]
 npm run seed-regions       isi ulang tabel kelurahan dan poligonnya
@@ -157,6 +184,9 @@ ulang sendiri waktu disimpan.
 | Peta kosong, kelurahan tidak muncul | `npm run seed-regions` belum dijalankan |
 | Semua pos 0% jangkauan | `npm run seed-coverage` belum dijalankan, atau pos belum punya koordinat |
 | `npm test` gagal semua di berkas yang menyentuh database | PostgreSQL belum jalan, atau role `astra` belum punya CREATEDB |
+| `Tidak menemukan berkas .env` | jalankan lewat `start.bat`, atau buat `.env.path` berisi letak `.env` |
+| Aplikasi mati sendiri dan tidak hidup lagi | tugas terjadwal belum dipasang — jalankan `ops\install-tasks.ps1` |
+| Ingin tahu apa yang terjadi kemarin | `C:/astra-data/logs/server-YYYY-MM-DD.log`, disimpan 30 hari |
 
 Pindah ke laptop atau VPS lain: lihat **[PINDAH.md](docs/PINDAH.md)**.
 

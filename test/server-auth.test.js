@@ -8,7 +8,7 @@
 const assert = require('assert');
 const http = require('http');
 const { buildApp } = require('../src/server/app');
-const { hashPassword, COOKIE_NAME } = require('../src/server/auth');
+const { hashPassword, createSession, COOKIE_NAME } = require('../src/server/auth');
 
 const PASSWORD = 'sandi-uji-tim-channel';
 const config = {
@@ -151,8 +151,37 @@ async function test() {
     assert.ok(limited.text.includes('Tunggu'),
       'pesan pembatas harus memberi tahu apa yang harus dilakukan');
 
+    // --- pembatas laju di rute yang mengembalikan PII ---
+    //
+    // Halaman Data Konsumen mengirim 500 baris per permintaan. Tanpa pembatas, satu
+    // akun bersama bisa menyedot 18 ribu baris dalam hitungan detik lewat 40
+    // permintaan berurutan. Yang diuji di sini bukan kelas RateLimiter-nya —
+    // auth.test.js sudah — tapi apakah dia benar-benar TERPASANG di rutenya.
+    //
+    // Tidak butuh database: pembatasnya jalan sebelum repositori disentuh.
+    const sesi = `${COOKIE_NAME}=${createSession(config.sessionSecret)}`;
+    let piiLimited = null;
+    for (let i = 0; i < 60; i++) {
+      const hit = await request(port, 'GET', '/api/customers/browse', { cookie: sesi });
+      assert.notStrictEqual(hit.status, 401, 'sesi uji ditolak — tesnya salah, bukan kodenya');
+      if (hit.status === 429) { piiLimited = { hit, ke: i + 1 }; break; }
+    }
+    assert.ok(piiLimited,
+      '60 permintaan data konsumen berturut-turut tidak pernah dibatasi');
+    assert.ok(piiLimited.ke > 10,
+      `dibatasi terlalu cepat (permintaan ke-${piiLimited.ke}) — menelusuri dengan ` +
+      'tangan pun akan kena');
+    assert.ok(piiLimited.hit.text.includes('Tunggu'),
+      'pesan pembatas harus memberi tahu apa yang harus dilakukan');
+
+    // Rute per-kelurahan ikut dibatasi oleh pembatas yang sama.
+    const perKelurahan = await request(port, 'GET',
+      '/api/customers?village=34.04.01.2001', { cookie: sesi });
+    assert.strictEqual(perKelurahan.status, 429,
+      '/api/customers tidak ikut dibatasi — pembatasnya cuma dipasang di satu rute');
+
     console.log('OK server-auth — rute tak dikenal ikut terjaga, cookie HttpOnly/Lax, ' +
-      'cookie palsu ditolak, pembatas percobaan aktif di rute');
+      'cookie palsu ditolak, pembatas login dan pembatas PII aktif di rute');
   } finally {
     server.close();
   }

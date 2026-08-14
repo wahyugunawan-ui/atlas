@@ -11,12 +11,20 @@ REM sulit ditolong daripada jendela yang menampilkan errornya.
 cd /d "%~dp0"
 title Astra Command Center
 
-if not exist ".env" (
+REM Letak folder data dan kredensial. Keduanya HARUS di luar OneDrive: yang pertama
+REM karena berkas geo bisa terkunci di tengah pembacaan, yang kedua karena .env memuat
+REM hash sandi, rahasia cookie, dan sandi database — dan folder tersinkron berarti
+REM ketiganya ikut naik ke cloud pihak ketiga.
+if not defined DATA_DIR set "DATA_DIR=C:\astra-data"
+if not defined ACC_ENV_FILE set "ACC_ENV_FILE=%DATA_DIR%\.env"
+
+if not exist "%ACC_ENV_FILE%" (
   echo.
-  echo   Berkas .env belum ada.
+  echo   Berkas kredensial belum ada:
+  echo     %ACC_ENV_FILE%
   echo.
-  echo   1. Salin .env.example jadi .env
-  echo   2. Isi DB_PASSWORD dengan sandi MySQL
+  echo   1. Salin .env.example ke situ
+  echo   2. Isi DB_PASSWORD dengan sandi PostgreSQL
   echo   3. Jalankan: npm run set-password
   echo.
   pause

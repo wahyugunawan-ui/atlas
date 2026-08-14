@@ -50,6 +50,81 @@ Tidak ada. Yang tersisa ada di "Belum dikerjakan" di bawah.
 
 ## Selesai
 
+### Pengerasan operasional — dari "jalan waktu ditunggui" ke "bisa ditinggal" (2026-08-14)
+
+Pertanyaannya "apakah ini sudah production ready". Jawabannya waktu itu: fungsinya
+matang, operasinya belum. Sembilan hal dikerjakan; dua di antaranya sudah menggigit
+sendiri di sesi yang sama.
+
+**Yang paling penting, dan bukan soal kode:**
+
+1. **Commit pertama.** Repo git punya nol commit — 74 berkas untracked, tidak ada satu
+   pun titik pulih. `DECISIONS.md` mencatat kejadian di proyek ini sendiri: pekerjaan
+   yang belum di-commit pernah hilang permanen dan `Code.js` ditulis ulang dari awal.
+2. **`.env` keluar dari OneDrive.** Hash sandi, rahasia cookie, dan sandi database ikut
+   tersinkron ke cloud Microsoft. Sekarang dicari berurutan lewat `ACC_ENV_FILE` →
+   `.env.path` → `DATA_DIR/.env` → proyek, dan `validate()` meneriakkannya kalau
+   berkasnya ada di folder tersinkron. `set-password` menulis ke berkas yang
+   BENAR-BENAR dipakai — kalau tidak, gejalanya "sandi tersimpan" tapi sandi lama
+   masih berlaku.
+3. **Auto-start tanpa hak admin.** `ops/install-tasks.ps1` memasang tugas terjadwal
+   yang menyalakan PostgreSQL lalu aplikasinya saat login, dan menghidupkan ulang
+   sampai 3x kalau prosesnya mati. Dibuktikan: aplikasi dimatikan paksa, tugasnya
+   dijalankan, port 3100 hidup lagi.
+4. **Backup harian yang pemulihannya sudah diuji.** `ops/backup.bat`, 19:00, simpan 14
+   hari. Dua hal ketemu waktu mengujinya sungguhan: `spatial_ref_sys` dan
+   `COMMENT ON EXTENSION postgis` membuat tiap pemulihan berakhir dengan baris merah
+   walaupun datanya lengkap — persis yang membuat orang panik saat benar-benar
+   memulihkan. Dengan `--exclude-table` dan `--no-comments`, pemulihannya **nol error**
+   dan tiap tabel cocok persis: 3.466 kelurahan, 9.609 penjualan, 21.336 jangkauan,
+   geometri utuh 14.272 km².
+
+**Sisanya:**
+
+5. **Penanganan crash tingkat proses.** Satu promise gagal tanpa `.catch()` menjatuhkan
+   Node, dan tidak ada yang menghidupkannya. Sengaja TIDAK memanggil `process.exit()`
+   di penangannya: nasihat umum "matikan saja, keadaannya tidak bisa dipercaya" benar
+   kalau ada supervisor — di laptop tim tanpa orang IT, mati berarti mati sampai ada
+   yang menyadarinya.
+6. **Log ke berkas.** 17 `console.*` yang hilang begitu jendela ditutup. `logger.js`
+   menyadap `console` — bukan menyediakan API baru — supaya semua titik panggil yang
+   sudah ada dan yang nanti ditulis ikut tercatat tanpa disentuh. Ditulis SINKRON:
+   stream menahan baris di buffer, dan yang tertahan saat proses mati justru baris yang
+   paling dibutuhkan. Disimpan 30 hari.
+7. **Pembatas laju di rute PII.** `/api/customers/browse` mengirim 500 baris per
+   permintaan tanpa throttle — 37 permintaan menyedot 18.512 baris. Sekarang 30 per
+   menit, memakai ulang `RateLimiter` dari `auth.js`, dan ikut dipasang di
+   `/api/customers`.
+8. **Retensi arsip unggahan.** `uploads/` menyimpan tiap Excel selamanya, dan Excel itu
+   memuat PII mentah. Sekarang 90 hari, dibersihkan waktu ada unggahan baru — bukan
+   lewat penjadwal terpisah, karena penjadwal yang harus dipasang orang adalah
+   penjadwal yang lupa dipasang.
+9. **Dukungan HTTPS opsional.** Aktif hanya kalau `SSL_CERT`/`SSL_KEY` menunjuk berkas
+   yang ada; salah tulis membuat server MENOLAK start, bukan diam-diam turun ke HTTP.
+   TIDAK membuat sertifikat sendiri: layar peringatan merah mengajari orang menekan
+   "lanjutkan saja".
+
+**Verifikasi:** 13/13 berkas tes hijau (dua berkas baru: `hardening.test.js`,
+`db.test.js`), **8/8 mutasi tertangkap** untuk perilaku baru, browser bersih di kelima
+halaman lewat proses yang dinyalakan Task Scheduler, dan pemulihan backup cocok persis.
+
+**Satu yang saya rusak sendiri dan perbaiki:** menghapus `.env` dari proyek memutus
+`npm test` — semua tes database gagal karena tidak ada kredensial. Ditambal dengan
+`.env.path`, berkas penunjuk berisi satu baris path (bukan rahasia, tetap di-gitignore).
+
+**Yang masih belum, dan sengaja tidak diklaim:**
+
+- **HTTPS belum benar-benar dipakai.** Mekanismenya ada, sertifikatnya tidak. Di LAN
+  tertutup ini risiko yang diterima sadar; di VPS nanti Caddy yang mengurusnya.
+- **Tugas terjadwal jalan saat LOGIN, bukan saat komputer menyala.** Untuk server yang
+  tidak pernah ada yang login, PostgreSQL dan aplikasi harus jadi Windows service —
+  butuh admin sekali. Langkahnya ditulis di `PINDAH.md`, belum dijalankan.
+- **Node 20 masih belum diuji langsung** meski `engines` mengizinkannya.
+- **Belum ada CI.** Tes jalan kalau ada yang ingat menjalankannya.
+- **Proyeknya sendiri masih di dalam OneDrive** — 228 MB dan 6.177 berkas
+  `node_modules` ikut tersinkron terus-menerus. Rahasianya sudah keluar; foldernya
+  belum, dan itu keputusan pemilik proyek.
+
 ### Struktur folder dirapikan untuk produksi (2026-08-13)
 
 Yang diubah, dan alasannya masing-masing:

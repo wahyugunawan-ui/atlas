@@ -12,8 +12,20 @@ const path = require('path');
 const crypto = require('crypto');
 const readline = require('readline');
 const { hashPassword } = require('../src/server/auth');
+const { config } = require('../src/server/config');
 
-const ENV_FILE = path.join(__dirname, '..', '.env');
+/**
+ * Ditulis ke berkas .env yang BENAR-BENAR dipakai server, bukan ke yang di dalam
+ * proyek begitu saja.
+ *
+ * Kalau keduanya berbeda — dan memang berbeda begitu .env dipindah keluar dari
+ * folder tersinkron — menulis ke tempat yang salah menghasilkan gejala yang paling
+ * membingungkan: skripnya bilang "sandi tersimpan", tapi sandi lamanya masih berlaku.
+ *
+ * Kalau belum ada satu pun .env, dibuat di sebelah folder data, yang memang sudah
+ * harus di disk lokal.
+ */
+const ENV_FILE = config.envFile || path.join(config.dataDir, '.env');
 
 /** Baca satu baris tanpa menampilkan ketikan di layar. */
 function askHidden(question) {
@@ -72,8 +84,10 @@ async function main() {
     console.log('\n  SESSION_SECRET yang lama dipertahankan (sesi tidak terputus).');
   }
 
+  // Foldernya bisa saja belum ada kalau ini .env pertama di lokasi baru.
+  fs.mkdirSync(path.dirname(ENV_FILE), { recursive: true });
   fs.writeFileSync(ENV_FILE, content, { mode: 0o600 });
-  console.log('  Sandi tersimpan di .env\n');
+  console.log('  Sandi tersimpan di ' + ENV_FILE + '\n');
   console.log('  Berkas .env memuat kredensial. Jangan dikirim lewat chat atau email,');
   console.log('  dan jangan ikut disalin ke tempat umum.\n');
 }

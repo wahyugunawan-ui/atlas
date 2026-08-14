@@ -8,9 +8,20 @@ const path = require('path');
 const crypto = require('crypto');
 const repo = require('./repository');
 const { runImport, isRunning } = require('./importer');
+const { RateLimiter } = require('./auth');
 
 /** Batas ukuran unggahan. Berkas Astra ±2,5 MB; 25 MB memberi ruang lega. */
 const MAX_UPLOAD = 25 * 1024 * 1024;
+
+/**
+ * Berapa lama arsip Excel yang diunggah disimpan.
+ *
+ * Berkas ini memuat PII mentah — nama, alamat, dan seluruh baris apa adanya dari
+ * Astra. Yang dibutuhkan aplikasi sudah masuk database sejak impor selesai; arsipnya
+ * cuma untuk menelusuri kalau ada angka yang dicurigai. Tiga bulan cukup untuk itu,
+ * dan menyimpan selamanya berarti menumpuk PII tanpa ada yang pernah memutuskannya.
+ */
+const UPLOAD_KEEP_DAYS = 90;
 
 const PERIOD = /^\d{4}-(0[1-9]|1[0-2])$/;
 const VILLAGE = /^\d{2}\.\d{2}\.\d{2}\.\d{4}$/;
@@ -19,6 +30,22 @@ const OUTLET = /^[A-Za-z0-9._-]{1,32}$/;
 
 function build(config) {
   const api = express.Router();
+
+  /**
+   * Pembatas laju untuk rute yang mengembalikan PII.
+   *
+   * Halaman Data Konsumen mengirim 500 baris per permintaan, dan itu wajar untuk
+   * orang yang menelusuri. Yang tidak wajar: 40 permintaan berturut-turut, yang
+   * menyedot seluruh 18 ribu baris dalam hitungan detik. Dengan satu akun bersama,
+   * tidak ada cara lain membedakan keduanya selain kecepatan.
+   *
+   * 30 per menit memberi ruang lebih dari cukup untuk menelusuri dengan tangan —
+   * satu halaman per dua detik tanpa henti — sambil membuat penyedotan penuh butuh
+   * lebih dari satu menit dan meninggalkan 40 baris di access_log.
+   *
+   * Kelasnya dipakai ulang dari auth.js, sama seperti pembatas percobaan login.
+   */
+  const piiLimiter = new RateLimiter(30, 60 * 1000);
 
   // Express 5 meneruskan penolakan promise dari handler async ke penangan error,
   // jadi tidak perlu try/catch di tiap rute.
@@ -60,6 +87,11 @@ function build(config) {
    * akan terasa seperti aplikasinya rusak.
    */
   api.get('/customers/browse', async (req, res) => {
+    if (!piiLimiter.allow(req.ip || 'tidak diketahui')) {
+      return res.status(429).json({
+        error: 'Terlalu banyak permintaan data konsumen. Tunggu sebentar lalu coba lagi.',
+      });
+    }
     const q = req.query;
     const period = String(q.period || '');
     const village = String(q.village || '');
@@ -99,6 +131,11 @@ function build(config) {
    * konsumen dalam satu permintaan. Tiap akses dicatat.
    */
   api.get('/customers', async (req, res) => {
+    if (!piiLimiter.allow(req.ip || 'tidak diketahui')) {
+      return res.status(429).json({
+        error: 'Terlalu banyak permintaan data konsumen. Tunggu sebentar lalu coba lagi.',
+      });
+    }
     const village = String(req.query.village || '');
     if (!VILLAGE.test(village)) {
       return res.status(400).json({
@@ -187,6 +224,7 @@ function build(config) {
       // "..\..\.env" tidak akan pernah punya kesempatan.
       const dir = path.join(config.dataDir, 'uploads');
       fs.mkdirSync(dir, { recursive: true });
+      pruneUploads(dir);
       const safe = path.join(dir,
         `${period}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`);
       fs.writeFileSync(safe, parsed.file.data);
@@ -256,4 +294,32 @@ function parseMultipart(body, contentType) {
   return { fields, file };
 }
 
-module.exports = { build, parseMultipart, MAX_UPLOAD };
+/**
+ * Buang arsip unggahan yang lebih tua dari UPLOAD_KEEP_DAYS.
+ *
+ * Dijalankan waktu ada unggahan baru, bukan lewat penjadwal terpisah: impor terjadi
+ * sebulan sekali, dan penjadwal yang harus dipasang orang adalah penjadwal yang
+ * lupa dipasang. Kegagalan menghapus tidak boleh menggagalkan impor — kalau satu
+ * berkas terkunci, yang benar adalah impornya tetap jalan.
+ *
+ * @return {number} jumlah berkas yang dibuang
+ */
+function pruneUploads(dir) {
+  const batas = Date.now() - UPLOAD_KEEP_DAYS * 24 * 60 * 60 * 1000;
+  let dibuang = 0;
+  try {
+    for (const name of fs.readdirSync(dir)) {
+      const file = path.join(dir, name);
+      try {
+        if (fs.statSync(file).mtimeMs < batas) { fs.unlinkSync(file); dibuang++; }
+      } catch { /* satu berkas terkunci tidak boleh menghentikan sisanya */ }
+    }
+    if (dibuang) {
+      console.log(`Arsip unggahan: ${dibuang} berkas di atas ` +
+        `${UPLOAD_KEEP_DAYS} hari dibuang (memuat PII).`);
+    }
+  } catch { /* folder belum ada — tidak ada yang perlu dibuang */ }
+  return dibuang;
+}
+
+module.exports = { build, parseMultipart, pruneUploads, MAX_UPLOAD, UPLOAD_KEEP_DAYS };

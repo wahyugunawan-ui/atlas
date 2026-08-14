@@ -47,3 +47,7 @@ Desktop.ini
 .idea/
 .vscode/
 *.swp
+
+# Penunjuk letak .env. Isinya path mesin masing-masing, bukan rahasia,
+# tapi juga bukan sesuatu yang sama untuk semua orang.
+.env.path

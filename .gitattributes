@@ -13,6 +13,12 @@
 *.bat text eol=crlf
 *.cmd text eol=crlf
 
+# Skrip PowerShell juga. Yang lebih penting lagi: berkas .ps1 di sini punya BOM UTF-8,
+# dan itu WAJIB — PowerShell 5.1 membaca .ps1 tanpa BOM sebagai ANSI, dan tiap karakter
+# non-ASCII (misalnya tanda pisah di komentar) berubah jadi sampah yang memecah string
+# dan menggagalkan seluruh skrip. Sudah pernah terjadi di proyek ini.
+*.ps1 text eol=crlf
+
 # Biner: jangan disentuh sama sekali.
 *.png binary
 *.jpg binary

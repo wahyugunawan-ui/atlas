@@ -64,6 +64,15 @@ Istilah wilayah memakai terjemahan resmi BPS: kelurahan/desa → `village`, keca
 - **Placeholder ditulis `?`**, diterjemahkan jadi `$n` oleh `toPositional()` di
   `db.js`. Penulisan borongan pakai `store.bulkValues(rows)`. Jangan campur `?` dan
   `$n` dalam satu query.
+- **Rahasia tidak pernah di folder proyek** kalau proyeknya di dalam OneDrive.
+  `.env` dicari lewat `ACC_ENV_FILE` → `.env.path` → `DATA_DIR/.env` → proyek.
+  `config.envFile` menyebut yang benar-benar dipakai, dan `set-password` menulis ke
+  situ — bukan ke `.env` di proyek begitu saja.
+- **Rute yang mengembalikan PII wajib lewat `piiLimiter`** di `routes.js`, dan tiap
+  aksesnya dicatat lewat `repo.logCustomerAccess`. Rute PII baru tanpa keduanya
+  membuka jalan penyedotan yang tidak meninggalkan jejak.
+- **Jangan `process.exit()` di penangan `uncaughtException`.** Di laptop tanpa
+  supervisor, mati berarti mati sampai ada yang menyadarinya.
 
 ## Struktur
 
@@ -75,6 +84,7 @@ public/         yang dikirim ke browser; public/js juga di-import tes
 public/vendor/  library hasil unduhan. DI LUAR GIT, dibangun `npm run vendor`.
 test/           *.test.js dijalankan `npm test`; test/helpers/ bukan tes
 scripts/        perkakas baris perintah dan seed
+ops/            skrip operasional: auto-start, backup, tugas terjadwal
 docs/           ROADMAP (status), DECISIONS (kenapa), PINDAH (pindah server), PLAN
 prototype/      berkas proposal mandiri. Ikut memakai src/core/coverage.js.
 data/           geo + arsip unggahan. DI LUAR GIT, DI LUAR OneDrive.
