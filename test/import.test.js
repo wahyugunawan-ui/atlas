@@ -319,6 +319,41 @@ async function test() {
     assert.strictEqual(lama.hasGeom, false,
       'prasyarat tes: kelurahan uji memang tanpa poligon');
 
+    // --- summary() menyaring kelurahan yang tidak berarti ---
+    //
+    // Database memuat SELURUH Jateng + DIY supaya perluasan cakupan tidak butuh setelan
+    // apa pun. Yang dikirim ke halaman harus lebih sempit: yang punya penjualan, yang
+    // masuk radius pos, atau yang ditambah manual.
+    //
+    // Ini bukan soal ukuran payload. Tanpa penyaring, KPI "Kelurahan Kosong" berubah
+    // makna diam-diam — dari "kelurahan di wilayah kita yang belum ada penjualan"
+    // jadi "kelurahan di seluruh Jawa Tengah yang tidak kita jual". Angkanya benar
+    // secara hitungan, tidak berguna secara bisnis, dan di layar terlihat seperti
+    // kemunduran drastis.
+    await store.run(db, `
+      INSERT INTO villages (village_code, village_name, district_code, district_name,
+                            city_code, city_name, province_code, geom, geom_m)
+      VALUES ('34.04.09.9001', 'Jauh Tanpa Penjualan', '34.04.09', 'Jauh',
+              '34.04', 'Kabupaten Sleman', '34',
+              ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)),
+              ST_Transform(ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)), 32749))`,
+    [JSON.stringify({ type: 'Polygon', coordinates: [[[111.9, -8.4], [111.91, -8.4],
+      [111.91, -8.41], [111.9, -8.4]]] }),
+    JSON.stringify({ type: 'Polygon', coordinates: [[[111.9, -8.4], [111.91, -8.4],
+      [111.91, -8.41], [111.9, -8.4]]] })]);
+
+    const disaring = await repo.summary();
+    const kodeTampil = new Set(disaring.villages.map((v) => v.code));
+
+    assert.ok(!kodeTampil.has('34.04.09.9001'),
+      'kelurahan tanpa penjualan DAN di luar semua radius ikut terkirim — ' +
+      'KPI "Kelurahan Kosong" jadi menghitung seluruh provinsi');
+    assert.ok(kodeTampil.has('34.04.06.2003'),
+      'kelurahan yang punya penjualan malah tersaring keluar');
+    assert.ok(kodeTampil.has('34.04.06.2099'),
+      'kelurahan yang ditambah manual hilang dari layar begitu disimpan — ' +
+      'orang akan mengira penambahannya gagal');
+
     // Kembalikan keadaan supaya pemeriksaan sesudah ini tetap bermakna.
     await runImport({ file, period: '2026-08', fileName: 'agustus.csv', config });
 

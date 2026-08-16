@@ -567,3 +567,50 @@ editor, tidak di GitHub, cuma waktu ada yang menyalin lalu bingung kenapa gagal.
 menolak commit yang memasangnya, karena paragraf yang menjelaskan bahaya karakter
 kontrol ternyata memuat tiga karakter kontrol baru. Kesalahan yang sama, penulis yang
 sama, lima menit berselang.
+
+## [2026-08-17] Database memuat seluruh Jateng + DIY; browser cuma yang berarti
+
+**Konteks:** Perluasan cakupan ke kabupaten baru butuh poligon, dan itu selama ini
+berarti menjalankan pipeline Python. Pertanyaannya: siapkan saja semuanya sekaligus?
+**Diukur dulu:** tabel `villages` se-Indonesia ~135 MB (aman), tapi `kelurahan.geojson`
+~84 MB dan `/api/summary` ~15 MB tiap halaman dibuka (mustahil — MapLibre memuat
+geojson sekaligus, dan summary dikirim tiap kali halaman dibuka).
+**Keputusan:** Database memuat SELURUH Jawa Tengah + DIY (8.999 kelurahan, 40
+kabupaten/kota). Yang dikirim ke browser disaring: kelurahan yang punya penjualan, ATAU
+masuk radius sebuah pos, ATAU ditambah manual. 4.003 dari 8.999.
+**Alasan:** Ekspansi jadi tanpa setelan — kabupaten baru di Excel langsung cocok karena
+kelurahannya sudah ada beserta poligonnya. Cakupan dibatasi Jateng + DIY karena 93%
+baris yang belum cocok ada di Jawa Tengah; pembeli dari provinsi lain memang di luar
+radius pos mana pun, jadi menambah cakupan untuk mereka tidak mengubah angka apa pun.
+**Alternatif yang ditolak:** Menyaring dengan "kota yang punya penjualan" — diukur dan
+ditolak: 38 dari 40 kota punya setidaknya satu penjualan, jadi penyaringnya cuma
+membuang 3%. Mengirim semua 8.999 ke halaman — ditolak bukan karena ukurannya (2,31 vs
+3,18 MB, halaman tetap siap 1,4 detik) tapi karena KPI "Kelurahan Kosong" berubah makna
+diam-diam dari 439 jadi 5.673.
+**Konsekuensi:**
+- Kriteria penyaring HARUS sama di `repository.summary()` dan `scripts/export-geo.js`.
+  Kalau berbeda, peta dan tabel menampilkan himpunan kelurahan yang berlainan.
+- `geom_m IS NULL` ikut disertakan di summary: kelurahan yang ditambah manual belum
+  punya penjualan maupun poligon, dan tanpa syarat itu dia hilang dari layar begitu
+  disimpan.
+- Angka jangkauan turun 15,1% -> 14,8% karena 403 baris yang tadinya tak terlihat kini
+  terhitung. Turunnya benar, bukan kemunduran.
+- Poligon di database detail penuh; penyederhanaan 50 m HANYA untuk yang digambar.
+
+## [2026-08-17] geopandas tidak diperlukan untuk memuat batas wilayah
+
+**Konteks:** Dua kali dalam proyek ini geopandas jadi penghalang: pertama waktu memilih
+sampling Monte Carlo daripada `radius.py`, kedua waktu perluasan cakupan dianggap butuh
+GDAL 100 MB.
+**Keputusan:** `scripts/seed-boundaries.js` membaca berkas sumber langsung di Node dan
+menyerahkan geometrinya ke PostGIS.
+**Alasan:** Asumsinya ternyata salah. Kolom `path` di `cahyadsn/wilayah_boundaries`
+adalah array JSON biasa — kedalaman 3 untuk poligon, 4 untuk multipoligon — bukan WKB
+yang butuh pustaka geometri. PostGIS sudah ada di proyek ini dan mengerjakan validasi,
+proyeksi, serta penyederhanaan lewat fungsi yang sudah dipakai `seed-regions.js`.
+**Konsekuensi:** Koordinat sumber `[lintang, bujur]`, GeoJSON `[bujur, lintang]` —
+penukarannya WAJIB dan tidak pernah menimbulkan error kalau salah. Poligonnya tetap
+sah, luasnya tetap masuk akal, jangkauannya cuma jadi 0% di mana-mana. Karena itu
+`checkOrientation()` berjalan sebelum satu baris pun masuk database, dan batas kotaknya
+diukur dari 8.999 kelurahan sungguhan (-8,212..-5,725) — bukan ditebak dari peta
+daratan, yang menolak Karimunjawa.

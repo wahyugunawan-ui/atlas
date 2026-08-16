@@ -20,7 +20,10 @@
     "seed-regions": "node scripts/seed-regions.js",
     "import": "node scripts/import-cli.js",
     "seed-outlets": "node scripts/seed-outlets.js",
-    "seed-coverage": "node scripts/seed-coverage.js"
+    "seed-coverage": "node scripts/seed-coverage.js",
+    "fetch-boundaries": "node scripts/fetch-boundaries.js",
+    "seed-boundaries": "node scripts/seed-boundaries.js",
+    "export-geo": "node scripts/export-geo.js"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",

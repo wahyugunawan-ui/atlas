@@ -50,6 +50,58 @@ Tidak ada.
 
 ## Selesai
 
+### Seluruh Jateng + DIY disiapkan di database (2026-08-17)
+
+Pertanyaannya: bisakah data kelurahan dan poligonnya disiapkan sekaligus supaya
+ekspansi tidak perlu menyetel geo lagi — atau tidak efisien? Diukur dulu, baru dijawab:
+
+| | 3.466 (sebelum) | se-Indonesia | |
+|---|---|---|---|
+| Tabel `villages` | 5,7 MB | ~135 MB | aman |
+| `kelurahan.geojson` ke browser | 3,5 MB | ~84 MB | tidak mungkin |
+| `villages` di `/api/summary` | 0,6 MB | ~15 MB per halaman | tidak mungkin |
+
+Jadi: **murah di database, mustahil diteruskan apa adanya ke browser.** Rancangannya
+jadi "database lengkap, browser cuma menerima yang berarti". Cakupan yang dipilih Jateng
++ DIY lengkap — 93% baris yang belum cocok ada di Jawa Tengah.
+
+**Hasilnya: 3.466 -> 8.999 kelurahan, 15 -> 40 kabupaten/kota.** Baris yang belum cocok
+turun dari 349 nama / 568 baris jadi **50 nama / 165 baris**; kecocokan impor naik dari
+97,0% ke **99,1%**, dan 403 baris penjualan yang tadinya hilang sekarang terhitung.
+
+**geopandas ternyata tidak diperlukan sama sekali** — pembalikan dari asumsi lama yang
+dua kali jadi penghalang. Kolom `path` di berkas sumber array JSON biasa, bukan WKB,
+jadi Node membacanya dan PostGIS yang mengurus validasi, proyeksi, dan penyederhanaan.
+Dependensi Python + GDAL 100 MB hilang dari jalur ini.
+
+**Tiga temuan yang tidak akan ketahuan tanpa mengukur:**
+
+1. **Karimunjawa.** Penjaga arah koordinat berbunyi di berkas Jepara. Yang tertangkap
+   bukan kesalahan: empat kelurahan Karimunjawa memang kepulauan di Laut Jawa 90 km
+   di utara pesisir, di lintang -5,7. Tebakan batas utara saya (-6,0) yang salah, bukan
+   datanya. Sekarang batasnya diukur dari 8.999 kelurahan: lintang -8,212..-5,725.
+2. **Penyaring "kota yang punya penjualan" ternyata tidak menyaring apa pun** — 38 dari
+   40 kota punya setidaknya satu penjualan. Diganti kriteria yang berarti: kelurahan
+   yang punya penjualan ATAU masuk radius pos. 4.003 dari 8.999.
+3. **KPI "Kelurahan Kosong" berubah makna diam-diam.** Tanpa penyaring, dia melonjak
+   439 -> 5.673: dari "kelurahan di wilayah kita yang belum ada penjualan" jadi
+   "kelurahan di seluruh Jawa Tengah yang tidak kita jual". Benar secara hitungan,
+   tidak berguna secara bisnis, dan di layar terlihat seperti kemunduran drastis.
+   Setelah disaring: **677**, dan itu justru metrik yang lebih tajam daripada 439 lama.
+
+**Angka jangkauan turun 15,1% -> 14,8%, dan itu BENAR.** 403 baris yang tadinya tak
+terlihat sekarang terhitung, sebagian besar di kota tanpa pos sama sekali — jadi memang
+di luar jangkauan. Yang 15,1% dulu terlihat lebih bagus karena diam-diam mengabaikan
+568 baris. Poligon detail penuh sendiri tidak menggeser angkanya: dihitung ulang dengan
+geometri baru sebelum impor, hasilnya tetap 7,6 / 15,1 / 23,5 / 34,2.
+
+Halaman siap dalam 1,4 detik, `/api/summary` 2,31 MB — lebih kecil daripada sebelum
+ekspansi meski database 2,6x lebih besar. 17/17 tes, 8/8 mutasi tertangkap.
+
+**Sisa 165 baris yang belum cocok bukan lagi soal cakupan** — 116 Jateng + 20 DIY itu
+ketidakcocokan EJAAN NAMA di kota yang kelurahannya sudah ada, dan 29 sisanya pembeli
+luar provinsi yang memang dibiarkan.
+
 ### Tambah data di Master Pos Dealer dan Master Kelurahan (2026-08-17)
 
 Sebelumnya outlet dan kelurahan HANYA lahir dari impor bulanan. Pos yang sudah buka

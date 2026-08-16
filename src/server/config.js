@@ -88,9 +88,25 @@ const dataDir = process.env.DATA_DIR
   ? path.resolve(process.env.DATA_DIR)
   : path.join(ROOT, 'data');
 
+/**
+ * Letak pipeline geo (`geo-kelurahan/`) — sumber batas wilayah kelurahan.
+ *
+ * Dulu ditulis relatif (`../../geo-kelurahan`) dan itu PATAH begitu folder proyek
+ * dipindahkan keluar dari OneDrive: yang dicari jadi `C:\geo-kelurahan`. Gejalanya
+ * cuma "berkas tidak ada" di skrip yang jarang dijalankan, jadi tidak ada yang tahu
+ * sampai ada yang membutuhkannya.
+ *
+ * Sekarang bisa ditunjuk lewat GEO_SOURCE_DIR di .env; kalau kosong, tebakan lama
+ * dipakai sebagai jalan terakhir supaya pemasangan yang belum pindah tetap jalan.
+ */
+const geoSourceDir = process.env.GEO_SOURCE_DIR
+  ? path.resolve(process.env.GEO_SOURCE_DIR)
+  : path.join(ROOT, '..', 'geo-kelurahan');
+
 const config = {
   root: ROOT,
   envFile,
+  geoSourceDir,
   port: Number(process.env.PORT) || 3000,
   dataDir: dataDir,
 

@@ -26,12 +26,38 @@ async function summary() {
   // "0% terjangkau" dan "belum bisa dihitung" — kalau tidak, penjualannya diam-diam
   // masuk hitungan sebagai "di luar jangkauan" dan menurunkan persentase tanpa sebab
   // yang terlihat.
+  // Yang dikirim ke halaman: kelurahan yang punya penjualan, ATAU yang masuk radius
+  // jangkauan sebuah pos. 4.003 dari 8.999 yang ada di database.
+  //
+  // Penyaring ini bukan soal ukuran payload — itu cuma 1,6 MB dan halaman tetap siap
+  // dalam 1,5 detik tanpanya. Alasannya ARTI ANGKANYA.
+  //
+  // Database sekarang memuat SELURUH Jateng + DIY supaya perluasan cakupan tidak butuh
+  // setelan apa pun. Tapi tanpa penyaring, KPI "Kelurahan Kosong" berubah makna
+  // diam-diam: dari "kelurahan di wilayah kita yang belum ada penjualan" (439) jadi
+  // "kelurahan di seluruh Jawa Tengah yang tidak kita jual" (5.673). Angka kedua benar
+  // secara hitungan dan tidak berguna secara bisnis — dan di layar terlihat seperti
+  // kemunduran drastis.
+  //
+  // `geom_m IS NULL` ikut disertakan, dan itu bukan tambalan. Kelurahan yang ditambah
+  // manual lewat halaman belum punya penjualan (penjualannya datang di impor
+  // berikutnya) dan belum punya poligon — tanpa syarat ini dia hilang dari layar
+  // begitu disimpan, dan orang akan mengira penambahannya gagal.
+  //
+  // Semua yang dimuat dari berkas sumber punya poligon, jadi `geom_m IS NULL` persis
+  // berarti "ditambah tangan oleh orang".
+  //
+  // Kriterianya sama dengan scripts/export-geo.js, KECUALI bagian ini: yang tanpa
+  // poligon memang tidak bisa digambar di peta. Perbedaan yang disengaja dan satu-satunya.
   const villages = await store.all(db, `
     SELECT village_code AS code, village_name AS name,
            district_name AS district, city_code AS "cityCode", city_name AS "cityName",
            province_code AS "provinceCode", lat, lng,
            (geom_m IS NOT NULL) AS "hasGeom"
     FROM villages
+    WHERE village_code IN (SELECT village_code FROM sales)
+       OR village_code IN (SELECT DISTINCT village_code FROM coverage)
+       OR geom_m IS NULL
     ORDER BY province_code, city_name, district_name, village_name`);
 
   const outlets = await store.all(db, `

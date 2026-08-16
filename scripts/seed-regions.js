@@ -18,8 +18,7 @@ const path = require('path');
 const { config } = require('../src/server/config');
 const store = require('../src/server/db');
 
-const REFERENCE = path.join(__dirname, '..', '..', 'geo-kelurahan', 'output',
-  'referensi_kelurahan.csv');
+const REFERENCE = path.join(config.geoSourceDir, 'output', 'referensi_kelurahan.csv');
 
 /**
  * Baris per INSERT. Lebih kecil daripada tempat lain karena tiap baris membawa satu

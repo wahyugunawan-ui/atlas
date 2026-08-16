@@ -160,6 +160,9 @@ ops/backup.bat             backup sekarang juga
 ops\install-tasks.ps1      pasang auto-start + backup harian
 npm run set-password       ganti sandi login
 npm run import -- <berkas> <YYYY-MM> [--konsumen]
+npm run fetch-boundaries   unduh berkas batas wilayah Jateng + DIY (sekali)
+npm run seed-boundaries    muat 8.999 kelurahan + poligonnya ke database
+npm run export-geo         segarkan berkas peta untuk browser
 npm run seed-regions       isi ulang tabel kelurahan dan poligonnya
 npm run seed-coverage      hitung ulang SEMUA rasio jangkauan
 ```
@@ -169,6 +172,20 @@ masuk ke server.
 
 Menggeser pin satu pos lewat aplikasi **tidak** perlu `seed-coverage` — pos itu dihitung
 ulang sendiri waktu disimpan.
+
+### Kalau penjualan melebar ke kabupaten baru
+
+Tidak perlu menambah kelurahan satu per satu. Database sudah memuat **seluruh Jawa
+Tengah + DI Yogyakarta** (8.999 kelurahan, 40 kabupaten/kota) beserta poligonnya,
+jadi kabupaten baru yang muncul di Excel langsung cocok sendiri. Setelah impor:
+
+```
+npm run export-geo     # kelurahan baru ikut tergambar di peta
+npm run seed-coverage  # hitung jangkauan kalau ada pos di sana
+```
+
+Yang dikirim ke browser tetap disaring ke kelurahan yang punya penjualan atau masuk
+radius sebuah pos — 4.003 dari 8.999. Database lengkap tidak membuat halaman berat.
 
 ---
 
