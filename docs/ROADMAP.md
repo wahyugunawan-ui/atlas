@@ -50,6 +50,50 @@ Tidak ada.
 
 ## Selesai
 
+### Impor Excel: 245 detik jadi 5,7 detik (2026-08-17)
+
+Keluhannya "upload Excel masih lama banget". Riwayat impor menunjukkan pola yang
+langsung menunjuk sebabnya:
+
+| berkas | baris | durasi |
+|---|---|---|
+| CSV | 19.080 | **0 detik** |
+| XLSX | 19.080 | **245–287 detik** |
+
+Isi dan hasilnya sama persis. Jadi bukan databasenya, bukan jaringannya, bukan
+ukuran datanya — sesuatu di jalur pembacaan xlsx.
+
+**Sebabnya satu baris:** `for (let i = 1; i <= sheet.columnCount; i++)`.
+
+`columnCount` itu GETTER yang memindai ulang seluruh sheet tiap kali dibaca, bukan
+angka tersimpan. Ditulis di kondisi loop, dia dievaluasi sekali per kolom per baris —
+19.081 x 14 = 267 ribu pemindaian penuh. Diukur langsung:
+
+    i <= sheet.columnCount   20.659 ms per 2.000 baris   (~197 detik)
+    batas diangkat           2 ms per 2.000 baris        (~19 ms)
+
+Membaca berkasnya sendiri cuma 1 detik. Seluruh sisanya loop itu.
+
+**Dua tebakan saya yang salah sebelum sampai ke sana**, dicatat karena keduanya
+terdengar masuk akal: pertama saya kira `getCell()` yang lambat, kedua saya kira dia
+memburuk karena `getCell()` membuat sel yang belum ada. Keduanya dibantah pengukuran
+sendiri — `getCell` di rentang baris mana pun tetap 1 ms per 2.000 baris. Yang
+membedakan profil pertama dari uji-uji berikutnya ternyata cuma satu: di profil
+pertama batas loopnya inline, di sisanya saya kebetulan mengangkatnya ke variabel.
+
+**Diverifikasi identik, bukan cuma cepat.** Seluruh 19.081 baris x 14 kolom
+dibandingkan lama vs baru: sama persis. Impor ulang menghasilkan 9.609 baris sales,
+18.512 unit, 349 unmatched — sama seperti sebelumnya.
+
+`row.values` dipakai menggantikan `getCell()` sekalian: bukan demi kecepatan (keduanya
+sama cepat setelah batasnya diangkat) tapi karena `getCell()` MEMBUAT sel yang belum
+ada, jadi sekadar membaca ikut menggemukkan struktur di memori.
+
+**Penjaganya `test/xlsx.test.js`**, dan yang dijaga bukan kecepatannya — tes waktu itu
+rapuh, merah di mesin sibuk dan hijau di mesin cepat meski kodenya salah. Yang dijaga:
+POLA-nya tidak muncul lagi di kode, dan kolom kosong tidak menggeser indeks. 2/2 mutasi
+tertangkap.
+
 ### Fase 5 tuntas: memindahkan pos ke dealer lain (2026-08-16)
 
 Pengelompokan dealer awalnya tebakan dari nama pos — bagian sebelum " - ". CLAUDE.md
