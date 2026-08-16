@@ -106,7 +106,6 @@ npm start         jalankan server
 node test/aggregate.test.js    satu berkas saja, waktu sedang memperbaiki
 npm run seed-regions           isi kelurahan + poligonnya (wajib sebelum jangkauan)
 npm run seed-coverage          hitung ulang semua rasio jangkauan dengan PostGIS
-npm run migrate-mysql          sekali jalan: pindahkan data dari MySQL lama
 ```
 
 ## Standar tes

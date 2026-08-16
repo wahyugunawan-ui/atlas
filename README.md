@@ -162,7 +162,6 @@ npm run set-password       ganti sandi login
 npm run import -- <berkas> <YYYY-MM> [--konsumen]
 npm run seed-regions       isi ulang tabel kelurahan dan poligonnya
 npm run seed-coverage      hitung ulang SEMUA rasio jangkauan
-npm run migrate-mysql      sekali jalan, dari versi MySQL lama
 ```
 
 `--konsumen` menyimpan nama dan alamat konsumen. Tanpa itu, tidak ada satu pun PII yang
