@@ -186,6 +186,21 @@ ulang sendiri waktu disimpan.
 | `Tidak menemukan berkas .env` | jalankan lewat `start.bat`, atau buat `.env.path` berisi letak `.env` |
 | Aplikasi mati sendiri dan tidak hidup lagi | tugas terjadwal belum dipasang — jalankan `ops\install-tasks.ps1` |
 | Ingin tahu apa yang terjadi kemarin | `C:/astra-data/logs/server-YYYY-MM-DD.log`, disimpan 30 hari |
+| Kode sudah diperbaiki tapi perilakunya tidak berubah | server masih memegang kode lama — **restart dulu**, lihat di bawah |
+
+### Setelah kode diperbarui, RESTART
+
+Node memuat kode sekali saja waktu start. Selama server masih jalan, perbaikan
+apa pun di berkas `.js` tidak berpengaruh — aplikasinya tetap menjalankan kode
+yang dimuat saat dinyalakan. Gejalanya menyesatkan: perbaikannya benar, tesnya
+hijau, tapi lewat browser perilakunya tidak berubah sama sekali.
+
+Tutup jendela `start.bat` lalu buka lagi. Kalau memakai tugas terjadwal:
+
+```
+Stop-ScheduledTask  -TaskName 'Astra Command Center'
+Start-ScheduledTask -TaskName 'Astra Command Center'
+```
 
 Pindah ke laptop atau VPS lain: lihat **[PINDAH.md](docs/PINDAH.md)**.
 
