@@ -385,14 +385,19 @@ function splitByCoverage(rows) {
 
 function setBasemap(which) {
   S.basemap = which;
-  ['abu', 'satelit', 'polos'].forEach((name) => {
+  // Aplikasi memakai label "Lokal" untuk basemap abu-abu yang tertanam. Di
+  // prototipe layernya tetap bernama bm-abu agar data demo tidak perlu berubah.
+  const normalized = which === 'lokal' ? 'abu' : which;
+  ['lokal', 'satelit', 'polos'].forEach((name) => {
     const btn = $('bm-' + name);
-    const on = name === which;
-    btn.className = 'flex-1 px-2 py-1.5 rounded-md ' +
-      (on ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500');
+    if (btn) {
+      const on = name === which;
+      btn.className = 'flex-1 px-2 py-1.5 rounded-md ' +
+        (on ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500');
+    }
   });
-  S.map.setLayoutProperty('bm-abu', 'visibility', which === 'abu' ? 'visible' : 'none');
-  S.map.setLayoutProperty('bm-satelit', 'visibility', which === 'satelit' ? 'visible' : 'none');
+  S.map.setLayoutProperty('bm-abu', 'visibility', normalized === 'abu' ? 'visible' : 'none');
+  S.map.setLayoutProperty('bm-satelit', 'visibility', normalized === 'satelit' ? 'visible' : 'none');
   if (S.layersReady) redrawMap();
 }
 
@@ -1373,8 +1378,34 @@ function fakePickFile() {
   $('dropzone').classList.add('hover');
   setTimeout(() => {
     $('dropzone').classList.remove('hover');
+    if ($('imp-file-name')) $('imp-file-name').textContent = 'Heatmap_Agustus_2026.xlsx';
+    if ($('imp-file-size')) $('imp-file-size').textContent = '2,4 MB · 19.080 baris (contoh)';
     $('imp-file').classList.remove('hidden');
   }, 250);
+}
+
+// Kompatibilitas markup aplikasi asli. Prototipe memakai data sintetis dan tidak
+// benar-benar mengirim berkas, tetapi alur kliknya tetap sama untuk demo.
+function pickFile() { fakePickFile(); }
+function dragOver(event) { event.preventDefault(); $('dropzone').classList.add('hover'); }
+function dragLeave() { $('dropzone').classList.remove('hover'); }
+function dropFile(event) { event.preventDefault(); fakePickFile(); }
+function runUpload() { importStep(3); }
+function reviewImport() { importStep(4); }
+function finishImport() { importStep(1); }
+function reimportPeriod(period) {
+  const [year, month] = String(period).split('-');
+  $('imp-tahun').value = year;
+  $('imp-bulan').value = month;
+  importPeriodChanged();
+  importStep(2);
+}
+function refreshImportTab() { renderSavedPeriods(); }
+function setRadius(meter) { ubahRadius(meter); }
+function filterSelectOptions() { /* daftar demo cukup kecil untuk tanpa pencarian */ }
+function dealerChoiceChanged() {
+  const input = $('sp-dealer-baru');
+  if (input) input.classList.toggle('hidden', $('sp-dealer').value !== '__baru__');
 }
 
 const FAKE_STEPS = [
@@ -1596,6 +1627,15 @@ function suntingPos(kode) {
   $('sp-alamat').value = o.alamat || '';
   $('sp-lat').value = o.lat == null ? '' : o.lat;
   $('sp-lng').value = o.lng == null ? '' : o.lng;
+  // Field ini ada di aplikasi asli. Prototipe menampilkannya untuk kesamaan UI,
+  // tetapi pengelompokan dealer tidak diubah karena datanya memang contoh.
+  if ($('sp-dealer')) {
+    $('sp-dealer').innerHTML = DATA.dealers.map((dealer) =>
+      `<option value="${esc(dealer.dealerCode)}">${esc(dealer.dealerName)}</option>`).join('') +
+      '<option value="__baru__">+ Dealer baru…</option>';
+    $('sp-dealer').value = o.kode_dealer;
+    dealerChoiceChanged();
+  }
   $('sp-reset').classList.toggle('hidden', !sudahDisunting(kode));
   $('modal-pos').classList.remove('hidden');
 }

@@ -119,11 +119,12 @@ Membaca:
 Menulis `index.html` (±5 MB).
 
 **Jangan sunting `index.html` langsung.** Itu hasil build; suntingannya hilang di build
-berikutnya. Yang disunting ada di `src/`:
+berikutnya. Tampilan dasarnya diambil dari `../public/index.html`, sehingga perubahan
+tampilan aplikasi ikut masuk saat build berikutnya. Logika demo dan data sintetis ada
+di `src/`:
 
 | Berkas | Isi |
 |---|---|
-| `src/template.html` | markup dan gaya semua tab |
 | `src/app.js` | seluruh logika |
 | `src/data.js` | pembangkit data sintetis |
 

@@ -18,6 +18,18 @@ const pg = require('pg');
 
 const SCHEMA_VERSION = 1;
 
+/**
+ * ponytail: belum ada penjalan migrasi. schema.sql cuma CREATE TABLE IF NOT EXISTS,
+ * jadi mengubah tipe kolom di sana HANYA berlaku untuk database yang belum ada —
+ * yang sudah ada tetap memakai tipe lamanya tanpa satu pun peringatan.
+ *
+ * Sejauh ini bisa ditahan karena databasenya cuma satu, dan perubahan tipe waktu
+ * VARCHAR -> TIMESTAMPTZ sudah dijalankan tangan di mesin itu. Begitu ada mesin kedua
+ * yang databasenya sudah berisi, ini harus jadi migrasi bernomor yang dijalankan
+ * berurutan dan dicatat di schema_version — bukan angka yang cuma ditulis ulang.
+ * Perintahnya ada di docs/DECISIONS.md entri 2026-08-16.
+ */
+
 let main = null;
 let customerPool = null;
 

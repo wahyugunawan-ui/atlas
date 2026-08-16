@@ -156,7 +156,7 @@ dan tidak menyentuh bulan lain. Suntingan yang dibuat lewat halaman Master Pos D
 ```
 npm start                  jalankan server (sama dengan start.bat)
 npm test                   semua tes — butuh PostgreSQL jalan
-opsackup.bat             backup sekarang juga
+ops/backup.bat             backup sekarang juga
 ops\install-tasks.ps1      pasang auto-start + backup harian
 npm run set-password       ganti sandi login
 npm run import -- <berkas> <YYYY-MM> [--konsumen]

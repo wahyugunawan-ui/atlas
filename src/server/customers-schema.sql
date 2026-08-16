@@ -28,7 +28,7 @@ CREATE INDEX IF NOT EXISTS idx_customers_period ON customers (period);
 -- "diakses wajar" dari "disedot".
 CREATE TABLE IF NOT EXISTS access_log (
   id           INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  at           VARCHAR(32) NOT NULL,
+  at           TIMESTAMPTZ NOT NULL,
   ip           VARCHAR(64),
   village_code VARCHAR(16),
   row_count    INTEGER

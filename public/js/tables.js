@@ -200,6 +200,19 @@ export function openOutletEditor(code) {
   $('sp-alamat').value = outlet.address || '';
   $('sp-lat').value = outlet.lat == null ? '' : outlet.lat;
   $('sp-lng').value = outlet.lng == null ? '' : outlet.lng;
+
+  // Daftar dealer dibangun dari outlet yang ada, bukan dari daftar terpisah — dealer
+  // memang cuma "kumpulan pos dengan kode yang sama", jadi tidak ada tabel dealer yang
+  // bisa menyimpang dari kenyataan.
+  const namaDealer = [...new Set(S.outlets.map((o) => o.dealerName).filter(Boolean))]
+    .sort((a, b2) => a.localeCompare(b2));
+  $('sp-dealer').innerHTML = namaDealer
+    .map((nama) => `<option value="${esc(nama)}">${esc(nama)}</option>`).join('') +
+    `<option value="${DEALER_BARU}">+ dealer baru...</option>`;
+  $('sp-dealer').value = outlet.dealerName || namaDealer[0] || DEALER_BARU;
+  $('sp-dealer-baru').value = '';
+  $('sp-dealer-baru').classList.add('hidden');
+
   editorMessage('');
   $('modal-pos').classList.remove('hidden');
 }
@@ -230,6 +243,16 @@ export function acceptMapPoint(lngLat) {
   $('modal-pos').classList.remove('hidden');
 }
 
+/** Nilai penanda di dropdown dealer. Bukan nama dealer yang mungkin ada. */
+const DEALER_BARU = ' baru';
+
+/** Tampilkan kotak isian nama begitu "dealer baru" dipilih. */
+export function dealerChoiceChanged() {
+  const baru = $('sp-dealer').value === DEALER_BARU;
+  $('sp-dealer-baru').classList.toggle('hidden', !baru);
+  if (baru) $('sp-dealer-baru').focus();
+}
+
 export async function saveOutletEditor() {
   const code = S.editing;
   const outlet = S.outletByCode[code];
@@ -242,14 +265,23 @@ export async function saveOutletEditor() {
     return;
   }
 
+  const pilihan = $('sp-dealer').value;
+  const dealerName = pilihan === DEALER_BARU
+    ? $('sp-dealer-baru').value.trim()
+    : pilihan;
+  if (!dealerName) {
+    editorMessage('Isi nama dealer barunya, atau pilih dealer yang sudah ada.', 'error');
+    return;
+  }
+
   const button = $('sp-simpan');
   button.disabled = true;
   button.textContent = 'Menyimpan...';
   editorMessage('');
 
   try {
-    const { outlet: saved, coverageRebuilt } = await saveOutlet(code, {
-      address: $('sp-alamat').value.trim(), lat, lng,
+    const { outlet: saved, coverageRebuilt, dealerChanged } = await saveOutlet(code, {
+      address: $('sp-alamat').value.trim(), lat, lng, dealerName,
     });
     Object.assign(outlet, saved);
     const index = S.outlets.findIndex((o) => o.code === code);
@@ -258,8 +290,13 @@ export async function saveOutletEditor() {
     closeOutletEditor();
     // Jangkauan yang dihitung ulang mengubah angka di panel performa, jadi datanya
     // harus diambil ulang — bukan sekadar menggambar ulang dari yang lama.
-    if (coverageRebuilt) {
-      toast('Tersimpan. Jangkauan pos ini dihitung ulang.', 'ok');
+    if (coverageRebuilt || dealerChanged) {
+      // Pindah dealer mengubah warna pos ini, isi treemap, daftar dropdown, dan
+      // pengelompokan di seluruh halaman. Menggambar ulang dari data lama akan
+      // menampilkan setengah keadaan lama dan setengah yang baru.
+      toast(dealerChanged
+        ? `Tersimpan. Pos dipindahkan ke ${saved.dealerName}.`
+        : 'Tersimpan. Jangkauan pos ini dihitung ulang.', 'ok');
       await window.reloadSummary();
     } else {
       toast('Tersimpan', 'ok');

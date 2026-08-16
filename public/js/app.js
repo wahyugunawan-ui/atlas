@@ -24,7 +24,8 @@ import {
 import { S } from './state.js';
 import {
   acceptMapPoint, closeOutletEditor, closeVillageDetail, jumpToVillage,
-  customerPage, openOutletEditor, openVillageDetail, pickFromMap, promptPin,
+  customerPage, dealerChoiceChanged, openOutletEditor, openVillageDetail, pickFromMap,
+  promptPin,
   renderCustomerTable,
   renderOutletTable, renderVillageTable, saveOutletEditor, searchCustomers, showOnMap,
   switchTab,
@@ -42,7 +43,7 @@ const HANDLERS = {
   // ringkasan
   setTreemapView, selectEntity, closeDealerCard,
   // sunting pos
-  openOutletEditor, closeOutletEditor, pickFromMap, saveOutletEditor,
+  openOutletEditor, closeOutletEditor, pickFromMap, saveOutletEditor, dealerChoiceChanged,
   // peta dan outlet
   selectOutlet, closeSelectionInfo, openVillageDetail, closeVillageDetail,
   // tabel

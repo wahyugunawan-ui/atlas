@@ -182,7 +182,7 @@ service** — dan itu butuh hak admin sekali di awal.
 PostgreSQL punya perintahnya sendiri:
 
 ```
-pg_ctl register -N postgresql-astra -D C:stra-data\pgdata -o "-p 5433"
+pg_ctl register -N postgresql-astra -D C:/astra-data/pgdata -o "-p 5433"
 sc start postgresql-astra
 ```
 
@@ -193,8 +193,8 @@ Untuk aplikasinya, Node tidak punya padanannya. Yang biasa dipakai:
 nssm install AstraCommandCenter "C:\Program Files
 odejs
 ode.exe" src\server\index.js
-nssm set AstraCommandCenter AppDirectory C:stra-command-center
-nssm set AstraCommandCenter AppEnvironmentExtra ACC_ENV_FILE=C:stra-data\.env
+nssm set AstraCommandCenter AppDirectory C:/astra-command-center
+nssm set AstraCommandCenter AppEnvironmentExtra ACC_ENV_FILE=C:/astra-data/.env
 nssm start AstraCommandCenter
 ```
 
@@ -213,7 +213,7 @@ Sudah otomatis kalau `ops/install-tasks.ps1` dipasang: tiap hari jam 19:00,
 disimpan 14 hari di `C:/astra-data/backup`. Menjalankannya sekarang juga:
 
 ```
-opsackup.bat
+ops/backup.bat
 ```
 
 Perintah dumpnya memakai tiga hal yang penting dan gampang terlewat:

@@ -170,13 +170,29 @@ function build(config) {
       });
     }
 
-    const hasil = await repo.updateOutlet(String(req.params.code), {
-      dealerCode: patch.dealerCode,
-      dealerName: patch.dealerName,
-      address: typeof patch.address === 'string' ? patch.address.trim() : undefined,
-      lat,
-      lng,
-    }, config);
+    // Nama dealer diterima; KODENYA tidak. Kode dealer itu identitas, dan browser
+    // tidak boleh menentukannya — repo.resolveDealer() yang memutuskan, sekaligus
+    // memakai ulang kode dealer yang sudah ada kalau namanya sama.
+    if (patch.dealerName !== undefined) {
+      if (typeof patch.dealerName !== 'string' || !patch.dealerName.trim()) {
+        return res.status(400).json({ error: 'Nama dealer tidak boleh kosong.' });
+      }
+      if (patch.dealerName.length > 200) {
+        return res.status(400).json({ error: 'Nama dealer terlalu panjang.' });
+      }
+    }
+
+    let hasil;
+    try {
+      hasil = await repo.updateOutlet(String(req.params.code), {
+        dealerName: patch.dealerName,
+        address: typeof patch.address === 'string' ? patch.address.trim() : undefined,
+        lat,
+        lng,
+      }, config);
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
+    }
     if (!hasil) return res.status(404).json({ error: 'Outlet tidak ditemukan.' });
     res.json(hasil);
   });

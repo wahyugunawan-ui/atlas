@@ -476,3 +476,94 @@ berderau — kelurahan yang tepinya dipotong lingkaran meleset sampai 3 poin, da
 terhadap dirinya sendiri dengan benih berbeda meleset sebesar itu juga. Yang tidak boleh
 ada adalah bias sistematis. Batasnya diukur, bukan ditebak: bias -0,01 poin, rerata
 selisih 0,41 poin, derau sampling murni 0,34 poin.
+
+## [2026-08-16] Kolom waktu jadi TIMESTAMPTZ, bukan teks ISO-8601
+
+**Konteks:** `imports.started_at`, `imports.finished_at`, `outlets.updated_at`, dan
+`access_log.at` bertipe `VARCHAR(32)` berisi `new Date().toISOString()` — warisan dari
+zaman SQLite lalu MySQL, yang memang tidak punya tipe waktu yang enak dipakai. Di
+Postgres bentuk itu punya biaya nyata: tiap hitungan selisih waktu gagal dengan
+`operator does not exist: character varying - character varying`. Sudah terjadi sekali
+di `pg.log` 2026-08-15 23:11 waktu ada yang mencoba menghitung lama impor.
+**Keputusan:** Keempat kolom diubah jadi `TIMESTAMPTZ`, di skema maupun di database
+yang sudah ada.
+**Alasan:** Yang lama tidak pernah *terlihat* salah — ISO-8601 kebetulan urut secara
+abjad, jadi `ORDER BY` dan indeksnya benar, dan tampilannya benar. Dia cuma menolak
+dihitung, dan menolaknya baru ketahuan waktu ada yang butuh. Menyimpan waktu sebagai
+teks di database yang punya tipe waktu berarti menabung kegagalan yang sama untuk
+orang berikutnya.
+**Alternatif yang ditolak:** Membiarkan teks dan menambahkan `::timestamptz` di query
+yang butuh — ditolak: itu memindahkan beban ke tiap pemanggil dan tetap gagal diam-diam
+di pemanggil yang lupa. Menambah kolom durasi hasil hitungan — ditolak, itu menyimpan
+sesuatu yang bisa diturunkan.
+**Konsekuensi:** Sisi JavaScript **tidak berubah**: `pg` menerima string ISO-8601 apa
+adanya untuk kolom `TIMESTAMPTZ`, jadi `new Date().toISOString()` di `importer.js` dan
+`repository.js` tetap benar. Yang berubah arah baca — kolomnya kembali sebagai objek
+`Date`, dan `res.json()` menjadikannya ISO-8601 lagi, jadi bentuk yang sampai ke
+browser sama persis. `import.js:273` yang memotong 10 karakter pertama tetap benar.
+
+Yang TIDAK ikut dibereskan, dan harus disebut: **belum ada penjalan migrasi.**
+`schema.sql` cuma `CREATE TABLE IF NOT EXISTS`, jadi perubahan tipe di sana hanya
+berlaku untuk database yang belum ada. Database di mesin ini sudah diubah dengan tangan:
+
+```sql
+ALTER TABLE imports ALTER COLUMN started_at  TYPE TIMESTAMPTZ USING NULLIF(started_at,'')::timestamptz;
+ALTER TABLE imports ALTER COLUMN finished_at TYPE TIMESTAMPTZ USING NULLIF(finished_at,'')::timestamptz;
+ALTER TABLE outlets ALTER COLUMN updated_at  TYPE TIMESTAMPTZ USING NULLIF(updated_at,'')::timestamptz;
+-- database astra_customers:
+ALTER TABLE access_log ALTER COLUMN at TYPE TIMESTAMPTZ USING NULLIF(at,'')::timestamptz;
+```
+
+Mesin lain yang databasenya sudah berisi WAJIB menjalankan keempat perintah itu; kalau
+tidak, dia jalan terus dengan tipe lama tanpa satu pun peringatan. Begitu ada mesin
+kedua, `schema_version` harus berhenti jadi angka yang ditulis ulang dan mulai jadi
+migrasi bernomor yang dijalankan berurutan. Catatannya ada di `db.js:21`.
+
+## [2026-08-16] Kode dealer ditentukan server, nama yang sama menggabungkan
+
+**Konteks:** Fase 5 — memindahkan pos ke dealer lain lewat aplikasi. Pengelompokan
+dealer awalnya tebakan dari nama pos (bagian sebelum " - "), dan CLAUDE.md melarang
+identitas diturunkan dari nama. Peredam yang dijanjikan: "hasilnya jadi tabel yang bisa
+disunting manusia". Separuhnya sudah ada (koordinat dan alamat); separuh yang justru
+melanggar aturannya belum.
+**Keputusan:** Halaman mengirim **nama dealer**, tidak pernah kodenya.
+`resolveDealer()` di `repository.js` yang menentukan kode: nama yang sudah dipakai
+dealer lain memakai ulang kode dealer itu; nama baru diturunkan lewat `toDealerCode()`
+dari `src/core/grouping.js`. Pencocokan nama tanpa memandang besar-kecil huruf dan
+spasi berlebih.
+**Alasan:** Kode dealer itu identitas. Kalau browser boleh menentukannya, aturan
+"jangan turunkan identitas dari nama" jadi tersebar ke tempat yang tidak bisa dijaga.
+Memakai ulang kode yang ada juga yang membuat "pindahkan pos ini ke NUSANTARA SAKTI"
+benar-benar MENGGABUNGKAN — kalau kodenya diturunkan ulang, hasilnya dealer kedua
+dengan nama sama persis, dan dua-duanya muncul terpisah di treemap dan dropdown.
+**Alternatif yang ditolak:** Browser mengirim `dealerCode` hasil pilihan dropdown —
+ditolak karena tidak ada cara memeriksa kode yang datang dari klien tanpa mengulang
+seluruh logikanya di server. Tabel `dealers` terpisah — ditolak: dealer memang cuma
+"kumpulan pos dengan kode yang sama", dan tabel terpisah bisa menyimpang dari kenyataan
+tanpa ada yang menyadarinya.
+**Konsekuensi:**
+- `patch.dealerCode` MASIH dihormati kalau diberikan langsung, untuk skrip dan tes.
+  Rute HTTP tidak pernah meneruskannya.
+- Nama yang seluruhnya tanda baca ditolak: kodenya akan kosong, dan kode kosong
+  menggabungkan semua outlet bernasib sama jadi satu dealer hantu.
+- Perpindahan dealer tidak memicu hitung ulang jangkauan — jangkauan bergantung pada
+  lokasi, bukan pengelompokan. Diuji.
+- `updateOutlet()` mengembalikan `dealerChanged` supaya halaman tahu harus mengambil
+  data ulang: warna, treemap, dan isi dropdown semuanya berubah.
+
+## [2026-08-16] Dokumentasi dijaga tes, bukan kehati-hatian
+
+**Konteks:** Escape `\a` dan `\b` di skrip penyunting menaruh karakter kontrol ke dalam
+perintah di `README.md` dan `docs/PINDAH.md` — `C:\astra-data` jadi `C:` + karakter bel,
+`ops\backup.bat` jadi `ops` + backspace. Kejadian kedua; `.env.example` kena lebih dulu.
+**Keputusan:** `test/docs.test.js` menolak karakter kontrol di berkas teks mana pun,
+memeriksa tautan antar dokumen, dan memastikan berkas yang disebut README benar-benar
+ada. Path di dokumen memakai garis miring biasa yang tidak punya escape sama sekali.
+**Alasan:** Dokumen di proyek ini bukan hiasan — penggunanya tidak punya orang IT, dan
+`PINDAH.md` adalah satu-satunya jalan mereka memindahkan server. Perintah yang rusak di
+sana sama seriusnya dengan kode yang rusak, dan rusaknya TIDAK KELIHATAN: tidak di
+editor, tidak di GitHub, cuma waktu ada yang menyalin lalu bingung kenapa gagal.
+**Konsekuensi:** Tesnya langsung membuktikan diri — beberapa menit setelah dipasang, dia
+menolak commit yang memasangnya, karena paragraf yang menjelaskan bahaya karakter
+kontrol ternyata memuat tiga karakter kontrol baru. Kesalahan yang sama, penulis yang
+sama, lima menit berselang.

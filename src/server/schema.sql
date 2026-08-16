@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS outlets (
   address     VARCHAR(400),
   lat         DOUBLE PRECISION,                     -- NULL = belum di-pin
   lng         DOUBLE PRECISION,
-  updated_at  VARCHAR(32)
+  updated_at  TIMESTAMPTZ
 );
 
 CREATE INDEX IF NOT EXISTS idx_outlets_dealer ON outlets (dealer_code);
@@ -98,10 +98,17 @@ CREATE TABLE IF NOT EXISTS unmatched (
 
 -- Jejak impor. Dengan satu akun bersama, ini satu-satunya cara mengetahui apa yang
 -- terjadi dan kapan.
+--
+-- Kolom waktu TIMESTAMPTZ, bukan teks. Semula VARCHAR(32) berisi ISO-8601 — warisan
+-- SQLite/MySQL yang memang tidak punya tipe waktu yang layak. Postgres punya, dan
+-- selama kolomnya teks tiap hitungan selisih waktu gagal dengan "operator does not
+-- exist: character varying - character varying". Urut dan tampilannya tetap sama:
+-- ISO-8601 kebetulan urut secara abjad, jadi yang lama tidak pernah terlihat salah —
+-- dia cuma menolak dihitung.
 CREATE TABLE IF NOT EXISTS imports (
   id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  started_at  VARCHAR(32) NOT NULL,
-  finished_at VARCHAR(32),
+  started_at  TIMESTAMPTZ NOT NULL,
+  finished_at TIMESTAMPTZ,
   ip          VARCHAR(64),
   file_name   VARCHAR(255),
   period      VARCHAR(7),

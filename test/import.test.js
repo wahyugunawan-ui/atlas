@@ -172,6 +172,75 @@ async function test() {
       'nama baru di Excel menimpa pengelompokan yang sudah dikurasi');
     assert.strictEqual(stillCurated.lat, -7.7, 'koordinat hasil pin manual ikut tertimpa');
 
+    // --- Fase 5: memindahkan pos ke dealer lain ---
+    //
+    // Pengelompokan dealer awalnya TEBAKAN dari nama pos, dan CLAUDE.md melarang
+    // identitas diturunkan dari nama. Peredamnya: tebakan itu harus bisa diperbaiki
+    // manusia. Bagian koordinat sudah; bagian dealer inilah yang dulu belum ada.
+
+    // Pindah ke dealer yang SUDAH ADA lewat namanya: kodenya harus DIPAKAI ULANG,
+    // bukan diturunkan ulang dari namanya.
+    //
+    // Sasarannya sengaja O01, yang kodenya `DIKURASI` sementara namanya
+    // "Sudah Diperiksa" — kode yang TIDAK bisa diturunkan dari nama. Itu bukan
+    // karangan: seed-outlets.js memasang kode dealer dari CSV kurasi, jadi kode yang
+    // tidak sama dengan turunan namanya memang ada di data sungguhan.
+    //
+    // Kalau sasarannya dealer yang kodenya kebetulan turunan namanya, kedua jalur
+    // menghasilkan jawaban yang sama dan tes ini tidak menguji apa pun — sudah dicoba,
+    // dan mutasinya lolos.
+    const tujuan = (await repo.summary()).outlets.find((o) => o.code === 'O01');
+    assert.strictEqual(tujuan.dealerCode, 'DIKURASI', 'prasyarat tes berubah');
+    assert.notStrictEqual(tujuan.dealerCode, 'SUDAHDIPERIKSA',
+      'kode sasaran harus BEDA dari turunan namanya, kalau tidak tesnya tumpul');
+
+    const digabung = await repo.updateOutlet('O02', { dealerName: tujuan.dealerName });
+    assert.strictEqual(digabung.dealerChanged, true, 'perpindahan dealer tidak dilaporkan');
+    assert.strictEqual(digabung.outlet.dealerCode, 'DIKURASI',
+      'kode dealer tidak dipakai ulang — jadi dua dealer dengan nama yang sama persis');
+    assert.strictEqual(digabung.outlet.dealerName, tujuan.dealerName);
+
+    // Nama dicocokkan tanpa memandang besar-kecil huruf dan spasi berlebih, karena
+    // itu yang diketik manusia.
+    await repo.updateOutlet('O02', { dealerName: '  sudah diperiksa ' });
+    const tetapSama = (await repo.summary()).outlets.find((o) => o.code === 'O02');
+    assert.strictEqual(tetapSama.dealerCode, 'DIKURASI',
+      'beda besar-kecil huruf dianggap dealer yang berbeda');
+
+    // O02 di-pin dulu. Tanpa koordinat, cabang hitung-ulang jangkauan tidak pernah
+    // terjangkau sama sekali, dan pemeriksaan coverageRebuilt di bawah jadi hijau
+    // karena alasan yang salah — sudah dicoba, dan mutasinya lolos.
+    await repo.updateOutlet('O02', { lat: -7.6, lng: 108.9 }, config);
+
+    // Dealer yang BENAR-BENAR baru: kodenya diturunkan, dan harus deterministik.
+    // config ikut dikirim supaya jalur hitung-ulang jangkauan benar-benar terlewati,
+    // bukan terlewati karena confignya kebetulan tidak ada.
+    const baru = await repo.updateOutlet('O02', { dealerName: 'Dealer Baru Sekali' }, config);
+    assert.strictEqual(baru.outlet.dealerCode, 'DEALERBARUSEKALI',
+      'kode dealer baru tidak diturunkan dengan aturan yang sama');
+    assert.strictEqual(baru.outlet.dealerName, 'Dealer Baru Sekali');
+
+    // Memindahkan dealer tidak memicu hitung ulang jangkauan — jangkauan bergantung
+    // pada lokasi, bukan pada pengelompokan.
+    assert.strictEqual(baru.coverageRebuilt, false,
+      'pindah dealer memicu hitung ulang jangkauan yang tidak perlu');
+
+    // Dan tidak menyentuh koordinat. O01 yang di-pin manual harus tetap utuh.
+    const pinUtuh = (await repo.summary()).outlets.find((o) => o.code === 'O01');
+    assert.strictEqual(pinUtuh.lat, -7.7, 'menyunting dealer ikut mengubah koordinat');
+
+    // Nama yang tidak memuat huruf atau angka ditolak: kodenya akan kosong, dan kode
+    // kosong menggabungkan semua outlet bernasib sama jadi satu dealer hantu.
+    await assert.rejects(() => repo.updateOutlet('O02', { dealerName: '---' }),
+      /tidak bisa dipakai/i);
+
+    // Dan yang paling penting: perpindahan ini harus BERTAHAN terhadap impor bulanan
+    // berikutnya, sama seperti koordinat.
+    await runImport({ file, period: '2026-08', fileName: 'agustus.csv', config });
+    const setelahImpor = (await repo.summary()).outlets.find((o) => o.code === 'O02');
+    assert.strictEqual(setelahImpor.dealerCode, 'DEALERBARUSEKALI',
+      'impor bulanan menimpa perpindahan dealer yang dilakukan manusia');
+
     // Kembalikan keadaan supaya pemeriksaan sesudah ini tetap bermakna.
     await runImport({ file, period: '2026-08', fileName: 'agustus.csv', config });
 

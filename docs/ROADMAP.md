@@ -39,16 +39,84 @@ Istilah wilayah memakai terjemahan resmi BPS supaya konsisten:
 | 2 | Frontend jadi modul + vendor lokal | **selesai** | 7 berkas tes hijau, nol permintaan keluar |
 | 3 | ~~SQLite~~ ~~MySQL~~ PostgreSQL + PostGIS | **selesai** | 2026-08-13, jangkauan dihitung di database |
 | 4 | Impor Excel lewat web | **selesai** | 10/11 mutasi tertangkap |
-| 5 | Sunting master outlet | sebagian | pin koordinat sudah; pindah dealer belum |
+| 5 | Sunting master outlet | **selesai** | pin koordinat, alamat, dan pindah dealer |
 | 6 | Bisa dijalankan orang non-IT | **selesai** | `start.bat`, README.md, PINDAH.md |
 
 ---
 
 ## Sedang dikerjakan
 
-Tidak ada. Yang tersisa ada di "Belum dikerjakan" di bawah.
+Tidak ada.
 
 ## Selesai
+
+### Fase 5 tuntas: memindahkan pos ke dealer lain (2026-08-16)
+
+Pengelompokan dealer awalnya tebakan dari nama pos — bagian sebelum " - ". CLAUDE.md
+melarang identitas diturunkan dari nama, dan peredam yang dijanjikan adalah "hasilnya
+jadi tabel yang bisa disunting manusia". Separuhnya sudah ada sejak lama (koordinat
+dan alamat); separuh yang justru melanggar aturannya belum.
+
+**Kode dealer ditentukan server, tidak pernah datang dari browser.** Halaman mengirim
+NAMA; `resolveDealer()` di `repository.js` yang memutuskan kodenya. Nama yang sudah
+dipakai dealer lain MEMAKAI ULANG kode dealer itu — jadi "pindahkan pos ini ke
+NUSANTARA SAKTI" benar-benar menggabungkan, bukan membuat dealer kedua bernama sama
+persis. Pencocokannya tanpa memandang besar-kecil huruf dan spasi berlebih.
+
+**Uji mutasi 5/6.** Tiga yang awalnya lolos ternyata karena DATA UJINYA lemah, bukan
+kodenya benar: dealer sasarannya punya kode yang kebetulan turunan namanya, jadi dua
+jalur yang berbeda menghasilkan jawaban yang sama. Diganti memakai dealer yang kodenya
+`DIKURASI` sementara namanya "Sudah Diperiksa" — keadaan yang memang ada di data
+sungguhan karena `seed-outlets.js` memasang kode dari CSV kurasi. Satu lagi lolos
+karena outletnya belum punya koordinat sehingga cabang hitung-ulang jangkauan tidak
+pernah terjangkau.
+
+Yang keenam mutan yang tertutup lapisan pertama di `resolveGroups()` — sudah tercatat
+di `importer.js` sejak dulu, bukan celah baru.
+
+### Dokumen: karakter kontrol dan penjaganya (2026-08-16)
+
+Lima karakter tak terlihat menyelinap ke dalam perintah di `README.md` dan
+`docs/PINDAH.md`, dari escape backslash-a dan backslash-b di skrip penyunting: `C:/astra-data`
+jadi `C:` + karakter bel, `ops/backup.bat` jadi `ops` + backspace + `ackup.bat`.
+
+Yang rusak justru perintah yang disalin-tempel orang non-IT untuk menyiapkan server.
+Tidak kelihatan di editor mana pun, tidak mengubah tampilan di GitHub, dan gagalnya
+tanpa menyebut sebab.
+
+Semua diganti jadi garis miring biasa (`C:/astra-data`) yang tidak punya escape sama
+sekali, dan `test/docs.test.js` sekarang menolak karakter kontrol di berkas teks mana
+pun, plus memeriksa tautan antar dokumen dan keberadaan berkas yang disebut README.
+Sudah dibuktikan merah dengan menyuntikkan satu karakter BEL.
+
+Ini kejadian kedua — `.env.example` kena backslash-a lebih dulu. Karena itu penjaganya tes,
+bukan kehati-hatian.
+
+Dan tesnya langsung membuktikan diri: beberapa menit setelah dipasang, dia menolak
+commit ini sendiri — tiga karakter kontrol baru, di dalam paragraf yang sedang
+menjelaskan bahaya karakter kontrol. Kesalahan yang sama, penulis yang sama, lima
+menit setelah menuliskan bahayanya. Itu alasan paling jelas kenapa ini harus jadi
+tes dan bukan kehati-hatian.
+
+### Kolom waktu jadi TIMESTAMPTZ (2026-08-16)
+
+Empat kolom waktu (`imports.started_at`, `imports.finished_at`, `outlets.updated_at`,
+`access_log.at`) masih `VARCHAR(32)` berisi ISO-8601 — warisan SQLite/MySQL. Ketahuan
+dari `pg.log`: satu query yang menghitung lama impor gagal dengan `operator does not
+exist: character varying - character varying`. Skema diperbaiki, database yang ada
+diubah dengan tangan, 13/13 berkas tes tetap lolos. Sisi JavaScript tidak berubah.
+Alasan dan perintah ALTER-nya di `DECISIONS.md` entri 2026-08-16.
+
+**Yang ditemukan tapi TIDAK diperbaiki:**
+
+- **Belum ada penjalan migrasi.** `schema.sql` cuma `CREATE TABLE IF NOT EXISTS`, jadi
+  perubahan tipe kolom tidak pernah sampai ke database yang sudah ada. Sekarang
+  ditambal dengan ALTER manual sekali di satu mesin. Mesin kedua yang databasenya
+  sudah berisi akan diam-diam jalan dengan tipe lama. Catatan di `db.js:21`.
+- **Satu baris `imports` id=2 tersangkut `result = 'berjalan'`** sejak 2026-08-15
+  16:01 — impor yang prosesnya mati sebelum sempat menutup barisnya. Tidak mengganggu
+  apa pun selain terlihat di riwayat, tapi berarti impor yang mati kasar tidak punya
+  yang membereskannya. Pembersih baris tersangkut saat start belum ada.
 
 ### Pengerasan operasional — dari "jalan waktu ditunggui" ke "bisa ditinggal" (2026-08-14)
 
@@ -637,10 +705,10 @@ bukan judul kolomnya.
 
 ## Utang yang dibawa dari versi percobaan
 
-- `dealer_grup.csv` masih hasil tebakan dari nama outlet (bagian sebelum " - ").
-  Melanggar aturan "jangan turunkan identitas dari nama" di CLAUDE.md. Peredamnya:
-  hasilnya jadi tabel yang bisa disunting manusia, bukan aturan yang tertanam di kode.
-  Beres saat Fase 5.
+- ~~`dealer_grup.csv` masih hasil tebakan dari nama outlet.~~ **Beres 2026-08-16.**
+  Tebakannya masih jadi isian awal — itu memang perannya — tapi sekarang bisa
+  diperbaiki lewat halaman Master Pos Dealer, dan perbaikannya tidak ditimpa impor
+  bulanan. Peredam yang dijanjikan CLAUDE.md akhirnya benar-benar ada.
 - 433 baris data di luar 15 kabupaten cakupan — belum diputuskan dilebarkan atau
   dibuang.
 - 132 baris / 29 nama kelurahan belum cocok dan perlu verifikasi manual.

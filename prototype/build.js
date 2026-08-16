@@ -43,6 +43,48 @@ function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
+/**
+ * Susun kerangka prototipe dari halaman aplikasi yang sebenarnya.
+ *
+ * Dengan ini perubahan tata letak di public/index.html otomatis ikut terlihat pada
+ * berkas demo. Logika dan datanya tetap milik prototype/src, jadi index.html hasil
+ * build masih satu berkas, bisa dibuka lewat file://, dan tidak membawa data nyata.
+ */
+function currentAppTemplate() {
+  const page = fs.readFileSync(path.join(PROJECT, 'public', 'index.html'), 'utf8');
+  const cdn = `
+  <!-- Prototipe sengaja memakai CDN agar tetap satu berkas yang mudah dibagikan. -->
+  <script src="https://cdn.tailwindcss.com"><\/script>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css">
+  <script src="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js"><\/script>
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1"><\/script>`;
+  const prototypeData = `
+<script>
+/* Batas kelurahan asli dan data demo sintetis; tidak ada data penjualan nyata. */
+const GEO = /*__GEO__*/;
+const DATA = /*__DATA__*/;
+</script>
+<script>
+/*__APP__*/
+</script>`;
+
+  return page
+    .replace(/\s*<link rel="stylesheet" href="\/vendor\/[^\n]+\n/g, '\n')
+    .replace(/\s*<link rel="stylesheet" href="\/css\/app\.css">\n/g, '\n')
+    .replace(/\s*<script defer src="\/vendor\/[^\n]+\n/g, '\n')
+    .replace(/\s*<script type="module" src="\/js\/app\.js"><\/script>\n/g, '\n')
+    // Loader aplikasi menunggu API. Prototipe tidak punya API, jadi tidak dipakai.
+    .replace(/\n<div id="pageLoader"[\s\S]*?<\/div>\n\n<nav id="topnav"/, '\n<nav id="topnav"')
+    // Tombol keluar tidak relevan pada demo statis dan akan mengarah ke URL file://.
+    .replace(/\s*<form method="post" action="\/logout"[\s\S]*?<\/form>/,
+      '\n    <div class="bg-white\/10 rounded-xl px-3 py-2 text-[11px] text-white\/80">Prototipe demo</div>')
+    .replace('</head>', cdn + '\n</head>')
+    .replace('</body>', prototypeData + '\n</body>');
+}
+
 /** Titik tengah poligon, cukup untuk menempatkan label dan menghitung jarak. */
 function centroid(geometry) {
   let sumLng = 0;
@@ -177,7 +219,7 @@ function main() {
     coverage: coverage,            // coverage[radius][kode_pos][kode_kelurahan] = rasio
   };
 
-  const template = fs.readFileSync(path.join(HERE, 'src', 'template.html'), 'utf8');
+  const template = currentAppTemplate();
   const app = fs.readFileSync(path.join(HERE, 'src', 'app.js'), 'utf8');
 
   const html = template

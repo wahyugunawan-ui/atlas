@@ -9,6 +9,7 @@
  */
 const store = require('./db');
 const coverage = require('./coverage-store');
+const { toDealerCode } = require('../core/grouping');
 
 /**
  * Seluruh isi dashboard dalam satu permintaan.
@@ -220,12 +221,49 @@ async function logCustomerAccess(ip, villageCode, count) {
 }
 
 /**
+ * Tentukan (kode, nama) dealer dari nama yang diketik atau dipilih pengguna.
+ *
+ * Kode dealer TIDAK pernah datang dari browser. Dia identitas, dan aturan proyek
+ * melarang identitas diturunkan dari nama di tempat yang tersebar — jadi penurunannya
+ * dikurung di satu tempat: di sini.
+ *
+ * Nama yang sudah dipakai dealer lain akan MEMAKAI ULANG kode dealer itu, bukan
+ * menurunkan kode baru. Itu yang membuat "pindahkan pos ini ke NUSANTARA SAKTI"
+ * benar-benar menggabungkannya ke dealer yang sudah ada, bukan membuat dealer kedua
+ * dengan nama yang sama persis. Pencocokannya tanpa memandang besar-kecil huruf dan
+ * spasi berlebih, karena itu yang diketik manusia.
+ *
+ * @return {{code: string, name: string}|null} null kalau namanya tidak bisa dipakai
+ */
+async function resolveDealer(name) {
+  const bersih = String(name || '').trim().replace(/\s+/g, ' ');
+  if (!bersih) return null;
+
+  const adaSama = await store.one(store.db(), `
+    SELECT dealer_code AS "dealerCode", dealer_name AS "dealerName"
+    FROM outlets
+    WHERE LOWER(dealer_name) = LOWER(?)
+    LIMIT 1`, [bersih]);
+  if (adaSama) return { code: adaSama.dealerCode, name: adaSama.dealerName };
+
+  const code = toDealerCode(bersih);
+  // Nama yang seluruhnya tanda baca ('---') menghasilkan kode kosong. Kode kosong
+  // akan menggabungkan semua outlet bernasib sama jadi satu dealer hantu.
+  if (!code) return null;
+  return { code, name: bersih };
+}
+
+/**
  * Perbaiki satu outlet: alamat, pengelompokan dealer, dan/atau koordinat.
+ *
+ * Pengelompokan dealer diubah lewat `patch.dealerName` — kodenya ditentukan
+ * resolveDealer(). `patch.dealerCode` masih dihormati kalau diberikan langsung, untuk
+ * pemakaian dari skrip dan tes; browser tidak pernah mengirimnya.
  *
  * @param {Object} config  dibutuhkan kalau koordinatnya berubah — jangkauan outlet ini
  *                          harus dihitung ulang, kalau tidak angkanya masih
  *                          menggambarkan lokasi yang sudah tidak dipakai
- * @return {{outlet: Object, coverageRebuilt: boolean}|null}
+ * @return {{outlet: Object, coverageRebuilt: boolean, dealerChanged: boolean}|null}
  */
 async function updateOutlet(code, patch, config) {
   const db = store.db();
@@ -233,16 +271,31 @@ async function updateOutlet(code, patch, config) {
     'SELECT * FROM outlets WHERE outlet_code = ?', [code]);
   if (!current) return null;
 
+  // Dealer diselesaikan SEBELUM UPDATE, dan sebelum baris ini ikut terhitung sebagai
+  // "dealer yang sudah ada" — kalau tidak, memindahkan satu-satunya pos milik sebuah
+  // dealer akan mencocokkan dirinya sendiri.
+  let dealer = null;
+  if (patch.dealerCode) {
+    dealer = { code: patch.dealerCode, name: patch.dealerName || current.dealer_name };
+  } else if (patch.dealerName !== undefined) {
+    dealer = await resolveDealer(patch.dealerName);
+    if (!dealer) {
+      throw new Error('Nama dealer tidak bisa dipakai. Harus memuat huruf atau angka.');
+    }
+  }
+
   const lat = patch.lat === undefined ? current.lat : patch.lat;
   const lng = patch.lng === undefined ? current.lng : patch.lng;
   const moved = lat !== current.lat || lng !== current.lng;
+
+  const dealerChanged = Boolean(dealer) && dealer.code !== current.dealer_code;
 
   await store.run(db, `
     UPDATE outlets SET dealer_code = ?, dealer_name = ?, address = ?,
                        lat = ?, lng = ?, updated_at = ?
     WHERE outlet_code = ?`, [
-    patch.dealerCode || current.dealer_code,
-    patch.dealerName || current.dealer_name,
+    dealer ? dealer.code : current.dealer_code,
+    dealer ? dealer.name : current.dealer_name,
     patch.address === undefined ? current.address : patch.address,
     lat, lng, new Date().toISOString(), code,
   ]);
@@ -262,11 +315,13 @@ async function updateOutlet(code, patch, config) {
              dealer_name AS "dealerName", address, lat, lng
       FROM outlets WHERE outlet_code = ?`, [code]),
     coverageRebuilt,
+    dealerChanged,
   };
 }
 
 module.exports = {
   summary, unmatched, imports, periodSummary,
   customersInVillage, browseCustomers, hasCustomers, logCustomerAccess, updateOutlet,
+  resolveDealer,
   BROWSE_LIMIT,
 };
