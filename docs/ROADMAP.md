@@ -48,6 +48,83 @@ Istilah wilayah memakai terjemahan resmi BPS supaya konsisten:
 
 Tidak ada.
 
+---
+
+## Belum dikerjakan
+
+### Perluasan cakupan se-Indonesia (butuh migrasi `geography` dulu)
+
+Ditanyakan 17 Agustus: kalau seluruh Indonesia disiapkan sekaligus, masih kuat?
+**Kuat — kecuali proyeksinya.** Angkanya sudah diukur, jadi keputusan nanti tidak
+perlu menurunkan ulang apa pun.
+
+**Yang tidak jadi masalah:**
+
+| | terukur (8.999) | proyeksi (83.700) |
+|---|---|---|
+| Tabel `villages` | 50 MB | ~0,45 GB — Postgres santai |
+| Tabel `coverage` | 4,9 MB | tidak ikut membesar; ditentukan jumlah POS |
+| Berkas peta ke browser | 3,57 MB | tetap 3,57 MB |
+| `/api/summary` | 2,31 MB | tetap 2,31 MB |
+
+Dua baris terakhir itu hasil pekerjaan 17 Agustus: browser sudah tidak terikat pada
+besarnya database. Menambah Papua tidak menambah satu byte pun ke halaman.
+
+**Penghalangnya: UTM 49S cuma sahih di 108-114 BT.** Jarak 1.000 m yang sebenarnya,
+diukur ulang di UTM 49S:
+
+    Yogyakarta  110,4 BT   1.000 m    0,0%
+    Jakarta     106,8 BT   1.002 m   +0,2%
+    Banjarmasin 114,6 BT   1.002 m   +0,2%
+    Makassar    119,4 BT   1.010 m   +1,0%
+    Ambon       128,2 BT   1.047 m   +4,7%
+    Jayapura    140,7 BT   1.152 m  +15,2%
+
+Radius "5 km" di Papua sebenarnya 5,76 km — dan seperti biasa di proyek ini, tanpa
+satu pun error. Poligonnya sah, angkanya keluar, cuma salah.
+
+**Jalan keluarnya sudah diuji:** ganti `geom_m` ke tipe `geography` (sahih di mana
+pun). Dampaknya ke angka yang sudah dilaporkan **cuma 0,06 poin**:
+
+    UTM 49S (sekarang)  14,81%
+    geography           14,75%
+
+Per kelurahan bisa beda sampai 0,95 poin, tapi di agregat saling menghapus.
+
+**Kenapa belum dikerjakan.** Jaringan dealer Astra ada di Jateng + DIY. Se-Indonesia
+menyelesaikan 29 baris pembeli luar provinsi yang secara analitis memang di luar
+radius pos mana pun. Unduhannya ~400 MB (perkiraan dari 32 MB untuk 40 kabupaten,
+dikali 514 kabupaten se-Indonesia), dan migrasi `geography` adalah perubahan skema
+yang perlu diuji ulang menyeluruh.
+
+**Kapan baru perlu.** UTM 49S masih sahih sampai 114 BT — mencakup SELURUH Jawa dan
+Bali. Melebar ke Jawa Timur atau Jawa Barat cukup unduh provinsinya lalu
+`seed-boundaries` + `export-geo`, tanpa migrasi apa pun. Yang menuntut `geography`
+cuma perluasan ke Sulawesi ke timur.
+
+**Yang belum diukur** dan harus diukur kalau migrasi ini dikerjakan: kecepatan
+`geography` dibanding UTM planar. Operasi elipsoid biasanya lebih lambat;
+`seed-coverage` sekarang 4 detik, belum tahu jadi berapa.
+
+### Sisanya
+
+- **165 baris masih belum cocok**, dan sifatnya sudah berubah — bukan lagi soal
+  cakupan. 116 Jateng + 20 DIY itu ketidakcocokan EJAAN NAMA di kota yang
+  kelurahannya sudah ada (butuh tabel alias); 29 sisanya pembeli luar provinsi yang
+  sudah diputuskan dibiarkan.
+- **Belum ada penjalan migrasi skema.** `schema.sql` cuma `CREATE TABLE IF NOT
+  EXISTS`, jadi perubahan tipe kolom hanya berlaku untuk database yang belum ada.
+  Ditandai `ponytail:` di `db.js`. Baru mendesak saat ada mesin kedua — dan jadi
+  prasyarat kalau migrasi `geography` di atas dikerjakan.
+- **HTTPS belum dipakai.** Mekanismenya ada di `index.js` dan menolak start kalau
+  sertifikatnya salah tulis; sertifikatnya yang belum ada.
+- **Tugas terjadwal jalan saat login, bukan saat komputer menyala.** Untuk server yang
+  tidak pernah ada yang login, PostgreSQL dan aplikasi harus jadi Windows service —
+  butuh admin sekali, langkahnya di `PINDAH.md`.
+- **Belum ada CI, dan Node 20 belum diuji langsung** meski `engines` mengizinkannya.
+
+---
+
 ## Selesai
 
 ### Seluruh Jateng + DIY disiapkan di database (2026-08-17)
