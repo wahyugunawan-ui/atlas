@@ -81,11 +81,28 @@ export function applyScope(kind, code) {
 export function splitByCoverage(rows) {
   let inside = 0;
   let total = 0;
+  let noBoundary = 0;
+
   rows.forEach((row) => {
+    // Kelurahan yang belum punya batas wilayah DIKELUARKAN dari hitungan, bukan
+    // dihitung sebagai "di luar jangkauan".
+    //
+    // Bedanya besar dan halus. Tanpa poligon, rasio jangkauannya selalu 0 — bukan
+    // karena posnya jauh, tapi karena belum ada yang bisa dihitung. Memasukkannya ke
+    // penyebut membuat persentase turun tiap kali ada kelurahan baru ditambahkan,
+    // dan turunnya terlihat seperti temuan padahal cuma data yang belum lengkap.
+    //
+    // Jumlahnya dilaporkan terpisah supaya yang belum lengkap TERLIHAT, bukan hilang.
+    const village = S.villageByCode[row.village];
+    if (village && village.hasGeom === false) {
+      noBoundary += row.units;
+      return;
+    }
     inside += row.units * ((S.coverage[row.outlet] || {})[row.village] || 0);
     total += row.units;
   });
-  return { inside, outside: total - inside, total };
+
+  return { inside, outside: total - inside, total, noBoundary };
 }
 
 /**

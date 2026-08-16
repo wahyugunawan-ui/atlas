@@ -241,6 +241,84 @@ async function test() {
     assert.strictEqual(setelahImpor.dealerCode, 'DEALERBARUSEKALI',
       'impor bulanan menimpa perpindahan dealer yang dilakukan manusia');
 
+    // --- tambah pos dealer baru lewat aplikasi ---
+    //
+    // Biasanya outlet lahir dari impor. Ini untuk pos yang sudah buka tapi belum
+    // muncul di Excel.
+    const posBaru = await repo.createOutlet({
+      outletCode: 'O99', outletName: 'POS BARU MANUAL',
+      dealerName: 'Sudah Diperiksa', address: 'Jl. Baru 99',
+      lat: -7.75, lng: 110.36,
+    }, config);
+    assert.strictEqual(posBaru.outlet.code, 'O99');
+    // Dealer yang namanya sudah ada harus MEMAKAI ULANG kodenya, sama seperti waktu
+    // memindahkan pos — kalau tidak, muncul dua dealer bernama sama persis.
+    assert.strictEqual(posBaru.outlet.dealerCode, 'DIKURASI',
+      'pos baru membuat dealer kedua alih-alih bergabung ke yang sudah ada');
+    // Pos yang langsung punya koordinat langsung punya jangkauan. Tanpa ini dia tampil
+    // 0% sampai ada yang ingat menjalankan seed-coverage.
+    assert.strictEqual(posBaru.coverageRebuilt, true,
+      'pos baru berkoordinat tidak dihitung jangkauannya');
+
+    // Kode yang sudah dipakai ditolak, dan pesannya menyebut siapa pemakainya —
+    // tanpa itu orang akan mengira kodenya salah ketik.
+    await assert.rejects(() => repo.createOutlet({
+      outletCode: 'O99', outletName: 'Lain', dealerName: 'X' }, config),
+    /sudah dipakai/i);
+
+    // Pos tanpa koordinat boleh dibuat, tapi tidak memicu hitung jangkauan.
+    const tanpaPin = await repo.createOutlet({
+      outletCode: 'O98', outletName: 'POS BELUM DI-PIN', dealerName: 'X Baru' }, config);
+    assert.strictEqual(tanpaPin.coverageRebuilt, false);
+    assert.strictEqual(tanpaPin.outlet.lat, null);
+
+    // --- tambah kelurahan baru ---
+    //
+    // Yang dijaga di sini bukan "barisnya masuk" tapi bahwa dia ditandai BELUM punya
+    // batas wilayah. Tanpa tanda itu, penjualannya diam-diam dihitung sebagai
+    // "di luar jangkauan" dan persentase turun tanpa sebab yang terlihat.
+    const kel = await repo.createVillage({
+      villageCode: '34.04.06.2099', villageName: 'Kelurahan Baru',
+      districtName: 'Mlati',
+    });
+    assert.strictEqual(kel.code, '34.04.06.2099');
+    assert.strictEqual(kel.hasGeom, false,
+      'kelurahan baru mengaku punya batas wilayah padahal tidak');
+    // Kode kota dan provinsi DITURUNKAN dari kode kelurahan, bukan isian terpisah
+    // yang bisa saling bertentangan.
+    assert.strictEqual(kel.cityCode, '34.04');
+    assert.strictEqual(kel.provinceCode, '34');
+    // Nama kotanya diambil dari kelurahan lain di kota yang sama, supaya tidak muncul
+    // dua ejaan untuk kota yang sama di dropdown.
+    assert.strictEqual(kel.cityName, 'Kabupaten Sleman');
+
+    // Kode yang bukan format BPS ditolak — aturan proyek: kode wilayah tidak pernah
+    // diturunkan dari nama atau dikarang.
+    for (const buruk of ['KEL-BARU', '34.04.06', '3404062099', '']) {
+      await assert.rejects(
+        () => repo.createVillage({ villageCode: buruk, villageName: 'X' }),
+        /format BPS/i, `kode "${buruk}" seharusnya ditolak`);
+    }
+    await assert.rejects(
+      () => repo.createVillage({ villageCode: '34.04.06.2099', villageName: 'Dobel' }),
+      /sudah dipakai/i);
+
+    // Kota yang belum ada sama sekali WAJIB menyebut namanya — kalau tidak, dropdown
+    // kota akan memuat entri tanpa nama yang tidak bisa dipilih siapa pun.
+    await assert.rejects(
+      () => repo.createVillage({ villageCode: '99.99.99.9999', villageName: 'Antah' }),
+      /nama kabupaten/i);
+
+    // summary() ikut membawa tandanya, karena halaman yang memakainya untuk
+    // mengeluarkan kelurahan ini dari hitungan.
+    const ringkas = await repo.summary();
+    const dariSummary = ringkas.villages.find((v) => v.code === '34.04.06.2099');
+    assert.strictEqual(dariSummary.hasGeom, false,
+      'summary() tidak membawa hasGeom — halaman tidak bisa membedakan 0% dari belum dihitung');
+    const lama = ringkas.villages.find((v) => v.code === '34.04.06.2003');
+    assert.strictEqual(lama.hasGeom, false,
+      'prasyarat tes: kelurahan uji memang tanpa poligon');
+
     // Kembalikan keadaan supaya pemeriksaan sesudah ini tetap bermakna.
     await runImport({ file, period: '2026-08', fileName: 'agustus.csv', config });
 

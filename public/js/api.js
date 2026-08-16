@@ -80,6 +80,24 @@ export function browseCustomers(filters) {
   return request(`${API}customers/browse?${query}`);
 }
 
+/** Tambah pos dealer baru. Kodenya dari pengguna — server menolak kalau sudah ada. */
+export function createOutlet(data) {
+  return request(`${API}outlets`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}
+
+/** Tambah kelurahan baru. Tanpa batas wilayah — lihat catatan di modalnya. */
+export function createVillage(data) {
+  return request(`${API}villages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}
+
 export function saveOutlet(code, patch) {
   return request(`${API}outlets/${encodeURIComponent(code)}`, {
     method: 'PUT',

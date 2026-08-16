@@ -50,6 +50,41 @@ Tidak ada.
 
 ## Selesai
 
+### Tambah data di Master Pos Dealer dan Master Kelurahan (2026-08-17)
+
+Sebelumnya outlet dan kelurahan HANYA lahir dari impor bulanan. Pos yang sudah buka
+harus menunggu sebulan sebelum bisa dipetakan.
+
+**Tambah pos dealer** lurus dan aman: kolom `geom_m` outlet dibuat database dari
+lat/lng, jadi pos berkoordinat langsung dihitung jangkauannya. Kodenya diketik manusia,
+tidak dibuatkan server — kode itu harus sama dengan yang dipakai Astra di Excel, dan
+kalau beda, impor berikutnya membuat outlet KEDUA untuk pos yang sama dan penjualannya
+terbelah tanpa gejala. Kode yang sudah dipakai ditolak dengan menyebut pemakainya.
+
+**Tambah kelurahan punya jebakan yang harus diputuskan sadar,** dan keputusannya
+diambil pemilik proyek: kelurahan yang ditambah manual TIDAK punya poligon — batas
+wilayah datang dari pipeline geo, bukan ketikan. Tanpa poligon rasio jangkauannya
+selalu 0, dan nol itu ambigu: "0% terjangkau" dan "belum bisa dihitung" terlihat sama
+persis di layar.
+
+Kalau ikut masuk penyebut, tiap kelurahan baru MENURUNKAN persentase jangkauan — dan
+turunnya tampak seperti temuan bisnis ("jangkauan memburuk") padahal cuma data belum
+lengkap. Jadi: `summary()` menandainya lewat `hasGeom`, `splitByCoverage()`
+mengeluarkannya dari hitungan, dan jumlah unitnya dilaporkan TERPISAH di panel. Dua-duanya
+perlu — dikeluarkan tanpa dilaporkan berarti datanya hilang diam-diam, sama buruknya.
+
+Dibuktikan di browser: menambah kelurahan tanpa poligon, persentase tetap 15,1%.
+
+7/7 mutasi tertangkap, termasuk mutasi yang memasukkan kelurahan tanpa batas ke
+penyebut dan yang membuang unitnya tanpa melaporkan.
+
+**Yang TIDAK dikerjakan, dan perlu disebut:** ini bukan perluasan cakupan. Dari 349
+nama yang belum cocok, **319 nama / 433 baris ada di 39 kota yang tidak tercakup sama
+sekali** (Klaten 95 baris, Kudus 55, Wonogiri 31, Sukoharjo 30 ...). Menambahnya satu
+per satu lewat form menghasilkan 319 kelurahan tanpa poligon — datanya terhitung, tapi
+tidak satu pun ikut jangkauan. Perluasan yang benar lewat pipeline geo; lihat
+"Belum dikerjakan".
+
 ### Impor Excel: 245 detik jadi 5,7 detik (2026-08-17)
 
 Keluhannya "upload Excel masih lama banget". Riwayat impor menunjukkan pola yang

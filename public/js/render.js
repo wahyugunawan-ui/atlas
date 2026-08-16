@@ -123,6 +123,15 @@ function coverageSummary(rows) {
     `<span class="text-emerald-700 font-bold">${esc(formatNumber(Math.round(split.inside)))} unit</span>` +
     `<span class="font-bold" style="color:var(--astra-red)">${esc(formatNumber(Math.round(split.outside)))} unit di luar</span>` +
     `</div>` +
+    // Yang belum punya batas wilayah disebut TERPISAH, bukan disembunyikan dan bukan
+    // dicampur jadi "di luar jangkauan". Angka persennya di atas dihitung tanpa
+    // mereka — jadi kalimat ini yang menjelaskan kenapa jumlahnya tidak genap.
+    (split.noBoundary
+      ? `<p class="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 ` +
+        `rounded-lg px-2 py-1 mt-2 leading-snug">` +
+        `${esc(formatNumber(Math.round(split.noBoundary)))} unit di kelurahan yang ` +
+        `belum punya batas wilayah — tidak ikut dihitung di persentase atas.</p>`
+      : '') +
     (S.radiusM === 5000 ? ''
       : `<p class="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 mt-2 leading-snug">` +
         `Radius acuan proyek ini 5 km.</p>`) +

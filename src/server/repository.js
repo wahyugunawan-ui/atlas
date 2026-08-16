@@ -21,10 +21,16 @@ const { toDealerCode } = require('../core/grouping');
 async function summary() {
   const db = store.db();
 
+  // hasGeom: kelurahan yang ditambah manual belum punya batas wilayah, dan tanpa itu
+  // dia tidak bisa punya rasio jangkauan sama sekali. Halaman WAJIB tahu bedanya
+  // "0% terjangkau" dan "belum bisa dihitung" — kalau tidak, penjualannya diam-diam
+  // masuk hitungan sebagai "di luar jangkauan" dan menurunkan persentase tanpa sebab
+  // yang terlihat.
   const villages = await store.all(db, `
     SELECT village_code AS code, village_name AS name,
            district_name AS district, city_code AS "cityCode", city_name AS "cityName",
-           province_code AS "provinceCode", lat, lng
+           province_code AS "provinceCode", lat, lng,
+           (geom_m IS NOT NULL) AS "hasGeom"
     FROM villages
     ORDER BY province_code, city_name, district_name, village_name`);
 
@@ -207,6 +213,123 @@ async function browseCustomers(filters) {
   return { rows, total, limit: BROWSE_LIMIT, offset };
 }
 
+/**
+ * Tambah pos dealer baru.
+ *
+ * Biasanya outlet lahir dari impor bulanan. Ini untuk pos yang sudah buka tapi belum
+ * muncul di Excel — tanpa ini, timnya harus menunggu satu bulan sebelum bisa
+ * memetakannya.
+ *
+ * `outletCode` datang dari pengguna dan HARUS sama dengan kode di Excel nanti. Kalau
+ * beda, impor berikutnya membuat outlet KEDUA untuk pos yang sama, dan penjualannya
+ * terbelah dua tanpa gejala. Itu sebabnya kodenya wajib diisi tangan, bukan dibuatkan
+ * server: cuma manusia yang tahu kode apa yang dipakai Astra.
+ *
+ * @return {{outlet: Object, coverageRebuilt: boolean}}
+ */
+async function createOutlet(data, config) {
+  const db = store.db();
+  const code = String(data.outletCode || '').trim();
+  const name = String(data.outletName || '').trim();
+  if (!code) throw new Error('Kode pos wajib diisi.');
+  if (!name) throw new Error('Nama pos wajib diisi.');
+
+  const ada = await store.one(db,
+    'SELECT outlet_name FROM outlets WHERE outlet_code = ?', [code]);
+  if (ada) {
+    throw new Error(`Kode ${code} sudah dipakai oleh "${ada.outlet_name}".`);
+  }
+
+  const dealer = await resolveDealer(data.dealerName || name);
+  if (!dealer) throw new Error('Nama dealer tidak bisa dipakai. Harus memuat huruf atau angka.');
+
+  const lat = data.lat === undefined || data.lat === null ? null : data.lat;
+  const lng = data.lng === undefined || data.lng === null ? null : data.lng;
+
+  await store.run(db, `
+    INSERT INTO outlets (outlet_code, outlet_name, dealer_code, dealer_name,
+                         address, lat, lng, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  [code, name, dealer.code, dealer.name,
+    data.address ? String(data.address).trim() : null, lat, lng,
+    new Date().toISOString()]);
+
+  // Pos yang langsung punya koordinat langsung punya jangkauan juga. Tanpa ini dia
+  // tampil 0% sampai ada yang ingat menjalankan seed-coverage.
+  let coverageRebuilt = false;
+  if (lat != null && lng != null && config) {
+    await coverage.rebuild(config, [code]);
+    coverageRebuilt = true;
+  }
+
+  return {
+    outlet: await store.one(db, `
+      SELECT outlet_code AS code, outlet_name AS name, dealer_code AS "dealerCode",
+             dealer_name AS "dealerName", address, lat, lng
+      FROM outlets WHERE outlet_code = ?`, [code]),
+    coverageRebuilt,
+  };
+}
+
+/**
+ * Tambah kelurahan baru.
+ *
+ * TANPA BATAS WILAYAH. Poligon kelurahan datang dari pipeline geo (BPS/Ina-Geoportal),
+ * bukan dari ketikan manusia — dan tanpa poligon, kelurahan ini tidak akan pernah
+ * punya rasio jangkauan.
+ *
+ * Itu BUKAN dianggap sepele: `summary()` menandainya lewat `hasGeom`, dan halaman
+ * mengeluarkan penjualannya dari hitungan dalam/luar jangkauan lalu melaporkannya
+ * terpisah. Yang belum lengkap harus terlihat, bukan tersamar jadi "di luar jangkauan".
+ *
+ * Kodenya WAJIB kode BPS bertitik dan tidak pernah diturunkan dari nama — aturan
+ * proyek, dan satu-satunya cara kelurahan ini nanti bisa disambungkan ke poligonnya
+ * waktu cakupan geo diperluas.
+ */
+async function createVillage(data) {
+  const db = store.db();
+  const code = String(data.villageCode || '').trim();
+  const name = String(data.villageName || '').trim();
+  if (!/^\d{2}\.\d{2}\.\d{2}\.\d{4}$/.test(code)) {
+    throw new Error('Kode kelurahan harus format BPS bertitik, misalnya 34.04.01.2001.');
+  }
+  if (!name) throw new Error('Nama kelurahan wajib diisi.');
+
+  const ada = await store.one(db,
+    'SELECT village_name FROM villages WHERE village_code = ?', [code]);
+  if (ada) throw new Error(`Kode ${code} sudah dipakai oleh "${ada.village_name}".`);
+
+  // Kode kota dan provinsi TURUNAN dari kode kelurahan, bukan isian terpisah. Kalau
+  // dipisah, keduanya bisa saling bertentangan dan penyaring kota jadi salah diam-diam.
+  const cityCode = code.slice(0, 5);
+  const provinceCode = code.slice(0, 2);
+
+  // Nama kota diambil dari kelurahan lain di kota yang sama kalau ada — supaya tidak
+  // muncul dua ejaan untuk kota yang sama di dropdown.
+  const kota = await store.one(db,
+    'SELECT city_name FROM villages WHERE city_code = ? LIMIT 1', [cityCode]);
+  const cityName = kota ? kota.city_name : String(data.cityName || '').trim();
+  if (!cityName) {
+    throw new Error('Kota ini belum ada di tabel — isi nama kabupaten/kotanya.');
+  }
+
+  await store.run(db, `
+    INSERT INTO villages (village_code, village_name, district_code, district_name,
+                          city_code, city_name, province_code, lat, lng)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  [code, name, code.slice(0, 8),
+    data.districtName ? String(data.districtName).trim() : null,
+    cityCode, cityName, provinceCode,
+    data.lat === undefined ? null : data.lat,
+    data.lng === undefined ? null : data.lng]);
+
+  return store.one(db, `
+    SELECT village_code AS code, village_name AS name, district_name AS district,
+           city_code AS "cityCode", city_name AS "cityName",
+           province_code AS "provinceCode", lat, lng, (geom_m IS NOT NULL) AS "hasGeom"
+    FROM villages WHERE village_code = ?`, [code]);
+}
+
 /** Apakah data konsumen tersedia sama sekali. */
 function hasCustomers() {
   return Boolean(store.customers());
@@ -322,6 +445,6 @@ async function updateOutlet(code, patch, config) {
 module.exports = {
   summary, unmatched, imports, periodSummary,
   customersInVillage, browseCustomers, hasCustomers, logCustomerAccess, updateOutlet,
-  resolveDealer,
+  resolveDealer, createOutlet, createVillage,
   BROWSE_LIMIT,
 };

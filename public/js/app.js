@@ -24,7 +24,9 @@ import {
 import { S } from './state.js';
 import {
   acceptMapPoint, closeOutletEditor, closeVillageDetail, jumpToVillage,
-  customerPage, dealerChoiceChanged, openOutletEditor, openVillageDetail, pickFromMap,
+  closeNewOutlet, closeNewVillage, customerPage, dealerChoiceChanged, newOutletDealerChanged,
+  openNewOutlet, openNewVillage, saveNewOutlet, saveNewVillage,
+  openOutletEditor, openVillageDetail, pickFromMap,
   promptPin,
   renderCustomerTable,
   renderOutletTable, renderVillageTable, saveOutletEditor, searchCustomers, showOnMap,
@@ -49,6 +51,8 @@ const HANDLERS = {
   // tabel
   switchTab, renderOutletTable, renderVillageTable, showOnMap, jumpToVillage, promptPin,
   renderCustomerTable, searchCustomers, customerPage,
+  openNewOutlet, closeNewOutlet, newOutletDealerChanged, saveNewOutlet,
+  openNewVillage, closeNewVillage, saveNewVillage,
   // impor
   importStep, importPeriodChanged, pickFile, fileChosen, dropFile, dragOver, dragLeave,
   runUpload, reviewImport, finishImport, reimportPeriod, refreshImportTab,

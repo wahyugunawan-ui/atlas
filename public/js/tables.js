@@ -1,7 +1,8 @@
 /**
  * Panel rincian kelurahan, tabel master, dan perpindahan tab.
  */
-import { browseCustomers, fetchCustomers, saveOutlet } from './api.js';
+import { browseCustomers, createOutlet, createVillage, fetchCustomers, saveOutlet }
+  from './api.js';
 import { dealerColor } from './colors.js';
 import {
   CUSTOMER_PANEL_LIMIT, PROVINCE_NAMES, SHOW_ENGINE_NUMBER, SHOW_HOUSE_PHOTO,
@@ -407,6 +408,144 @@ document.addEventListener('keydown', (event) => {
   if (!$('modal-pos').classList.contains('hidden')) { closeOutletEditor(); return; }
   if (S.fullscreen) window.toggleFullscreen(false);
 });
+
+/* ==========================================================================
+   TAMBAH POS DEALER DAN KELURAHAN
+   ==========================================================================
+   Keduanya menambah baris yang biasanya lahir dari impor bulanan. Bedanya besar:
+
+   Pos baru langsung utuh — kolom geom_m-nya dibuat database dari lat/lng, jadi
+   jangkauannya bisa dihitung saat itu juga.
+
+   Kelurahan baru TIDAK utuh: batas wilayahnya datang dari pipeline geo, bukan dari
+   ketikan. Sampai poligonnya ada, penjualannya dikeluarkan dari persentase jangkauan
+   dan dilaporkan terpisah — lihat splitByCoverage() di filters.js.
+   ========================================================================== */
+
+function pesanModal(id, teks, jenis) {
+  const el = $(id);
+  if (!el) return;
+  el.textContent = teks || '';
+  el.className = 'text-xs mb-3 ' +
+    (jenis === 'error' ? 'text-red-600' : 'text-emerald-600');
+}
+
+/** Isi dropdown dealer dengan yang sudah ada, plus pilihan membuat baru. */
+function isiDealer(selectId, inputId) {
+  const nama = [...new Set(S.outlets.map((o) => o.dealerName).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b));
+  $(selectId).innerHTML = nama
+    .map((x) => `<option value="${esc(x)}">${esc(x)}</option>`).join('') +
+    `<option value="${DEALER_BARU}">+ dealer baru...</option>`;
+  $(selectId).value = nama[0] || DEALER_BARU;
+  $(inputId).value = '';
+  $(inputId).classList.toggle('hidden', $(selectId).value !== DEALER_BARU);
+}
+
+export function openNewOutlet() {
+  ['np-kode', 'np-nama', 'np-alamat', 'np-lat', 'np-lng'].forEach((id) => {
+    $(id).value = '';
+  });
+  isiDealer('np-dealer', 'np-dealer-baru');
+  pesanModal('np-pesan', '');
+  $('modal-pos-baru').classList.remove('hidden');
+  $('np-kode').focus();
+}
+
+export function closeNewOutlet() {
+  $('modal-pos-baru').classList.add('hidden');
+}
+
+export function newOutletDealerChanged() {
+  const baru = $('np-dealer').value === DEALER_BARU;
+  $('np-dealer-baru').classList.toggle('hidden', !baru);
+  if (baru) $('np-dealer-baru').focus();
+}
+
+export async function saveNewOutlet() {
+  const pilihan = $('np-dealer').value;
+  const dealerName = pilihan === DEALER_BARU
+    ? $('np-dealer-baru').value.trim() : pilihan;
+  const lat = $('np-lat').value.trim();
+  const lng = $('np-lng').value.trim();
+
+  if (!$('np-kode').value.trim()) return pesanModal('np-pesan', 'Kode pos wajib diisi.', 'error');
+  if (!$('np-nama').value.trim()) return pesanModal('np-pesan', 'Nama pos wajib diisi.', 'error');
+  if (!dealerName) return pesanModal('np-pesan', 'Pilih dealer, atau isi nama dealer barunya.', 'error');
+  if (Boolean(lat) !== Boolean(lng)) {
+    return pesanModal('np-pesan', 'Isi lintang dan bujur dua-duanya, atau kosongkan dua-duanya.', 'error');
+  }
+
+  const tombol = $('np-simpan');
+  tombol.disabled = true;
+  tombol.textContent = 'Menyimpan...';
+  pesanModal('np-pesan', '');
+  try {
+    const { outlet } = await createOutlet({
+      outletCode: $('np-kode').value.trim(),
+      outletName: $('np-nama').value.trim(),
+      dealerName,
+      address: $('np-alamat').value.trim(),
+      lat: lat || null,
+      lng: lng || null,
+    });
+    closeNewOutlet();
+    toast(`Pos ${outlet.name} ditambahkan.`, 'ok');
+    // Pos baru mengubah daftar dealer, warna, treemap, dan dropdown — ambil ulang
+    // semuanya daripada menambal setengah keadaan.
+    await window.reloadSummary();
+    renderOutletTable();
+  } catch (error) {
+    pesanModal('np-pesan', error.message, 'error');
+  } finally {
+    tombol.disabled = false;
+    tombol.textContent = 'Tambah';
+  }
+}
+
+export function openNewVillage() {
+  ['nk-kode', 'nk-nama', 'nk-kecamatan', 'nk-kota'].forEach((id) => { $(id).value = ''; });
+  pesanModal('nk-pesan', '');
+  $('modal-kel-baru').classList.remove('hidden');
+  $('nk-kode').focus();
+}
+
+export function closeNewVillage() {
+  $('modal-kel-baru').classList.add('hidden');
+}
+
+export async function saveNewVillage() {
+  const kode = $('nk-kode').value.trim();
+  if (!/^\d{2}\.\d{2}\.\d{2}\.\d{4}$/.test(kode)) {
+    return pesanModal('nk-pesan',
+      'Kode harus format BPS bertitik, misalnya 34.04.01.2001.', 'error');
+  }
+  if (!$('nk-nama').value.trim()) {
+    return pesanModal('nk-pesan', 'Nama kelurahan wajib diisi.', 'error');
+  }
+
+  const tombol = $('nk-simpan');
+  tombol.disabled = true;
+  tombol.textContent = 'Menyimpan...';
+  pesanModal('nk-pesan', '');
+  try {
+    const { village } = await createVillage({
+      villageCode: kode,
+      villageName: $('nk-nama').value.trim(),
+      districtName: $('nk-kecamatan').value.trim(),
+      cityName: $('nk-kota').value.trim(),
+    });
+    closeNewVillage();
+    toast(`${village.name} ditambahkan (belum ada batas wilayah).`, 'ok');
+    await window.reloadSummary();
+    renderVillageTable();
+  } catch (error) {
+    pesanModal('nk-pesan', error.message, 'error');
+  } finally {
+    tombol.disabled = false;
+    tombol.textContent = 'Tambah';
+  }
+}
 
 /* ==========================================================================
    DATA KONSUMEN

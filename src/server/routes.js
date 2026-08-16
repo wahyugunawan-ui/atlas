@@ -28,6 +28,27 @@ const VILLAGE = /^\d{2}\.\d{2}\.\d{2}\.\d{4}$/;
 const CITY = /^\d{2}\.\d{2}$/;
 const OUTLET = /^[A-Za-z0-9._-]{1,32}$/;
 
+/**
+ * Periksa koordinat. Dipakai bersama rute tambah dan rute sunting pos.
+ *
+ * Cakupan proyek: DIY + Jawa Tengah. Koordinat di luar itu hampir pasti salah ketik
+ * atau lintang dan bujur tertukar, dan pin yang melompat ke Afrika lebih membingungkan
+ * daripada penolakan.
+ *
+ * @return {string|null} pesan kesalahan, atau null kalau tidak apa-apa
+ */
+function cekKoordinat(lat, lng) {
+  if ((lat !== undefined && !Number.isFinite(lat)) ||
+      (lng !== undefined && !Number.isFinite(lng))) {
+    return 'Koordinat harus angka.';
+  }
+  if ((lat !== undefined && (lat < -9 || lat > -5)) ||
+      (lng !== undefined && (lng < 107 || lng > 113))) {
+    return 'Koordinat di luar wilayah cakupan. Lintang dan bujur tertukar?';
+  }
+  return null;
+}
+
 function build(config) {
   const api = express.Router();
 
@@ -152,23 +173,80 @@ function build(config) {
     res.json({ village, customers: rows });
   });
 
+  /**
+   * Tambah pos dealer baru.
+   *
+   * Kodenya datang dari pengguna dan tidak pernah dibuatkan server: kode itu harus
+   * sama dengan yang dipakai Astra di Excel, dan cuma manusia yang tahu. Kode yang
+   * salah membuat impor berikutnya membuat outlet KEDUA untuk pos yang sama.
+   */
+  api.post('/outlets', async (req, res) => {
+    const body = req.body || {};
+    const lat = body.lat === null || body.lat === undefined || body.lat === ''
+      ? undefined : Number(body.lat);
+    const lng = body.lng === null || body.lng === undefined || body.lng === ''
+      ? undefined : Number(body.lng);
+    const salah = cekKoordinat(lat, lng);
+    if (salah) return res.status(400).json({ error: salah });
+    if ((lat === undefined) !== (lng === undefined)) {
+      return res.status(400).json({ error: 'Isi lintang dan bujur dua-duanya, atau kosongkan dua-duanya.' });
+    }
+    if (!OUTLET.test(String(body.outletCode || ''))) {
+      return res.status(400).json({
+        error: 'Kode pos cuma boleh huruf, angka, titik, strip, dan garis bawah.',
+      });
+    }
+    try {
+      const hasil = await repo.createOutlet({
+        outletCode: body.outletCode,
+        outletName: body.outletName,
+        dealerName: body.dealerName,
+        address: body.address,
+        lat: lat === undefined ? null : lat,
+        lng: lng === undefined ? null : lng,
+      }, config);
+      res.status(201).json(hasil);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  /**
+   * Tambah kelurahan baru — TANPA batas wilayah.
+   *
+   * Poligonnya datang dari pipeline geo, bukan dari ketikan. Sampai poligonnya ada,
+   * kelurahan ini ditandai `hasGeom: false` dan penjualannya DIKELUARKAN dari hitungan
+   * dalam/luar jangkauan, bukan dihitung sebagai "di luar".
+   */
+  api.post('/villages', async (req, res) => {
+    const body = req.body || {};
+    const lat = body.lat === null || body.lat === undefined || body.lat === ''
+      ? undefined : Number(body.lat);
+    const lng = body.lng === null || body.lng === undefined || body.lng === ''
+      ? undefined : Number(body.lng);
+    const salah = cekKoordinat(lat, lng);
+    if (salah) return res.status(400).json({ error: salah });
+    try {
+      const village = await repo.createVillage({
+        villageCode: body.villageCode,
+        villageName: body.villageName,
+        districtName: body.districtName,
+        cityName: body.cityName,
+        lat: lat === undefined ? null : lat,
+        lng: lng === undefined ? null : lng,
+      });
+      res.status(201).json({ village });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
   api.put('/outlets/:code', async (req, res) => {
     const patch = req.body || {};
     const lat = patch.lat === null || patch.lat === undefined ? undefined : Number(patch.lat);
     const lng = patch.lng === null || patch.lng === undefined ? undefined : Number(patch.lng);
-    if ((lat !== undefined && !Number.isFinite(lat)) ||
-        (lng !== undefined && !Number.isFinite(lng))) {
-      return res.status(400).json({ error: 'Koordinat harus angka.' });
-    }
-    // Cakupan proyek: DIY + Jawa Tengah. Koordinat di luar ini hampir pasti salah
-    // ketik atau lintang dan bujur tertukar, dan pin yang melompat ke Afrika lebih
-    // membingungkan daripada penolakan.
-    if ((lat !== undefined && (lat < -9 || lat > -5)) ||
-        (lng !== undefined && (lng < 107 || lng > 113))) {
-      return res.status(400).json({
-        error: 'Koordinat di luar wilayah cakupan. Lintang dan bujur tertukar?',
-      });
-    }
+    const salah = cekKoordinat(lat, lng);
+    if (salah) return res.status(400).json({ error: salah });
 
     // Nama dealer diterima; KODENYA tidak. Kode dealer itu identitas, dan browser
     // tidak boleh menentukannya — repo.resolveDealer() yang memutuskan, sekaligus

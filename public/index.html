@@ -444,6 +444,7 @@
       <p class="text-sm text-slate-500 mt-0.5"><span id="pos-count">0</span> pos dari <span id="pos-dealer-count">0</span> dealer</p>
     </div>
     <div class="flex gap-2">
+      <button onclick="openNewOutlet()" class="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700 whitespace-nowrap"><i class="ph ph-plus mr-1"></i>Tambah Pos</button>
       <input id="mpos-search" oninput="renderOutletTable()" type="text" placeholder="Cari nama atau kode pos..." class="px-3 py-2 rounded-xl border border-slate-200 text-sm w-64">
       <select id="mpos-filter-dealer" onchange="renderOutletTable()" class="px-3 py-2 rounded-xl border border-slate-200 text-sm font-semibold bg-white"></select>
     </div>
@@ -507,6 +508,7 @@
       <p class="text-sm text-slate-500 mt-0.5">Urut provinsi &rarr; kabupaten &rarr; kecamatan &rarr; kelurahan</p>
     </div>
     <div class="flex gap-2">
+      <button onclick="openNewVillage()" class="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700 whitespace-nowrap"><i class="ph ph-plus mr-1"></i>Tambah Kelurahan</button>
       <input id="mkel-search" oninput="renderVillageTable()" type="text" placeholder="Cari kelurahan atau kode..." class="px-3 py-2 rounded-xl border border-slate-200 text-sm w-56">
       <select id="mkel-filter-provinsi" onchange="renderVillageTable()" class="px-3 py-2 rounded-xl border border-slate-200 text-sm font-semibold bg-white"></select>
       <select id="mkel-filter-kota" onchange="renderVillageTable()" class="px-3 py-2 rounded-xl border border-slate-200 text-sm font-semibold bg-white"></select>
@@ -529,6 +531,73 @@
   </div>
 </section>
 </main>
+
+<div id="modal-pos-baru" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[300] flex items-center justify-center p-4" onclick="if(event.target===this) closeNewOutlet()">
+  <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 relative rise-in">
+    <button onclick="closeNewOutlet()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><i class="ph ph-x text-xl"></i></button>
+    <div class="text-lg font-extrabold text-slate-800 pr-8">Tambah Pos Dealer</div>
+    <p class="text-xs text-slate-400 mb-4">Untuk pos yang sudah buka tapi belum muncul di Excel bulanan.</p>
+
+    <label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Kode pos</label>
+    <input id="np-kode" type="text" placeholder="mis. 4808" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm mono mb-1">
+    <p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 mb-3 leading-snug">Harus SAMA dengan kode di Excel Astra. Kalau beda, impor berikutnya membuat pos kedua dan penjualannya terbelah.</p>
+
+    <label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Nama pos</label>
+    <input id="np-nama" type="text" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm mb-3">
+
+    <label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Dealer induk</label>
+    <select id="np-dealer" onchange="newOutletDealerChanged()" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white mb-1"></select>
+    <input id="np-dealer-baru" type="text" placeholder="Nama dealer baru" class="hidden w-full px-3 py-2 rounded-xl border border-slate-200 text-sm mb-3">
+
+    <label class="block text-[11px] uppercase font-bold text-slate-400 mb-1 mt-3">Alamat</label>
+    <textarea id="np-alamat" rows="2" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm mb-3"></textarea>
+
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Lintang</label>
+        <input id="np-lat" type="text" inputmode="decimal" placeholder="-7.79558" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm mono"></div>
+      <div><label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Bujur</label>
+        <input id="np-lng" type="text" inputmode="decimal" placeholder="110.36949" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm mono"></div>
+    </div>
+    <p class="text-[11px] text-slate-400 mt-1 mb-3">Boleh dikosongkan dulu, tapi pos tanpa koordinat tidak punya jangkauan sama sekali.</p>
+
+    <div id="np-pesan" class="text-xs mb-3"></div>
+    <div class="flex gap-2">
+      <button id="np-simpan" onclick="saveNewOutlet()" class="flex-1 px-4 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-700">Tambah</button>
+      <button onclick="closeNewOutlet()" class="px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600">Batal</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-kel-baru" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[300] flex items-center justify-center p-4" onclick="if(event.target===this) closeNewVillage()">
+  <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 relative rise-in">
+    <button onclick="closeNewVillage()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><i class="ph ph-x text-xl"></i></button>
+    <div class="text-lg font-extrabold text-slate-800 pr-8">Tambah Kelurahan</div>
+    <p class="text-xs text-slate-400 mb-4">Untuk kelurahan yang muncul di Excel tapi belum ada di tabel.</p>
+
+    <label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Kode kelurahan (BPS)</label>
+    <input id="nk-kode" type="text" placeholder="34.04.01.2001" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm mono mb-1">
+    <p class="text-[11px] text-slate-500 mb-3">Kode BPS/Kemendagri bertitik. Kode kota dan provinsi diambil otomatis dari sini, jadi tidak bisa saling bertentangan.</p>
+
+    <label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Nama kelurahan</label>
+    <input id="nk-nama" type="text" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm mb-3">
+
+    <label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Kecamatan</label>
+    <input id="nk-kecamatan" type="text" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm mb-3">
+
+    <label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Kabupaten/Kota</label>
+    <input id="nk-kota" type="text" placeholder="terisi sendiri kalau kotanya sudah ada" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm mb-3">
+
+    <div class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900 leading-snug mb-3">
+      <b>Tanpa batas wilayah.</b> Poligon kelurahan datang dari pipeline geo, bukan dari ketikan. Sampai poligonnya ada, penjualan di kelurahan ini <b>dikeluarkan</b> dari persentase jangkauan dan dilaporkan terpisah &mdash; bukan dihitung sebagai &ldquo;di luar jangkauan&rdquo;.
+    </div>
+
+    <div id="nk-pesan" class="text-xs mb-3"></div>
+    <div class="flex gap-2">
+      <button id="nk-simpan" onclick="saveNewVillage()" class="flex-1 px-4 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-700">Tambah</button>
+      <button onclick="closeNewVillage()" class="px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600">Batal</button>
+    </div>
+  </div>
+</div>
 
 <div id="modal-pos" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[300] flex items-center justify-center p-4" onclick="if(event.target===this) closeOutletEditor()">
   <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 relative rise-in">
