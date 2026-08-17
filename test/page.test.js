@@ -291,6 +291,57 @@ function test() {
   assert.deepStrictEqual(rogueFetch, [],
     `modul ini memanggil fetch() sendiri, bukan lewat api.js: ${rogueFetch.join(', ')}`);
 
+  /* ------------------------------------------------------------------------
+     9. basemap: daftar lapisannya DITANGKAP, bukan ditebak dari `source`
+     ------------------------------------------------------------------------
+     Bug yang sungguhan terjadi. setBasemap() dulu mencari lapisan basemap dengan
+     menyaring `layer.source === 'protomaps'`, dan penyaring itu melewatkan lapisan
+     pertama tema: sebuah lapisan bertipe `background`, yang di MapLibre memang TIDAK
+     punya `source`.
+
+     Lapisan itu jadi tidak pernah ikut dimatikan. Warnanya #a3a3a3 pekat dan duduk
+     DI ATAS lapisan citra satelit, jadi menekan tombol Satelit menghasilkan layar
+     abu-abu rata: ubinnya diminta, dijawab 200 OK, lalu tertutup rapat. Tidak ada
+     error, tidak ada ubin gagal, dan tidak ada satu pun tes yang merah.
+     ------------------------------------------------------------------------ */
+
+  const ctxTema = {};
+  vm.createContext(ctxTema);
+  vm.runInContext(fs.readFileSync(
+    path.join(ROOT, 'frontend', 'vendor', 'protomaps-themes-base.js'), 'utf8'), ctxTema);
+  const themeLayers = ctxTema.protomaps_themes_base.noLabels('protomaps', 'grayscale');
+
+  // Premis bugnya, diperiksa ke tema yang sungguhan dipakai. Kalau protomaps suatu
+  // saat memberi `source` ke semua lapisannya, tes ini merah — dan yang membacanya
+  // boleh membuang blok ini, karena jebakannya memang sudah tidak ada lagi.
+  const tanpaSource = themeLayers.filter((l) => !l.source);
+  assert.ok(tanpaSource.some((l) => l.type === 'background'),
+    'tema protomaps tidak lagi punya lapisan background tanpa source — premis penjaga ' +
+    'ini hilang, periksa apakah blok ini masih perlu');
+
+  // Dan penyaring yang melewatkannya tidak boleh dipasang lagi.
+  //
+  // Komentar dibuang dulu: catatan di map.js MENGUTIP penyaring lama supaya orang
+  // berikutnya tahu kenapa dia salah, dan penjaga yang menembak kutipan itu akan
+  // menghukum dokumentasi yang justru mencegah bugnya terulang.
+  const mapTanpaKomentar = source['map.js']
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  assert.ok(!/source\s*===\s*'protomaps'/.test(mapTanpaKomentar),
+    "map.js menyaring lapisan basemap dengan source === 'protomaps' lagi. Penyaring itu " +
+    'melewatkan lapisan background tema, dan citra satelit akan tertutup rata tanpa ' +
+    'satu pun error');
+
+  // Daftarnya harus datang dari tema itu sendiri — dia yang membuat lapisannya, jadi
+  // dia yang tahu daftar lengkapnya.
+  assert.ok(/basemapLayerIds\s*=\s*basemapLayers\.map/.test(source['map.js']),
+    'id lapisan basemap harus ditangkap dari tema waktu peta dibuat, bukan dicari ulang');
+  assert.ok(/basemapLayerIds\.forEach/.test(source['map.js']),
+    'setBasemap harus memakai daftar id yang ditangkap itu');
+
+  // `polos` latar terakhir milik kita sendiri dan TIDAK boleh ikut dimatikan.
+  assert.ok(!themeLayers.some((l) => l.id === 'polos'),
+    'tema punya lapisan bernama `polos` juga — namanya bertabrakan dengan latar kita');
+
   const totalLines = files.reduce((sum, f) => sum + source[f].split('\n').length, 0);
   console.log(`OK page — ${files.length} modul (${totalLines} baris), ` +
     `${new Set(handlers).size} handler terdaftar, ${new Set(usedIds).size} id, ` +

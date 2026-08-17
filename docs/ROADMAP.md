@@ -133,6 +133,60 @@ cuma perluasan ke Sulawesi ke timur.
 
 ## Selesai
 
+### Citra satelit tidak pernah muncul — satu lapisan lupa dimatikan (2026-08-17)
+
+Laporannya "render opsi peta satelit masih lama". Ternyata bukan lambat sama sekali:
+citranya **tidak pernah muncul**, dan yang terlihat lapisan abu-abu rata.
+
+Dua hipotesis pertama saya gugur oleh pengukuran saya sendiri, lagi:
+
+1. **Jaringan lambat ke Esri** — salah. Ubin di atas Jawa datang dalam 34–162 ms,
+   12–18 KB.
+2. **`getStyle()` menyalin GeoJSON 4.003 kelurahan tiap kali tombol ditekan** — salah.
+   `GeoJSONSource.serialize()` memakai `extend` dangkal; `data` cuma referensi.
+
+Basemap satelitnya diukur terpisah di halaman uji tanpa lapisan aplikasi: **613 ms
+sampai diam, 28 ubin.** Cepat. Jadi masalahnya di aplikasi, dan bukti terakhirnya
+datang dari daftar lapisan yang masih menyala waktu mode Satelit aktif:
+
+```
+polos, bm-satelit, background, kel-isi, ...
+                   ^^^^^^^^^^
+```
+
+**`setBasemap()` mencari lapisan basemap dengan menyaring `layer.source ===
+'protomaps'`, dan lapisan pertama tema itu bertipe `background` — yang di MapLibre
+memang TIDAK punya `source`.** Dia lolos dari penyaring, tidak pernah ikut dimatikan,
+warnanya `#a3a3a3` pekat, dan posisinya DI ATAS lapisan citra satelit.
+
+Jadi ubinnya diminta, dijawab **200 OK**, lalu tertutup rapat. Tidak ada error, tidak
+ada ubin gagal, tidak ada satu pun tes yang merah. Menyembunyikan satu lapisan itu di
+konsol langsung memunculkan seluruh citra.
+
+**Mode Polos juga salah selama ini** dan tidak ada yang melaporkannya: yang tampil
+`#a3a3a3` milik tema, bukan `#eef1f6` milik kita. Itu justru yang membuat kalimat
+laporannya tepat secara harfiah — "cuma kaya yang polos" — Satelit dan Polos memang
+menampilkan lapisan yang sama persis.
+
+**Perbaikannya menghapus tebakannya, bukan menambal penyaringnya.** Daftar id lapisan
+basemap ditangkap dari tema waktu peta dibuat: tema yang membuat lapisannya, jadi tema
+yang tahu daftar lengkapnya. Menambahkan `|| l.type === 'background'` ke penyaring
+akan terlihat memperbaiki, tapi ikut mematikan lapisan `polos` milik kita sendiri.
+
+Efek sampingnya `getStyle()` hilang dari jalur ini — dia menserialisasi 66 lapisan tiap
+tombol ditekan, walaupun itu bukan penyebab keluhannya.
+
+Dijaga `test/page.test.js`: tema sungguhan dimuat dan dipastikan masih punya lapisan
+background tanpa `source` (kalau premisnya hilang, tesnya merah dan penjaganya boleh
+dibuang), penyaring `source === 'protomaps'` tidak boleh dipasang lagi, dan daftarnya
+harus datang dari tema. Komentar dibuang dulu sebelum diperiksa — catatan di `map.js`
+MENGUTIP penyaring lama supaya orang berikutnya tahu kenapa dia salah, dan penjaga yang
+menembak kutipan itu akan menghukum dokumentasi yang mencegah bugnya terulang.
+
+18/18 tes, 2/2 mutasi tertangkap, dan ketiga basemap diperiksa satu per satu di browser.
+
+**KF-PETA-11 di PRD naik dari `belum dijaga`** jadi dijaga `test/page.test.js`.
+
 ### PRD ditulis mundur, struktur jadi backend/ + frontend/ (2026-08-17)
 
 Proyek ini dibangun tanpa PRD. Enam dokumen yang ada semuanya menjawab "bagaimana",

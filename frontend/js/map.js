@@ -11,10 +11,34 @@ import { activeRows, filterValue } from './filters.js';
 import { circle, EMPTY_COLLECTION } from './geo.js';
 import { S } from './state.js';
 
+/**
+ * Id lapisan basemap lokal, diambil dari tema waktu peta dibuat.
+ *
+ * DITANGKAP, BUKAN DITEBAK. Sebelumnya daftarnya dicari ulang tiap kali basemap
+ * diganti dengan menyaring `layer.source === 'protomaps'` — dan penyaring itu
+ * MELEWATKAN satu lapisan: tema protomaps diawali lapisan bertipe `background`, dan
+ * lapisan background di MapLibre memang TIDAK punya `source` sama sekali.
+ *
+ * Akibatnya lapisan itu tidak pernah ikut dimatikan. Dia berwarna #a3a3a3 pekat dan
+ * duduk DI ATAS lapisan citra satelit, jadi menekan tombol Satelit menghasilkan layar
+ * abu-abu rata: ubinnya diminta, dijawab 200, lalu tertutup rapat. Tidak ada error,
+ * tidak ada ubin gagal — cuma satu lapisan yang lupa dimatikan.
+ *
+ * Karena tema ini yang membuat lapisannya, tema ini juga yang tahu daftarnya. Menyimpan
+ * hasilnya menghapus tebakan sekaligus menghapus panggilan `getStyle()` yang
+ * menserialisasi 66 lapisan tiap kali tombol ditekan.
+ */
+let basemapLayerIds = [];
+
 export function setupMap() {
   // Protokol pmtiles harus terdaftar SEBELUM Map dibuat, kalau tidak MapLibre tidak
   // tahu cara membaca url 'pmtiles://' dan basemapnya kosong tanpa pesan apa pun.
   maplibregl.addProtocol('pmtiles', new pmtiles.Protocol().tile);
+
+  // noLabels: jalan/air/tutupan lahan saja. Nama tempat bawaan dimatikan supaya tidak
+  // berebut dengan label kelurahan.
+  const basemapLayers = protomaps_themes_base.noLabels('protomaps', 'grayscale');
+  basemapLayerIds = basemapLayers.map((l) => l.id);
 
   S.map = new maplibregl.Map({
     container: 'map',
@@ -30,12 +54,13 @@ export function setupMap() {
           maxzoom: 19, attribution: ATTRIBUTION_SATELLITE },
       },
       layers: [
+        // `polos` di paling bawah dan TIDAK pernah dimatikan — dia latar terakhir
+        // kalau semua basemap mati. Namanya sengaja beda dari lapisan `background`
+        // milik tema supaya keduanya tidak pernah tertukar.
         { id: 'polos', type: 'background', paint: { 'background-color': '#eef1f6' } },
         { id: 'bm-satelit', type: 'raster', source: 'satelit',
           layout: { visibility: 'none' } },
-        // noLabels: jalan/air/tutupan lahan saja. Nama tempat bawaan dimatikan supaya
-        // tidak berebut dengan label kelurahan.
-        ...protomaps_themes_base.noLabels('protomaps', 'grayscale'),
+        ...basemapLayers,
       ],
     },
   });
@@ -66,9 +91,6 @@ export function setupMap() {
   }).observe($('map'));
 }
 
-const PROTOMAPS_LAYERS = () =>
-  S.map.getStyle().layers.filter((l) => l.source === 'protomaps').map((l) => l.id);
-
 export function setBasemap(which) {
   S.basemap = which;
   ['lokal', 'satelit', 'polos'].forEach((name) => {
@@ -78,7 +100,7 @@ export function setBasemap(which) {
       (name === which ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500');
   });
 
-  PROTOMAPS_LAYERS().forEach((id) => {
+  basemapLayerIds.forEach((id) => {
     S.map.setLayoutProperty(id, 'visibility', which === 'lokal' ? 'visible' : 'none');
   });
   S.map.setLayoutProperty('bm-satelit', 'visibility',

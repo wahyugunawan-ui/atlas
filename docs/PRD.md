@@ -189,12 +189,19 @@ siapa pun, dan banyak orang login bersamaan jalan dengan sendirinya.
 | KF-PETA-8 | Halaman bisa membedakan "0% terjangkau" dari "jangkauan belum pernah dihitung" | `test/coverage-split.test.js` |
 | KF-PETA-9 | Klik kelurahan membuka rincian: daftar pos dan porsinya | `test/page.test.js` |
 | KF-PETA-10 | Treemap kontribusi dealer dan pos | belum dijaga |
-| KF-PETA-11 | Basemap bisa diganti antara peta lokal dan citra satelit | belum dijaga |
+| KF-PETA-11 | Basemap bisa diganti antara peta lokal, citra satelit, dan polos | `test/page.test.js` |
+| KF-PETA-12 | Basemap yang tidak dipilih dimatikan **seluruhnya**, termasuk lapisan yang tidak punya `source` | `test/page.test.js` |
 
 **KF-PETA-11 satu-satunya fitur yang butuh internet**, dan itu disengaja: citra
 satelitnya dari Esri, diminta di meeting. Peta lokal (PMTiles) tetap jalan penuh tanpa
 jaringan keluar, jadi menutup internet mendegradasi satu pilihan basemap — bukan
 mematikan halaman.
+
+**KF-PETA-12 kelihatan seperti detail teknis, tapi dia yang pernah rusak.** Daftar
+lapisan basemap ditangkap dari tema waktu peta dibuat, tidak pernah dicari ulang dengan
+menyaring `layer.source`: lapisan bertipe `background` tidak punya `source`, jadi
+penyaring seperti itu melewatkannya dan lapisan abu-abu pekat tetap menutupi citra
+satelit di bawahnya — dengan ubin yang dijawab 200 OK dan tanpa satu pun error.
 
 ### KF-POS — Master Pos Dealer
 
