@@ -19,8 +19,8 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { config } = require('../src/server/config');
-const store = require('../src/server/db');
+const { config } = require('../backend/server/config');
+const store = require('../backend/server/db');
 
 /**
  * Toleransi penyederhanaan, dalam meter.

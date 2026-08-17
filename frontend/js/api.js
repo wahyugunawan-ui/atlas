@@ -89,13 +89,26 @@ export function createOutlet(data) {
   });
 }
 
-/** Tambah kelurahan baru. Tanpa batas wilayah — lihat catatan di modalnya. */
-export function createVillage(data) {
-  return request(`${API}villages`, {
+/** Nama yang menunggu dicocokkan beserta sarannya, plus alias yang sudah tersimpan. */
+export const fetchAliases = () => request(`${API}village-aliases`);
+
+/**
+ * Konfirmasi satu ejaan Excel menunjuk kelurahan mana.
+ *
+ * Kodenya selalu diambil dari daftar yang dikirim server, tidak pernah diketik —
+ * kode kelurahan itu kode BPS dan tidak boleh lahir dari nama.
+ */
+export function saveAlias(data) {
+  return request(`${API}village-aliases`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
+}
+
+export function deleteAlias(cityCode, districtName, villageName) {
+  const query = new URLSearchParams({ cityCode, districtName, villageName });
+  return request(`${API}village-aliases?${query}`, { method: 'DELETE' });
 }
 
 export function saveOutlet(code, patch) {

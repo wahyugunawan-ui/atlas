@@ -12,7 +12,7 @@ const path = require('path');
 const { buildDataset, WORDS } = require('./src/data');
 // Implementasinya milik aplikasi, bukan prototipe. Satu berkas, dua pemakai —
 // kalau disalin, angka di proposal dan angka di aplikasi akan menyimpang diam-diam.
-const { computeCoverage, splitByCoverage } = require('../src/core/coverage');
+const { computeCoverage, splitByCoverage } = require('../backend/core/coverage');
 
 const HERE = __dirname;
 const PROJECT = path.join(HERE, '..');
@@ -46,12 +46,12 @@ function readJson(file) {
 /**
  * Susun kerangka prototipe dari halaman aplikasi yang sebenarnya.
  *
- * Dengan ini perubahan tata letak di public/index.html otomatis ikut terlihat pada
+ * Dengan ini perubahan tata letak di frontend/index.html otomatis ikut terlihat pada
  * berkas demo. Logika dan datanya tetap milik prototype/src, jadi index.html hasil
  * build masih satu berkas, bisa dibuka lewat file://, dan tidak membawa data nyata.
  */
 function currentAppTemplate() {
-  const page = fs.readFileSync(path.join(PROJECT, 'public', 'index.html'), 'utf8');
+  const page = fs.readFileSync(path.join(PROJECT, 'frontend', 'index.html'), 'utf8');
   const cdn = `
   <!-- Prototipe sengaja memakai CDN agar tetap satu berkas yang mudah dibagikan. -->
   <script src="https://cdn.tailwindcss.com"><\/script>

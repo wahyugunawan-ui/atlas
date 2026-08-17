@@ -1,5 +1,5 @@
 /**
- * Uji modul warna. Meng-import public/js/colors.js langsung, jadi tidak ada salinan
+ * Uji modul warna. Meng-import frontend/js/colors.js langsung, jadi tidak ada salinan
  * kedua yang bisa menyimpang dari yang dipakai browser.
  *
  * Kuota 8 warna DIBUANG pada 2026-08-12 atas keputusan meeting: tiap dealer dapat
@@ -25,7 +25,7 @@ function salesFrom(pairs) {
 
 async function test() {
   const source = pathToFileURL(
-    path.join(__dirname, '..', 'public', 'js', 'colors.js')).href;
+    path.join(__dirname, '..', 'frontend', 'js', 'colors.js')).href;
   const {
     RAMP, COLOR_EMPTY, COLOR_UNKNOWN, CLASS_LABELS, mixColor, buildPalette, shadeRamp,
     buildColorRegistry, dealerColor, percentileBreaks, classOf, classRanges,

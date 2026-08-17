@@ -10,7 +10,7 @@ const assert = require('assert');
 const {
   hashPassword, verifyPassword, createSession, readSession, RateLimiter,
   cookieOptions, SESSION_MS,
-} = require('../src/server/auth');
+} = require('../backend/server/auth');
 
 const SECRET = 'rahasia-uji-jangan-dipakai-sungguhan';
 
@@ -118,7 +118,7 @@ function test() {
   // Pemeriksaan sumber memang rapuh. Dipakai di sini karena alternatifnya bukan
   // pemeriksaan yang lebih baik, melainkan tidak ada pemeriksaan sama sekali.
   const source = require('fs').readFileSync(
-    require('path').join(__dirname, '..', 'src', 'server', 'auth.js'), 'utf8');
+    require('path').join(__dirname, '..', 'backend', 'server', 'auth.js'), 'utf8');
   const body = source.slice(source.indexOf('function readSession'));
   assert.ok(body.includes('timingSafeEqual'),
     'readSession harus membandingkan tanda tangan dengan crypto.timingSafeEqual');

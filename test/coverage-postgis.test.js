@@ -1,9 +1,9 @@
 /**
- * Uji silang: hitungan PostGIS lawan sampling di src/core/coverage.js.
+ * Uji silang: hitungan PostGIS lawan sampling di backend/core/coverage.js.
  *
  * Dua cara yang sepenuhnya berbeda menjawab pertanyaan yang sama — irisan luas
  * kelurahan dengan lingkaran radius. PostGIS memakai geometri tepat di proyeksi meter
- * (UTM 49S); src/core memakai Monte Carlo di ruang derajat dengan jarak haversine.
+ * (UTM 49S); backend/core memakai Monte Carlo di ruang derajat dengan jarak haversine.
  * Tidak ada satu baris kode pun yang dipakai bersama.
  *
  * Kalau keduanya sepakat, dua-duanya hampir pasti benar. Kalau berselisih jauh, salah
@@ -16,9 +16,9 @@
  */
 const assert = require('assert');
 
-const store = require('../src/server/db');
-const coverage = require('../src/server/coverage-store');
-const { computeCoverage } = require('../src/core/coverage');
+const store = require('../backend/server/db');
+const coverage = require('../backend/server/coverage-store');
+const { computeCoverage } = require('../backend/core/coverage');
 const { openTestDb, closeTestDb } = require('./helpers/db');
 
 const OUTLET_LNG = 110.00;

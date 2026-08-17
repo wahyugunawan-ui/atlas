@@ -45,7 +45,7 @@ if not exist "node_modules" (
   )
 )
 
-node src/server/index.js
+node backend/server/index.js
 
 REM Sampai di sini berarti servernya berhenti. Kalau karena error, pesannya ada di
 REM atas — pause menahan jendelanya supaya sempat terbaca.

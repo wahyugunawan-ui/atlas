@@ -150,7 +150,7 @@ After=network.target postgresql.service
 
 [Service]
 WorkingDirectory=/opt/astra-command-center
-ExecStart=/usr/bin/node src/server/index.js
+ExecStart=/usr/bin/node backend/server/index.js
 Restart=always
 User=astra
 
@@ -192,7 +192,7 @@ Untuk aplikasinya, Node tidak punya padanannya. Yang biasa dipakai:
 ```
 nssm install AstraCommandCenter "C:\Program Files
 odejs
-ode.exe" src\server\index.js
+ode.exe" backend\server\index.js
 nssm set AstraCommandCenter AppDirectory C:/astra-command-center
 nssm set AstraCommandCenter AppEnvironmentExtra ACC_ENV_FILE=C:/astra-data/.env
 nssm start AstraCommandCenter

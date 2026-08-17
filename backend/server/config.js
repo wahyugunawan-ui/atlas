@@ -119,7 +119,7 @@ const config = {
   dbPassword: process.env.DB_PASSWORD || '',
   dbName: process.env.DB_NAME || 'astra',
   dbNameCustomers: process.env.DB_NAME_CUSTOMERS || 'astra_customers',
-  publicDir: path.join(ROOT, 'public'),
+  frontendDir: path.join(ROOT, 'frontend'),
   passwordHash: process.env.PASSWORD_HASH || '',
   sessionSecret: process.env.SESSION_SECRET || '',
   cookieSecure: process.env.COOKIE_SECURE === '1',

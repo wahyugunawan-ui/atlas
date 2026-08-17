@@ -16,8 +16,8 @@ const path = require('path');
 
 const {
   parseBoundaries, parseDistricts, checkOrientation, swapCoords, depth, BATAS,
-} = require('../src/core/boundaries');
-const { config } = require('../src/server/config');
+} = require('../backend/core/boundaries');
+const { config } = require('../backend/server/config');
 
 /* ==========================================================================
    1. penukaran koordinat

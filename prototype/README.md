@@ -5,7 +5,7 @@ Isinya hasil meeting 12 Agustus.
 
 **Ini bukan aplikasi.** Tidak ada server, tidak ada database, tidak ada login. Yang
 ditunjukkan bentuk dan alurnya. Aplikasi yang sebenarnya ada di `../src` dan
-`../public`.
+`../frontend`.
 
 ## Cara memakai
 
@@ -119,7 +119,7 @@ Membaca:
 Menulis `index.html` (±5 MB).
 
 **Jangan sunting `index.html` langsung.** Itu hasil build; suntingannya hilang di build
-berikutnya. Tampilan dasarnya diambil dari `../public/index.html`, sehingga perubahan
+berikutnya. Tampilan dasarnya diambil dari `../frontend/index.html`, sehingga perubahan
 tampilan aplikasi ikut masuk saat build berikutnya. Logika demo dan data sintetis ada
 di `src/`:
 

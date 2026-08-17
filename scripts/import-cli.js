@@ -5,9 +5,9 @@
  * mengisi data pertama kali dan untuk memeriksa masalah tanpa menyalakan server.
  */
 const fs = require('fs');
-const { config } = require('../src/server/config');
-const store = require('../src/server/db');
-const { runImport } = require('../src/server/importer');
+const { config } = require('../backend/server/config');
+const store = require('../backend/server/db');
+const { runImport } = require('../backend/server/importer');
 
 async function main() {
   const args = process.argv.slice(2);

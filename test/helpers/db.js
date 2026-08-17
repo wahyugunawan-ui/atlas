@@ -20,8 +20,8 @@ const os = require('os');
 const path = require('path');
 const pg = require('pg');
 
-const { config } = require('../../src/server/config');
-const store = require('../../src/server/db');
+const { config } = require('../../backend/server/config');
+const store = require('../../backend/server/db');
 
 /** Koneksi ke database `postgres` — dipakai untuk CREATE/DROP DATABASE. */
 async function admin() {

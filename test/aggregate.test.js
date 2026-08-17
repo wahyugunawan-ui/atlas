@@ -7,9 +7,9 @@
  * Seluruh maksud pengujian yang lain dipertahankan apa adanya.
  */
 const assert = require('assert');
-const { normalizeName, toDottedCityCode, regionKey } = require('../src/core/region');
-const { aggregate, mergeAggregates } = require('../src/core/aggregate');
-const { resolveGroups, guessDealerName, toDealerCode } = require('../src/core/grouping');
+const { normalizeName, toDottedCityCode, regionKey } = require('../backend/core/region');
+const { aggregate, mergeAggregates } = require('../backend/core/aggregate');
+const { resolveGroups, guessDealerName, toDealerCode } = require('../backend/core/grouping');
 
 /**
  * Satu baris Excel. Kolom 0 dan 1 sengaja diisi PII sungguhan supaya kalau suatu saat

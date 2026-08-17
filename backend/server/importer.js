@@ -1,7 +1,7 @@
 /**
  * Impor berkas bulanan dari Astra.
  *
- * Alurnya: baca berkas -> agregasi (logika murni di src/core) -> tulis dalam SATU
+ * Alurnya: baca berkas -> agregasi (logika murni di backend/core) -> tulis dalam SATU
  * transaksi. Gagal di tengah berarti ROLLBACK dan data bulan lalu tetap utuh.
  *
  * Impor ulang periode yang sama menghasilkan keadaan yang sama, bukan dobel: baris
@@ -176,6 +176,24 @@ async function runImport(options) {
       .forEach((v) => {
         villageIndex[regionKey(v.city_code, v.district_name, v.village_name)] =
           v.village_code;
+      });
+
+    // Alias ejaan ditimpakan di atasnya: TEGALREJO di Excel menunjuk Tegalreja yang
+    // sungguhan, lengkap dengan poligonnya.
+    //
+    // Isinya HANYA yang sudah dikonfirmasi manusia lewat halaman Master Kelurahan.
+    // backend/core/matching.js menyarankan padanan, tapi sarannya tidak pernah sampai ke
+    // sini — impor tidak pernah menebak sendiri. Satu tebakan yang diterima diam-diam
+    // menempelkan penjualan ke kelurahan yang salah tanpa gejala apa pun di layar.
+    //
+    // Ditimpakan SESUDAH indeks aslinya, bukan sebelum. Kalau ada nama yang belakangan
+    // ternyata juga cocok apa adanya, alias yang dikonfirmasi orang tetap menang —
+    // dia keputusan, bukan kebetulan.
+    (await store.all(db,
+      'SELECT city_code, district_name, village_name, village_code FROM village_aliases'))
+      .forEach((a) => {
+        villageIndex[regionKey(a.city_code, a.district_name, a.village_name)] =
+          a.village_code;
       });
 
     const result = aggregate(rows, villageIndex, options.period);

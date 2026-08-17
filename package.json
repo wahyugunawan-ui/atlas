@@ -7,13 +7,13 @@
     "node": ">=20.11.0"
   },
   "type": "commonjs",
-  "main": "src/server/index.js",
+  "main": "backend/server/index.js",
   "scripts": {
-    "start": "node src/server/index.js",
+    "start": "node backend/server/index.js",
     "set-password": "node scripts/set-password.js",
     "vendor": "node scripts/vendor.js",
-    "css": "tailwindcss -i src/styles/app.css -o public/css/app.css --minify",
-    "css:watch": "tailwindcss -i src/styles/app.css -o public/css/app.css --watch",
+    "css": "tailwindcss -i frontend/styles/app.css -o frontend/css/app.css --minify",
+    "css:watch": "tailwindcss -i frontend/styles/app.css -o frontend/css/app.css --watch",
     "build": "npm run vendor && npm run css",
     "postinstall": "npm run build",
     "test": "node test/run.js",

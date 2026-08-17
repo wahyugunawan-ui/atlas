@@ -8,7 +8,7 @@
 const assert = require('assert');
 const {
   computeCoverage, splitByCoverage, pointInRing, distanceMeters,
-} = require('../src/core/coverage');
+} = require('../backend/core/coverage');
 
 /** Bujur sangkar kecil, sisi ~2,2 km di khatulistiwa. */
 function square(code, lng, lat, size) {

@@ -21,8 +21,8 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
-const JS_DIR = path.join(ROOT, 'public', 'js');
-const html = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
+const JS_DIR = path.join(ROOT, 'frontend', 'js');
+const html = fs.readFileSync(path.join(ROOT, 'frontend', 'index.html'), 'utf8');
 
 const files = fs.readdirSync(JS_DIR).filter((name) => name.endsWith('.js'));
 const source = {};
@@ -260,7 +260,7 @@ function test() {
   // terhadap database berisi lebih dari BROWSE_LIMIT baris — pemeriksaan teks saja
   // tidak pernah bisa membuktikan itu.
   const repoSource = fs.readFileSync(
-    path.join(ROOT, 'src', 'server', 'repository.js'), 'utf8');
+    path.join(ROOT, 'backend', 'server', 'repository.js'), 'utf8');
   const browseBody = repoSource.slice(repoSource.indexOf('async function browseCustomers'));
   assert.ok(/LIMIT \?/.test(browseBody.slice(0, browseBody.indexOf('\n}'))),
     'browseCustomers harus membatasi jumlah baris yang dikembalikan');

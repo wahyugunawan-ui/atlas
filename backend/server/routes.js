@@ -211,34 +211,63 @@ function build(config) {
     }
   });
 
+  /* ------------------------------------------------------------------------
+     ALIAS NAMA KELURAHAN
+     ------------------------------------------------------------------------
+     Menggantikan POST /villages yang dulu membuat kelurahan BARU tanpa poligon.
+     Sekarang seluruh Jateng + DIY sudah ada di database berpoligon, jadi nama Excel
+     yang tidak cocok hampir selalu varian ejaan — yang dibutuhkan menunjuk kelurahan
+     yang sudah ada, bukan membuat baris baru yang tidak akan pernah punya jangkauan.
+     ------------------------------------------------------------------------ */
+
+  /** Nama yang menunggu dicocokkan + sarannya, dan alias yang sudah tersimpan. */
+  api.get('/village-aliases', async (req, res) => {
+    // Periode boleh tidak dikirim: halaman Master Kelurahan tidak punya penyaring
+    // periode, dan yang relevan selalu impor terakhir.
+    const diminta = String(req.query.period || '');
+    if (diminta && !PERIOD.test(diminta)) {
+      return res.status(400).json({ error: 'Periode harus format YYYY-MM.' });
+    }
+    const period = diminta || await repo.latestUnmatchedPeriod();
+    res.json({
+      period,
+      unmatched: period ? await repo.unmatchedWithSuggestions(period) : [],
+      aliases: await repo.aliases(),
+    });
+  });
+
   /**
-   * Tambah kelurahan baru — TANPA batas wilayah.
+   * Konfirmasi satu alias. Ini SATU-SATUNYA jalan alias masuk database.
    *
-   * Poligonnya datang dari pipeline geo, bukan dari ketikan. Sampai poligonnya ada,
-   * kelurahan ini ditandai `hasGeom: false` dan penjualannya DIKELUARKAN dari hitungan
-   * dalam/luar jangkauan, bukan dihitung sebagai "di luar".
+   * Saran dari backend/core/matching.js tidak pernah tersimpan sendiri — yang menulis di
+   * sini selalu klik orang. Kode kelurahannya datang dari daftar yang dikirim server,
+   * jadi tetap kode BPS dan tidak pernah diturunkan dari nama.
    */
-  api.post('/villages', async (req, res) => {
+  api.post('/village-aliases', async (req, res) => {
     const body = req.body || {};
-    const lat = body.lat === null || body.lat === undefined || body.lat === ''
-      ? undefined : Number(body.lat);
-    const lng = body.lng === null || body.lng === undefined || body.lng === ''
-      ? undefined : Number(body.lng);
-    const salah = cekKoordinat(lat, lng);
-    if (salah) return res.status(400).json({ error: salah });
     try {
-      const village = await repo.createVillage({
-        villageCode: body.villageCode,
-        villageName: body.villageName,
+      const village = await repo.saveAlias({
+        cityCode: body.cityCode,
         districtName: body.districtName,
-        cityName: body.cityName,
-        lat: lat === undefined ? null : lat,
-        lng: lng === undefined ? null : lng,
+        villageName: body.villageName,
+        villageCode: body.villageCode,
       });
       res.status(201).json({ village });
     } catch (error) {
       res.status(400).json({ error: error.message });
     }
+  });
+
+  /** Batalkan alias yang salah pilih. Berlaku pada impor berikutnya, sama seperti simpan. */
+  api.delete('/village-aliases', async (req, res) => {
+    const { cityCode, districtName, villageName } = req.query;
+    if (!cityCode || !districtName || !villageName) {
+      return res.status(400).json({
+        error: 'Butuh cityCode, districtName, dan villageName.',
+      });
+    }
+    await repo.deleteAlias(cityCode, districtName, villageName);
+    res.json({ ok: true });
   });
 
   api.put('/outlets/:code', async (req, res) => {

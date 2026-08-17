@@ -7,12 +7,12 @@
  */
 const assert = require('assert');
 const http = require('http');
-const { buildApp } = require('../src/server/app');
-const { hashPassword, createSession, COOKIE_NAME } = require('../src/server/auth');
+const { buildApp } = require('../backend/server/app');
+const { hashPassword, createSession, COOKIE_NAME } = require('../backend/server/auth');
 
 const PASSWORD = 'sandi-uji-tim-channel';
 const config = {
-  publicDir: require('path').join(__dirname, '..', 'public'),
+  frontendDir: require('path').join(__dirname, '..', 'frontend'),
   dataDir: require('path').join(__dirname, 'fixtures'),
   passwordHash: hashPassword(PASSWORD),
   sessionSecret: 'x'.repeat(48),

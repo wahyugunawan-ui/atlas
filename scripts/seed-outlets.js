@@ -13,9 +13,9 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { config } = require('../src/server/config');
-const { parseCsv, stripBom } = require('../src/core/csv');
-const store = require('../src/server/db');
+const { config } = require('../backend/server/config');
+const { parseCsv, stripBom } = require('../backend/core/csv');
+const store = require('../backend/server/db');
 
 const SOURCE = path.join(__dirname, '..', '..', 'md-command-center-uji', 'contoh-excel');
 

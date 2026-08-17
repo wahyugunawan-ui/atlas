@@ -12,9 +12,9 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 
-const store = require('../src/server/db');
-const coverage = require('../src/server/coverage-store');
-const repo = require('../src/server/repository');
+const store = require('../backend/server/db');
+const coverage = require('../backend/server/coverage-store');
+const repo = require('../backend/server/repository');
 const { openTestDb, closeTestDb } = require('./helpers/db');
 
 /** Bujur sangkar kecil di sekitar satu titik. */

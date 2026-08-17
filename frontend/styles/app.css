@@ -1,5 +1,5 @@
 /**
- * Gaya aplikasi. Sumber untuk `npm run css` -> public/css/app.css
+ * Gaya aplikasi. Sumber untuk `npm run css` -> frontend/css/app.css
  *
  * Tailwind di-build di sini, BUKAN dimuat dari CDN. Selain karena jaringan kantor
  * bisa memblokir CDN, versi CDN adalah kompiler yang jalan di browser: dia menerapkan
@@ -10,12 +10,22 @@
 
 /* CSS vendor (font, ikon, maplibre, apexcharts) SENGAJA tidak di-@import ke sini.
  * Tailwind menyatukan isinya tapi TIDAK menulis ulang url() di dalamnya, jadi
- * ./fonts/x.woff2 yang tadinya relatif terhadap public/vendor/ akan dicari di
- * public/css/ dan hilang tanpa error — halaman tetap tampil, cuma ikonnya jadi
+ * ./fonts/x.woff2 yang tadinya relatif terhadap frontend/vendor/ akan dicari di
+ * frontend/css/ dan hilang tanpa error — halaman tetap tampil, cuma ikonnya jadi
  * kotak kosong. Berkas-berkas itu ditautkan terpisah dari index.html. */
 
-@source "../../public/**/*.html";
-@source "../../public/js/**/*.js";
+/* Relatif terhadap berkas ini (frontend/styles/), jadi `../` = frontend/.
+ *
+ * PATH DI SINI GAGAL DENGAN DIAM. Tailwind tidak mengeluh kalau polanya tidak cocok
+ * dengan apa pun — dia cuma menghasilkan CSS tanpa kelas yang tidak ditemukannya.
+ * Halaman tetap tampil, tata letaknya saja yang berantakan, dan `npm test` tetap hijau.
+ * Sudah terjadi: modal 1504x3244 piksel dengan separuh isinya di atas layar.
+ *
+ * Sesudah mengubah baris ini, periksa ISI keluarannya, bukan cuma bahwa perintahnya
+ * berhasil: `frontend/css/app.css` harus ~33 KB dan memuat kelas yang cuma dipakai di
+ * satu tempat, misalnya `max-w-3xl`. */
+@source "../**/*.html";
+@source "../js/**/*.js";
 
     :root {
       /* Astra Motor Corporate Identity */

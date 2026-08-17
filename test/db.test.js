@@ -11,7 +11,7 @@
  * parameter sesudahnya — query tetap jalan, hasilnya cuma salah.
  */
 const assert = require('assert');
-const { toPositional, bulkValues } = require('../src/server/db');
+const { toPositional, bulkValues } = require('../backend/server/db');
 
 // --- penomoran dasar ---
 assert.strictEqual(

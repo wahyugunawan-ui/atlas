@@ -10,10 +10,10 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 
-const store = require('../src/server/db');
-const { runImport, checkHeader } = require('../src/server/importer');
-const repo = require('../src/server/repository');
-const { parseMultipart } = require('../src/server/routes');
+const store = require('../backend/server/db');
+const { runImport, checkHeader } = require('../backend/server/importer');
+const repo = require('../backend/server/repository');
+const { parseMultipart } = require('../backend/server/routes');
 const { openTestDb, closeTestDb, dropCustomerDatabase,
   queryOutsidePool } = require('./helpers/db');
 
@@ -42,6 +42,15 @@ async function seedVillages(db) {
     'Kabupaten Sleman', '34', -7.75, 110.36]);
   await store.run(db, sql, ['33.01.01.2001', 'Tambakreja', '33.01.01', 'Kedungreja',
     '33.01', 'Kabupaten Cilacap', '33', -7.6, 108.9]);
+  // Sengaja beda SATU huruf dari "Karangwuni" yang muncul di CSV uji. Itu bentuk
+  // kegagalan yang sungguhan terjadi: 31 dari 50 nama yang belum cocok di data asli
+  // ternyata varian ejaan dari kelurahan yang sudah ada, bukan kelurahan yang hilang.
+  await store.run(db, sql, ['34.01.05.2005', 'Karangwuno', '34.01.05', 'Wates',
+    '34.01', 'Kabupaten Kulon Progo', '34', -7.85, 110.15]);
+  // Sekecamatan dengan yang di atas dan namanya juga mirip — supaya peringkat saran
+  // benar-benar harus memilih, bukan cuma mengembalikan satu-satunya kandidat.
+  await store.run(db, sql, ['34.01.05.2006', 'Karangsari', '34.01.05', 'Wates',
+    '34.01', 'Kabupaten Kulon Progo', '34', -7.86, 110.16]);
 }
 
 async function test() {
@@ -272,52 +281,90 @@ async function test() {
     assert.strictEqual(tanpaPin.coverageRebuilt, false);
     assert.strictEqual(tanpaPin.outlet.lat, null);
 
-    // --- tambah kelurahan baru ---
+    // --- cocokkan nama kelurahan (alias) ---
     //
-    // Yang dijaga di sini bukan "barisnya masuk" tapi bahwa dia ditandai BELUM punya
-    // batas wilayah. Tanpa tanda itu, penjualannya diam-diam dihitung sebagai
-    // "di luar jangkauan" dan persentase turun tanpa sebab yang terlihat.
-    const kel = await repo.createVillage({
-      villageCode: '34.04.06.2099', villageName: 'Kelurahan Baru',
-      districtName: 'Mlati',
-    });
-    assert.strictEqual(kel.code, '34.04.06.2099');
-    assert.strictEqual(kel.hasGeom, false,
-      'kelurahan baru mengaku punya batas wilayah padahal tidak');
-    // Kode kota dan provinsi DITURUNKAN dari kode kelurahan, bukan isian terpisah
-    // yang bisa saling bertentangan.
-    assert.strictEqual(kel.cityCode, '34.04');
-    assert.strictEqual(kel.provinceCode, '34');
-    // Nama kotanya diambil dari kelurahan lain di kota yang sama, supaya tidak muncul
-    // dua ejaan untuk kota yang sama di dropdown.
-    assert.strictEqual(kel.cityName, 'Kabupaten Sleman');
+    // Menggantikan fitur "tambah kelurahan" yang dulu ada di sini. Fitur itu membuat
+    // kelurahan BARU tanpa poligon; setelah seluruh Jateng + DIY masuk database
+    // berpoligon, itu hampir selalu jawaban yang salah — nama yang tidak cocok hampir
+    // selalu varian ejaan dari kelurahan yang sudah ada beserta batas wilayahnya.
+    const menunggu = await repo.unmatchedWithSuggestions('2026-08');
+    assert.strictEqual(menunggu.length, 1);
+    assert.strictEqual(menunggu[0].villageName, 'Karangwuni');
+    assert.strictEqual(menunggu[0].alias, null, 'alias muncul padahal belum pernah disimpan');
 
-    // Kode yang bukan format BPS ditolak — aturan proyek: kode wilayah tidak pernah
-    // diturunkan dari nama atau dikarang.
-    for (const buruk of ['KEL-BARU', '34.04.06', '3404062099', '']) {
-      await assert.rejects(
-        () => repo.createVillage({ villageCode: buruk, villageName: 'X' }),
-        /format BPS/i, `kode "${buruk}" seharusnya ditolak`);
-    }
-    await assert.rejects(
-      () => repo.createVillage({ villageCode: '34.04.06.2099', villageName: 'Dobel' }),
-      /sudah dipakai/i);
+    // Sarannya harus MENGURUT, bukan sekadar mengembalikan apa saja yang mirip.
+    // Karangwuno beda satu huruf, Karangsari beda tiga — dua-duanya sekecamatan.
+    assert.strictEqual(menunggu[0].suggestions[0].code, '34.01.05.2005',
+      'saran teratas bukan yang paling mirip ejaannya');
+    assert.strictEqual(menunggu[0].suggestions[0].distance, 1);
+    assert.ok(menunggu[0].suggestions.length > 1, 'kandidat lain sekota tidak ikut dikirim');
+    assert.ok(menunggu[0].suggestions[1].distance > 1, 'urutan sarannya terbalik');
 
-    // Kota yang belum ada sama sekali WAJIB menyebut namanya — kalau tidak, dropdown
-    // kota akan memuat entri tanpa nama yang tidak bisa dipilih siapa pun.
-    await assert.rejects(
-      () => repo.createVillage({ villageCode: '99.99.99.9999', villageName: 'Antah' }),
-      /nama kabupaten/i);
+    // INI PEMERIKSAAN TERPENTING DI BLOK INI: saran TIDAK PERNAH dipakai sendiri.
+    //
+    // Saran yang bagus di atas tidak boleh mengubah apa pun sampai ada orang yang
+    // menekan tombol. Kalau importer diam-diam memakai padanan terdekat, baris ini
+    // merah — dan tanpa baris ini, penjualan bisa menempel ke kelurahan yang salah
+    // tanpa satu pun gejala di layar.
+    const tanpaKonfirmasi = await runImport({
+      file, period: '2026-08', fileName: 'agustus.csv', config });
+    assert.strictEqual(tanpaKonfirmasi.rowsUsed, 3,
+      'impor mencocokkan sendiri tanpa konfirmasi manusia');
+    assert.strictEqual((await repo.unmatched('2026-08')).length, 1);
 
-    // summary() ikut membawa tandanya, karena halaman yang memakainya untuk
-    // mengeluarkan kelurahan ini dari hitungan.
+    // Alias yang menunjuk kelurahan tidak ada DITOLAK — kalau lolos, penjualannya
+    // hilang ke kelurahan hantu yang tidak pernah muncul di mana pun.
+    await assert.rejects(() => repo.saveAlias({
+      cityCode: '34.01', districtName: 'Wates', villageName: 'Karangwuni',
+      villageCode: '99.99.99.9999' }), /tidak ada/i);
+
+    // Alias lintas kabupaten juga ditolak. Kunci pencocokannya memuat kode kota, jadi
+    // alias seperti itu tidak akan pernah terpakai — dan diam-diam tidak terpakai lebih
+    // buruk daripada ditolak, karena yang menyimpannya mengira sudah beres.
+    await assert.rejects(() => repo.saveAlias({
+      cityCode: '34.01', districtName: 'Wates', villageName: 'Karangwuni',
+      villageCode: '34.04.06.2003' }), /bukan/i);
+
+    // --- konfirmasi manusia ---
+    const target = await repo.saveAlias({
+      cityCode: '34.01', districtName: 'Wates', villageName: 'Karangwuni',
+      villageCode: '34.01.05.2005' });
+    assert.strictEqual(target.name, 'Karangwuno');
+
+    // Alias BARU BERLAKU pada impor berikutnya. Baris yang sudah tertulis tidak
+    // berubah sendiri — itu janji yang tertulis di modalnya, jadi diuji di sini.
+    assert.strictEqual((await repo.unmatched('2026-08')).length, 1,
+      'alias mengubah baris yang sudah tersimpan tanpa impor ulang');
+
+    const setelahAlias = await runImport({
+      file, period: '2026-08', fileName: 'agustus.csv', config });
+    assert.strictEqual(setelahAlias.rowsUsed, 4, 'alias tidak dipakai saat impor');
+    assert.strictEqual(setelahAlias.unmatched.length, 0);
+    // Dan penjualannya menempel ke kelurahan SUNGGUHAN, yang punya poligon sendiri.
+    const menempel = await store.one(db, `
+      SELECT SUM(quantity) AS n FROM sales
+      WHERE period = '2026-08' AND village_code = '34.01.05.2005'`);
+    assert.strictEqual(menempel.n, 1, 'baris beralias tidak masuk ke kelurahan tujuan');
+
+    // Jumlah yang menunggu ikut ke summary(), supaya tombolnya bisa menampilkan
+    // pekerjaan yang tertunda tanpa ada yang membuka modalnya dulu.
+    assert.strictEqual((await repo.summary()).pendingNames, 0);
+
+    // --- batalkan alias yang salah pilih ---
+    await repo.deleteAlias('34.01', 'Wates', 'Karangwuni');
+    assert.strictEqual((await repo.aliases()).length, 0);
+    const setelahBatal = await runImport({
+      file, period: '2026-08', fileName: 'agustus.csv', config });
+    assert.strictEqual(setelahBatal.rowsUsed, 3, 'alias yang dibatalkan masih dipakai');
+    assert.strictEqual((await repo.summary()).pendingNames, 1);
+
+    // summary() tetap membawa hasGeom. Sekarang tidak ada satu pun jalur yang membuat
+    // kelurahan tanpa poligon, dan justru itu sebabnya tandanya harus tetap ada: kalau
+    // suatu saat ada yang masuk, dia harus TERLIHAT, bukan hilang diam-diam.
     const ringkas = await repo.summary();
-    const dariSummary = ringkas.villages.find((v) => v.code === '34.04.06.2099');
-    assert.strictEqual(dariSummary.hasGeom, false,
-      'summary() tidak membawa hasGeom — halaman tidak bisa membedakan 0% dari belum dihitung');
     const lama = ringkas.villages.find((v) => v.code === '34.04.06.2003');
     assert.strictEqual(lama.hasGeom, false,
-      'prasyarat tes: kelurahan uji memang tanpa poligon');
+      'summary() tidak membawa hasGeom — halaman tidak bisa membedakan 0% dari belum dihitung');
 
     // --- summary() menyaring kelurahan yang tidak berarti ---
     //
@@ -350,9 +397,11 @@ async function test() {
       'KPI "Kelurahan Kosong" jadi menghitung seluruh provinsi');
     assert.ok(kodeTampil.has('34.04.06.2003'),
       'kelurahan yang punya penjualan malah tersaring keluar');
-    assert.ok(kodeTampil.has('34.04.06.2099'),
-      'kelurahan yang ditambah manual hilang dari layar begitu disimpan — ' +
-      'orang akan mengira penambahannya gagal');
+    // Kelurahan tanpa poligon TETAP dikirim walau tanpa penjualan. Sekarang tidak ada
+    // jalur yang membuatnya, tapi jaringnya harus tetap ada: yang datanya belum lengkap
+    // wajib terlihat dan ditandai, bukan hilang dari layar tanpa ada yang tahu.
+    assert.ok(kodeTampil.has('34.01.05.2006'),
+      'kelurahan tanpa poligon hilang dari layar — ketidaklengkapannya jadi tak terlihat');
 
     // Kembalikan keadaan supaya pemeriksaan sesudah ini tetap bermakna.
     await runImport({ file, period: '2026-08', fileName: 'agustus.csv', config });

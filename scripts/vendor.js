@@ -1,5 +1,5 @@
 /**
- * Salin library dari node_modules ke public/vendor: `npm run vendor`
+ * Salin library dari node_modules ke frontend/vendor: `npm run vendor`
  *
  * Dijalankan otomatis sesudah `npm install` lewat postinstall, jadi pindah server
  * tetap cuma "salin folder -> npm install -> npm start".
@@ -14,9 +14,9 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 const MODULES = path.join(ROOT, 'node_modules');
-const VENDOR = path.join(ROOT, 'public', 'vendor');
+const VENDOR = path.join(ROOT, 'frontend', 'vendor');
 
-/** [asal di node_modules, tujuan di public/vendor] */
+/** [asal di node_modules, tujuan di frontend/vendor] */
 const FILES = [
   ['maplibre-gl/dist/maplibre-gl.js', 'maplibre-gl.js'],
   ['maplibre-gl/dist/maplibre-gl.css', 'maplibre-gl.css'],
@@ -145,11 +145,11 @@ async function main() {
     console.error('Butuh koneksi internet SEKALI saja, waktu memasang.');
     console.error('Tanpa berkas ini peta tetap tampil tapi nama kelurahan hilang.');
     console.error('Kalau memasang di mesin tanpa internet, salin folder');
-    console.error('public/vendor/glyphs dari mesin yang sudah berhasil.\n');
+    console.error('frontend/vendor/glyphs dari mesin yang sudah berhasil.\n');
     process.exit(1);
   }
 
-  console.log(`vendor: ${count} berkas, ${(total / 1e6).toFixed(2)} MB -> public/vendor`);
+  console.log(`vendor: ${count} berkas, ${(total / 1e6).toFixed(2)} MB -> frontend/vendor`);
   if (missing.length) {
     // Berkas yang hilang JANGAN diabaikan diam-diam: halaman akan tampil separuh jadi
     // dan penyebabnya tidak akan kelihatan di mana pun.

@@ -10,7 +10,7 @@
  * tetap berlaku. Yang hilang cuma derau hitungan, bukan galat model — dan galat model
  * itulah yang paling besar. Kalimat asumsinya tetap dipasang di panel.
  *
- * src/core/coverage.js (sampling) TIDAK dibuang. Dia dipakai prototipe proposal yang
+ * backend/core/coverage.js (sampling) TIDAK dibuang. Dia dipakai prototipe proposal yang
  * tidak punya database, dan jadi pembanding independen untuk hitungan di sini —
  * test/coverage-postgis.test.js membandingkan keduanya.
  */

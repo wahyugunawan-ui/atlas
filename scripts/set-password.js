@@ -11,8 +11,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const readline = require('readline');
-const { hashPassword } = require('../src/server/auth');
-const { config } = require('../src/server/config');
+const { hashPassword } = require('../backend/server/auth');
+const { config } = require('../backend/server/config');
 
 /**
  * Ditulis ke berkas .env yang BENAR-BENAR dipakai server, bukan ke yang di dalam

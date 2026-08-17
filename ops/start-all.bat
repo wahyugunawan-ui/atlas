@@ -39,10 +39,10 @@ if errorlevel 1 (
 
 REM --- Aplikasi ---
 REM
-REM Node mencatat sendiri ke DATA_DIR\logs lewat src/server/logger.js; yang di sini
+REM Node mencatat sendiri ke DATA_DIR\logs lewat backend/server/logger.js; yang di sini
 REM cuma menangkap kegagalan yang terjadi SEBELUM logger sempat menyala.
 echo Menyalakan aplikasi... >> "%BOOTLOG%"
-node src/server/index.js >> "%BOOTLOG%" 2>&1
+node backend/server/index.js >> "%BOOTLOG%" 2>&1
 
 echo ==== %DATE% %TIME% aplikasi berhenti (kode %ERRORLEVEL%) ==== >> "%BOOTLOG%"
 exit /b %ERRORLEVEL%

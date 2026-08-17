@@ -14,6 +14,7 @@ export const S = {
   periods: [],
   lastImport: null,
   hasCustomers: false,
+  pendingNames: 0,         // nama kelurahan yang menunggu dicocokkan manusia
 
   // --- indeks, dibangun sekali saat muat ---
   villageByCode: {},

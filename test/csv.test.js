@@ -6,7 +6,7 @@
  * kesimpulan bahwa data tidak punya outlet sama sekali. Kasus itu ada di bawah.
  */
 const assert = require('assert');
-const { parseCsv, stripBom } = require('../src/core/csv');
+const { parseCsv, stripBom } = require('../backend/core/csv');
 
 function test() {
   // --- kasus yang dulu merusak segalanya ---

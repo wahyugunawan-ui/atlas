@@ -11,7 +11,7 @@ const { pathToFileURL } = require('url');
 
 async function test() {
   const source = pathToFileURL(
-    path.join(__dirname, '..', 'public', 'js', 'geo.js')).href;
+    path.join(__dirname, '..', 'frontend', 'js', 'geo.js')).href;
   const { circle, distanceMeters } = await import(source);
 
   // --- jarak ---

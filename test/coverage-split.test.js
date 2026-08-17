@@ -29,7 +29,7 @@ const ROOT = path.join(__dirname, '..');
  * kode yang benar-benar dipakai halaman.
  */
 function loadSplit(S) {
-  const src = fs.readFileSync(path.join(ROOT, 'public', 'js', 'filters.js'), 'utf8');
+  const src = fs.readFileSync(path.join(ROOT, 'frontend', 'js', 'filters.js'), 'utf8');
   const mulai = src.indexOf('export function splitByCoverage');
   assert.ok(mulai >= 0, 'splitByCoverage tidak ditemukan di filters.js');
   const akhir = src.indexOf('\n}', mulai) + 2;

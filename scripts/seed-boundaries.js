@@ -17,11 +17,11 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { config } = require('../src/server/config');
-const store = require('../src/server/db');
+const { config } = require('../backend/server/config');
+const store = require('../backend/server/db');
 const {
   parseBoundaries, parseDistricts, checkOrientation,
-} = require('../src/core/boundaries');
+} = require('../backend/core/boundaries');
 
 /** Baris per INSERT. Kecil karena tiap baris membawa satu poligon utuh sebagai teks. */
 const BATCH = 100;

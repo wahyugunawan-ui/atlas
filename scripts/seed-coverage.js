@@ -2,13 +2,13 @@
  * Hitung rasio jangkauan dan simpan ke database: `npm run seed-coverage`
  *
  * Dijalankan sekali setelah outlet punya koordinat, dan diulang kalau daftar radius di
- * src/server/coverage-store.js berubah. Menyunting koordinat satu outlet lewat aplikasi
+ * backend/server/coverage-store.js berubah. Menyunting koordinat satu outlet lewat aplikasi
  * TIDAK perlu menjalankan ini — outlet itu dihitung ulang sendiri saat disimpan.
  */
-const { config } = require('../src/server/config');
-const store = require('../src/server/db');
-const coverage = require('../src/server/coverage-store');
-const repo = require('../src/server/repository');
+const { config } = require('../backend/server/config');
+const store = require('../backend/server/db');
+const coverage = require('../backend/server/coverage-store');
+const repo = require('../backend/server/repository');
 
 async function main() {
   await store.open(config);

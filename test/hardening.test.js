@@ -12,9 +12,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { pruneUploads, UPLOAD_KEEP_DAYS } = require('../src/server/routes');
-const logger = require('../src/server/logger');
-const { validate } = require('../src/server/config');
+const { pruneUploads, UPLOAD_KEEP_DAYS } = require('../backend/server/routes');
+const logger = require('../backend/server/logger');
+const { validate } = require('../backend/server/config');
 
 const HARI = 24 * 60 * 60 * 1000;
 

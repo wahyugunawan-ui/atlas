@@ -64,7 +64,7 @@ export function renderDealerLegend(rows) {
    ==========================================================================
    Fungsi utama produknya: berapa bagian penjualan tiap pos yang berada di dalam radius
    jangkauan. Rasionya dihitung server dari luas kelurahan yang beririsan dengan
-   lingkaran radius — lihat src/core/coverage.js.
+   lingkaran radius — lihat backend/core/coverage.js.
    ========================================================================== */
 
 function performanceByOutlet(rows) {

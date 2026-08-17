@@ -9,8 +9,9 @@ keputusan teknis di sini.
 Aplikasi web Node biasa. Jalan di laptop dulu, VPS menyusul. Menggantikan versi Google
 Apps Script di `../md-command-center-uji/` (dibiarkan utuh sampai versi ini terbukti).
 
-**Baca [ROADMAP.md](docs/ROADMAP.md) dulu sebelum mulai kerja.** Rencana lengkap ada di
-`docs/PLAN.md`, keputusan arsitektur di `docs/DECISIONS.md`.
+**Baca [PRD.md](docs/PRD.md) dulu sebelum mulai kerja** — apa yang produk ini harus bisa,
+dan arti tiap angkanya. Lalu [ROADMAP.md](docs/ROADMAP.md) untuk status terakhir, dan
+[DECISIONS.md](docs/DECISIONS.md) waktu hendak mengubah keputusan arsitektur.
 
 ## Aturan penamaan
 
@@ -24,7 +25,7 @@ dokumentasi, dan pesan untuk pengguna: **bahasa Indonesia**.
 | konstanta modul | `SCREAMING_SNAKE` | `MAX_MAP_HUES`, `DEALER_PALETTE` |
 | kolom & tabel database | `snake_case` | `outlet_code`, `village_code` |
 | berkas frontend, rute | `kebab-case` | `map-layers.js`, `/api/outlets` |
-| berkas modul Node | `kebab-case` | `src/core/aggregate.js` |
+| berkas modul Node | `kebab-case` | `backend/core/aggregate.js` |
 
 Istilah wilayah memakai terjemahan resmi BPS: kelurahan/desa → `village`, kecamatan →
 `district`, kabupaten/kota → `city`, provinsi → `province`, pos/outlet → `outlet`.
@@ -37,10 +38,10 @@ Istilah wilayah memakai terjemahan resmi BPS: kelurahan/desa → `village`, keca
 - **`/api/customers` wajib punya parameter `village`.** Tanpa itu 400, bukan
   dikembalikan semuanya. Ini satu-satunya hal yang mencegah satu akun bersama menyedot
   seluruh basis data konsumen dalam satu permintaan.
-- **`src/core/` tidak boleh meng-`require('fs')`, `pg`, atau apa pun yang
+- **`backend/core/` tidak boleh meng-`require('fs')`, `pg`, atau apa pun yang
   menyentuh dunia luar.** Kemurnian itu yang membuat fungsi yang sama bisa dipakai
   server, CLI, dan tes tanpa duplikasi.
-- **`src/core/coverage.js` TIDAK dibuang meski jangkauan sekarang dihitung PostGIS.**
+- **`backend/core/coverage.js` TIDAK dibuang meski jangkauan sekarang dihitung PostGIS.**
   Dia dipakai prototipe proposal yang tidak punya database, dan jadi pembanding
   independen di `test/coverage-postgis.test.js`. Dua cara yang saling mengoreksi
   lebih bernilai daripada satu cara tanpa pembanding.
@@ -51,7 +52,7 @@ Istilah wilayah memakai terjemahan resmi BPS: kelurahan/desa → `village`, keca
   tabrakan di 171 tempat dari 3.466 kelurahan cakupan.
 - Baris yang tidak cocok JANGAN dibuang diam-diam — laporkan jumlah dan namanya.
 - Impor idempoten: hapus baris periode X, tulis ulang, di dalam satu transaksi.
-- Semua library dari CDN di-download ke `public/vendor/`. Jaringan kantor bisa
+- Semua library dari CDN di-download ke `frontend/vendor/`. Jaringan kantor bisa
   memblokir CDN.
 - `data/` harus di luar OneDrive: berkas geo bisa terkunci di tengah pembacaan.
 - **Semua query database async.** `pg` mengembalikan Promise; tidak ada pembungkus
@@ -77,18 +78,27 @@ Istilah wilayah memakai terjemahan resmi BPS: kelurahan/desa → `village`, keca
 ## Struktur
 
 ```
-src/core/       logika murni, tanpa I/O — aggregate, region, grouping, csv, coverage
-src/server/     Express, auth, db, importer, skema SQL
-src/styles/     sumber Tailwind; hasilnya ke public/css/app.css
-public/         yang dikirim ke browser; public/js juga di-import tes
-public/vendor/  library hasil unduhan. DI LUAR GIT, dibangun `npm run vendor`.
-test/           *.test.js dijalankan `npm test`; test/helpers/ bukan tes
-scripts/        perkakas baris perintah dan seed
-ops/            skrip operasional: auto-start, backup, tugas terjadwal
-docs/           ROADMAP (status), DECISIONS (kenapa), PINDAH (pindah server), PLAN
-prototype/      berkas proposal mandiri. Ikut memakai src/core/coverage.js.
-data/           geo + arsip unggahan. DI LUAR GIT, DI LUAR OneDrive.
+backend/core/     logika murni, tanpa I/O — aggregate, region, matching, grouping, csv
+backend/server/   Express, auth, db, importer, skema SQL
+frontend/         yang dikirim ke browser: index.html, login.html
+frontend/js/      modul ES; ikut di-import tes, jadi tidak ada salinan kedua
+frontend/styles/  sumber Tailwind; hasilnya ke frontend/css/app.css
+frontend/css/     hasil `npm run css`. DI LUAR GIT.
+frontend/vendor/  library hasil unduhan. DI LUAR GIT, dibangun `npm run vendor`.
+test/             *.test.js dijalankan `npm test`; test/helpers/ bukan tes
+scripts/          perkakas baris perintah dan seed
+ops/              skrip operasional: auto-start, backup, tugas terjadwal
+docs/             PRD (apa), DECISIONS (kenapa), ROADMAP (kapan), PINDAH (pindah server)
+prototype/        berkas proposal mandiri. Ikut memakai backend/core/coverage.js.
+data/             geo + arsip unggahan. DI LUAR GIT, DI LUAR OneDrive.
 ```
+
+Batasnya lurus: **`frontend/` tidak pernah meng-import dari `backend/`, dan sebaliknya.**
+Yang dipakai bersama cuma bentuk JSON di `/api`. Tes boleh membaca keduanya — itu
+memang tugasnya.
+
+Sampai 2026-08-17 dua folder ini bernama `src/` dan `public/`. Entri lama di ROADMAP dan
+DECISIONS masih memakai nama itu dan sengaja tidak ditulis ulang.
 
 Akar sengaja cuma memuat `README.md` (pintu masuk) dan berkas ini. Dokumen lain di
 `docs/`.

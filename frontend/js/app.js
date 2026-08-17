@@ -24,8 +24,9 @@ import {
 import { S } from './state.js';
 import {
   acceptMapPoint, closeOutletEditor, closeVillageDetail, jumpToVillage,
-  closeNewOutlet, closeNewVillage, customerPage, dealerChoiceChanged, newOutletDealerChanged,
-  openNewOutlet, openNewVillage, saveNewOutlet, saveNewVillage,
+  closeNewOutlet, closeMatchNames, confirmMatch, customerPage, dealerChoiceChanged,
+  newOutletDealerChanged, openMatchNames, undoMatch,
+  openNewOutlet, saveNewOutlet,
   openOutletEditor, openVillageDetail, pickFromMap,
   promptPin,
   renderCustomerTable,
@@ -52,7 +53,7 @@ const HANDLERS = {
   switchTab, renderOutletTable, renderVillageTable, showOnMap, jumpToVillage, promptPin,
   renderCustomerTable, searchCustomers, customerPage,
   openNewOutlet, closeNewOutlet, newOutletDealerChanged, saveNewOutlet,
-  openNewVillage, closeNewVillage, saveNewVillage,
+  openMatchNames, closeMatchNames, confirmMatch, undoMatch,
   // impor
   importStep, importPeriodChanged, pickFile, fileChosen, dropFile, dragOver, dragLeave,
   runUpload, reviewImport, finishImport, reimportPeriod, refreshImportTab,
@@ -128,6 +129,11 @@ export function renderAll() {
   $('scope-label').textContent = scope;
   $('scope-clear').classList.toggle('hidden', scope === 'seluruh penjualan');
 
+  // Jumlah nama yang menunggu dicocokkan, di tombolnya sendiri. Pekerjaan yang
+  // menunggu harus terlihat tanpa ada yang membuka modalnya dulu.
+  $('mkel-pending').textContent = S.pendingNames;
+  $('mkel-pending').classList.toggle('hidden', !S.pendingNames);
+
   // Dropdown layar penuh cuma cermin; nilainya selalu mengikuti filter utama.
   FS_MIRROR.forEach(([mirror, main]) => {
     if ($(mirror)) $(mirror).value = $(main).value;
@@ -153,6 +159,7 @@ function buildIndexes(data) {
   S.periods = data.periods;
   S.lastImport = data.lastImport;
   S.hasCustomers = data.hasCustomers;
+  S.pendingNames = data.pendingNames || 0;
 
   S.coverageAll = data.coverage || {};
   S.radiiM = data.radiiM || [data.radiusM || 5000];

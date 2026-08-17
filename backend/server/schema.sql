@@ -96,6 +96,33 @@ CREATE TABLE IF NOT EXISTS unmatched (
   PRIMARY KEY (period, city_code, district_name, village_name)
 );
 
+-- Nama kelurahan versi Excel yang sudah DIKONFIRMASI MANUSIA menunjuk kelurahan mana.
+--
+-- Isinya varian ejaan: TEGALREJO untuk Tegalreja, PABUARAN untuk Pabuwaran. Tanpa tabel
+-- ini, tiap bulan baris yang sama gagal cocok lagi dan orang harus memeriksanya lagi.
+--
+-- Kuncinya (kota, kecamatan, nama) — sama persis dengan regionKey() di backend/core/region.js,
+-- jadi satu alias tidak pernah bocor ke kecamatan lain yang kebetulan punya nama serupa.
+--
+-- Baris di sini TIDAK PERNAH lahir sendiri dari tebakan. backend/core/matching.js cuma
+-- menyarankan; yang menulis ke sini hanya klik konfirmasi di halaman. Tebakan yang
+-- diterima diam-diam akan menempelkan penjualan ke kelurahan yang salah tanpa satu pun
+-- gejala di layar.
+--
+-- Foreign key ke villages disengaja: alias yang menunjuk kode yang tidak ada berarti
+-- penjualan hilang ke kelurahan hantu, dan database yang menolaknya lebih baik daripada
+-- pemeriksaan di aplikasi yang bisa terlewat di jalur kedua.
+CREATE TABLE IF NOT EXISTS village_aliases (
+  city_code     VARCHAR(8) NOT NULL,                -- 34.04
+  district_name VARCHAR(120) NOT NULL,
+  village_name  VARCHAR(120) NOT NULL,              -- ejaan seperti di Excel
+  village_code  VARCHAR(16) NOT NULL,               -- kelurahan sungguhan yang dimaksud
+  created_at    TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (city_code, district_name, village_name),
+  CONSTRAINT fk_alias_village FOREIGN KEY (village_code)
+    REFERENCES villages(village_code) ON DELETE CASCADE
+);
+
 -- Jejak impor. Dengan satu akun bersama, ini satu-satunya cara mengetahui apa yang
 -- terjadi dan kapan.
 --

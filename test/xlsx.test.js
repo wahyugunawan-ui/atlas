@@ -25,7 +25,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { readTable, checkHeader } = require('../src/server/importer');
+const { readTable, checkHeader } = require('../backend/server/importer');
 
 const ROOT = path.join(__dirname, '..');
 
@@ -37,7 +37,7 @@ const ROOT = path.join(__dirname, '..');
 // semuanya berubah jadi kuadratik.
 const GETTER_MAHAL = ['columnCount', 'rowCount', 'actualColumnCount', 'actualRowCount'];
 
-const sumber = fs.readFileSync(path.join(ROOT, 'src', 'server', 'importer.js'), 'utf8');
+const sumber = fs.readFileSync(path.join(ROOT, 'backend', 'server', 'importer.js'), 'utf8');
 const pelanggaran = [];
 
 sumber.split('\n').forEach((baris, i) => {

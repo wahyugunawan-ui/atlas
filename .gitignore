@@ -22,8 +22,8 @@ data/
 # `npm install` (lewat postinstall) atau `npm run build`.
 # ==========================================================================
 node_modules/
-public/css/app.css
-public/vendor/
+frontend/css/app.css
+frontend/vendor/
 
 # Hasil build prototipe (±5 MB). Dibangun ulang dengan: node prototype/build.js
 prototype/index.html

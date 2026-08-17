@@ -10,6 +10,8 @@
 const store = require('./db');
 const coverage = require('./coverage-store');
 const { toDealerCode } = require('../core/grouping');
+const { regionKey } = require('../core/region');
+const { suggestVillages } = require('../core/matching');
 
 /**
  * Seluruh isi dashboard dalam satu permintaan.
@@ -39,13 +41,14 @@ async function summary() {
   // secara hitungan dan tidak berguna secara bisnis — dan di layar terlihat seperti
   // kemunduran drastis.
   //
-  // `geom_m IS NULL` ikut disertakan, dan itu bukan tambalan. Kelurahan yang ditambah
-  // manual lewat halaman belum punya penjualan (penjualannya datang di impor
-  // berikutnya) dan belum punya poligon — tanpa syarat ini dia hilang dari layar
-  // begitu disimpan, dan orang akan mengira penambahannya gagal.
+  // `geom_m IS NULL` ikut disertakan sebagai JARING PENGAMAN, bukan untuk satu fitur
+  // tertentu. Sekarang tidak ada satu pun jalur yang membuat kelurahan tanpa poligon —
+  // fitur "tambah kelurahan" sudah dibuang dan seluruh isi tabel datang dari berkas
+  // sumber yang berpoligon — jadi syarat ini seharusnya tidak pernah cocok.
   //
-  // Semua yang dimuat dari berkas sumber punya poligon, jadi `geom_m IS NULL` persis
-  // berarti "ditambah tangan oleh orang".
+  // Justru itu gunanya. Kalau suatu saat ada kelurahan tanpa geometri masuk dari jalur
+  // mana pun, dia MUNCUL di layar dan ditandai `hasGeom: false`, bukan hilang diam-diam.
+  // Kebenarannya tidak boleh bergantung pada fitur mana yang kebetulan sedang ada.
   //
   // Kriterianya sama dengan scripts/export-geo.js, KECUALI bagian ini: yang tanpa
   // poligon memang tidak bisa digambar di peta. Perbedaan yang disengaja dan satu-satunya.
@@ -96,6 +99,14 @@ async function summary() {
     // Tanpa ini, server yang baru dipasang akan menampilkan 0% di semua outlet dan
     // orang akan mengira itu temuan.
     coverageReady: !(await coverage.isEmpty()),
+    // Berapa nama yang menunggu dicocokkan manusia, di periode terakhir yang diimpor.
+    //
+    // Ikut di sini supaya jumlahnya bisa tampil di tombol "Cocokkan Nama" tanpa
+    // permintaan kedua, dan supaya ikut segar tiap kali halaman memuat ulang ringkasan.
+    // Pekerjaan yang menunggu harus terlihat tanpa ada yang membuka modalnya dulu.
+    pendingNames: (await store.one(db, `
+      SELECT COUNT(*) AS n FROM unmatched
+      WHERE period = (SELECT MAX(period) FROM unmatched)`)).n,
   };
 }
 
@@ -297,63 +308,122 @@ async function createOutlet(data, config) {
   };
 }
 
+/* ==========================================================================
+   ALIAS NAMA KELURAHAN
+   ==========================================================================
+   Ejaan Excel yang sudah dikonfirmasi manusia menunjuk kelurahan mana. Menggantikan
+   fitur "tambah kelurahan" yang dulu ada di sini: setelah seluruh Jateng + DIY masuk
+   database berpoligon, membuat kelurahan BARU tanpa poligon hampir selalu jawaban yang
+   salah — yang benar hampir selalu menunjuk kelurahan yang sudah ada beserta batasnya.
+   ========================================================================== */
+
+/** Semua alias yang tersimpan, lengkap dengan kelurahan yang ditunjuknya. */
+function aliases() {
+  return store.all(store.db(), `
+    SELECT a.city_code AS "cityCode", a.district_name AS "districtName",
+           a.village_name AS "villageName", a.village_code AS "villageCode",
+           v.village_name AS "targetName", v.district_name AS "targetDistrict",
+           (v.geom_m IS NOT NULL) AS "targetHasGeom"
+    FROM village_aliases a
+    JOIN villages v ON v.village_code = a.village_code
+    ORDER BY a.city_code, a.district_name, a.village_name`);
+}
+
 /**
- * Tambah kelurahan baru.
+ * Simpan satu alias. Dipanggil HANYA dari klik konfirmasi, tidak pernah dari impor.
  *
- * TANPA BATAS WILAYAH. Poligon kelurahan datang dari pipeline geo (BPS/Ina-Geoportal),
- * bukan dari ketikan manusia — dan tanpa poligon, kelurahan ini tidak akan pernah
- * punya rasio jangkauan.
- *
- * Itu BUKAN dianggap sepele: `summary()` menandainya lewat `hasGeom`, dan halaman
- * mengeluarkan penjualannya dari hitungan dalam/luar jangkauan lalu melaporkannya
- * terpisah. Yang belum lengkap harus terlihat, bukan tersamar jadi "di luar jangkauan".
- *
- * Kodenya WAJIB kode BPS bertitik dan tidak pernah diturunkan dari nama — aturan
- * proyek, dan satu-satunya cara kelurahan ini nanti bisa disambungkan ke poligonnya
- * waktu cakupan geo diperluas.
+ * Kelurahan tujuan diperiksa keberadaannya di sini walaupun foreign key sudah menjaga
+ * hal yang sama: pesan "kode tidak ada" lebih berguna bagi orang yang sedang memilih
+ * daripada pelanggaran constraint yang keluar sebagai teks Postgres.
  */
-async function createVillage(data) {
+async function saveAlias(data) {
   const db = store.db();
-  const code = String(data.villageCode || '').trim();
-  const name = String(data.villageName || '').trim();
-  if (!/^\d{2}\.\d{2}\.\d{2}\.\d{4}$/.test(code)) {
-    throw new Error('Kode kelurahan harus format BPS bertitik, misalnya 34.04.01.2001.');
+  const cityCode = String(data.cityCode || '').trim();
+  const districtName = String(data.districtName || '').trim();
+  const villageName = String(data.villageName || '').trim();
+  const villageCode = String(data.villageCode || '').trim();
+
+  if (!cityCode || !districtName || !villageName) {
+    throw new Error('Kota, kecamatan, dan nama dari Excel wajib ada.');
   }
-  if (!name) throw new Error('Nama kelurahan wajib diisi.');
+  const target = await store.one(db, `
+    SELECT village_code AS code, village_name AS name, district_name AS district,
+           city_code AS "cityCode", (geom_m IS NOT NULL) AS "hasGeom"
+    FROM villages WHERE village_code = ?`, [villageCode]);
+  if (!target) throw new Error(`Kelurahan ${villageCode} tidak ada di tabel.`);
 
-  const ada = await store.one(db,
-    'SELECT village_name FROM villages WHERE village_code = ?', [code]);
-  if (ada) throw new Error(`Kode ${code} sudah dipakai oleh "${ada.village_name}".`);
-
-  // Kode kota dan provinsi TURUNAN dari kode kelurahan, bukan isian terpisah. Kalau
-  // dipisah, keduanya bisa saling bertentangan dan penyaring kota jadi salah diam-diam.
-  const cityCode = code.slice(0, 5);
-  const provinceCode = code.slice(0, 2);
-
-  // Nama kota diambil dari kelurahan lain di kota yang sama kalau ada — supaya tidak
-  // muncul dua ejaan untuk kota yang sama di dropdown.
-  const kota = await store.one(db,
-    'SELECT city_name FROM villages WHERE city_code = ? LIMIT 1', [cityCode]);
-  const cityName = kota ? kota.city_name : String(data.cityName || '').trim();
-  if (!cityName) {
-    throw new Error('Kota ini belum ada di tabel — isi nama kabupaten/kotanya.');
+  // Alias lintas kabupaten DITOLAK. Kunci pencocokannya memuat kode kota, jadi alias
+  // seperti itu tidak akan pernah terpakai — dan diam-diam tidak terpakai jauh lebih
+  // buruk daripada ditolak, karena orang yang menyimpannya mengira sudah beres.
+  if (target.cityCode !== cityCode) {
+    throw new Error(
+      `${target.name} ada di kabupaten ${target.cityCode}, bukan ${cityCode}.`);
   }
 
   await store.run(db, `
-    INSERT INTO villages (village_code, village_name, district_code, district_name,
-                          city_code, city_name, province_code, lat, lng)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  [code, name, code.slice(0, 8),
-    data.districtName ? String(data.districtName).trim() : null,
-    cityCode, cityName, provinceCode,
-    data.lat === undefined ? null : data.lat,
-    data.lng === undefined ? null : data.lng]);
+    INSERT INTO village_aliases (city_code, district_name, village_name,
+                                 village_code, created_at)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT (city_code, district_name, village_name) DO UPDATE SET
+      village_code = EXCLUDED.village_code,
+      created_at = EXCLUDED.created_at`,
+  [cityCode, districtName, villageName, villageCode, new Date().toISOString()]);
 
-  return store.one(db, `
+  return target;
+}
+
+function deleteAlias(cityCode, districtName, villageName) {
+  return store.run(store.db(), `
+    DELETE FROM village_aliases
+    WHERE city_code = ? AND district_name = ? AND village_name = ?`,
+  [String(cityCode || ''), String(districtName || ''), String(villageName || '')]);
+}
+
+/** Periode terakhir yang punya nama belum cocok. NULL kalau semuanya sudah cocok. */
+async function latestUnmatchedPeriod() {
+  const row = await store.one(store.db(),
+    'SELECT MAX(period) AS period FROM unmatched');
+  return row ? row.period : null;
+}
+
+/**
+ * Nama yang belum cocok, masing-masing beserta saran kelurahan yang mungkin dimaksud.
+ *
+ * Kandidatnya diambil sekota, bukan sekecamatan. Nama kecamatan di Excel sendiri
+ * kadang salah eja — itu justru salah satu sebab barisnya tidak cocok — jadi menyaring
+ * kandidat ke kecamatan yang tertulis akan membuang jawaban yang benar. Kecamatan tetap
+ * dipakai untuk MENGURUTKAN, di backend/core/matching.js, bukan untuk menyaring.
+ *
+ * Kolom `alias` diisi kalau namanya sudah pernah dicocokkan tapi barisnya masih tercatat
+ * belum cocok — itu keadaan wajar: alias baru berlaku pada impor berikutnya.
+ */
+async function unmatchedWithSuggestions(period) {
+  const rows = await unmatched(period);
+  if (!rows.length) return [];
+
+  const cities = [...new Set(rows.map((r) => r.cityCode))];
+  const candidates = await store.all(store.db(), `
     SELECT village_code AS code, village_name AS name, district_name AS district,
-           city_code AS "cityCode", city_name AS "cityName",
-           province_code AS "provinceCode", lat, lng, (geom_m IS NOT NULL) AS "hasGeom"
-    FROM villages WHERE village_code = ?`, [code]);
+           city_code AS "cityCode", (geom_m IS NOT NULL) AS "hasGeom"
+    FROM villages
+    WHERE city_code IN (${cities.map(() => '?').join(',')})`, cities);
+
+  const perCity = {};
+  candidates.forEach((c) => {
+    (perCity[c.cityCode] = perCity[c.cityCode] || []).push(c);
+  });
+
+  const tersimpan = {};
+  (await aliases()).forEach((a) => {
+    tersimpan[regionKey(a.cityCode, a.districtName, a.villageName)] = a;
+  });
+
+  return rows.map((r) => ({
+    ...r,
+    alias: tersimpan[regionKey(r.cityCode, r.districtName, r.villageName)] || null,
+    suggestions: suggestVillages(
+      r.villageName, r.districtName, perCity[r.cityCode] || [], 5),
+  }));
 }
 
 /** Apakah data konsumen tersedia sama sekali. */
@@ -471,6 +541,7 @@ async function updateOutlet(code, patch, config) {
 module.exports = {
   summary, unmatched, imports, periodSummary,
   customersInVillage, browseCustomers, hasCustomers, logCustomerAccess, updateOutlet,
-  resolveDealer, createOutlet, createVillage,
+  resolveDealer, createOutlet,
+  aliases, saveAlias, deleteAlias, latestUnmatchedPeriod, unmatchedWithSuggestions,
   BROWSE_LIMIT,
 };

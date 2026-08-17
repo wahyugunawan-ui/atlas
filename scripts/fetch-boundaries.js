@@ -15,7 +15,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { config } = require('../src/server/config');
+const { config } = require('../backend/server/config');
 
 const REPO = 'https://raw.githubusercontent.com/cahyadsn/wilayah_boundaries/main';
 const API = 'https://api.github.com/repos/cahyadsn/wilayah_boundaries/contents';

@@ -1,8 +1,10 @@
 /**
  * Panel rincian kelurahan, tabel master, dan perpindahan tab.
  */
-import { browseCustomers, createOutlet, createVillage, fetchCustomers, saveOutlet }
-  from './api.js';
+import {
+  browseCustomers, createOutlet, deleteAlias, fetchAliases, fetchCustomers, saveAlias,
+  saveOutlet,
+} from './api.js';
 import { dealerColor } from './colors.js';
 import {
   CUSTOMER_PANEL_LIMIT, PROVINCE_NAMES, SHOW_ENGINE_NUMBER, SHOW_HOUSE_PHOTO,
@@ -244,8 +246,16 @@ export function acceptMapPoint(lngLat) {
   $('modal-pos').classList.remove('hidden');
 }
 
-/** Nilai penanda di dropdown dealer. Bukan nama dealer yang mungkin ada. */
-const DEALER_BARU = ' baru';
+/**
+ * Nilai penanda di dropdown dealer. Bukan nama dealer yang mungkin ada.
+ *
+ * Ditulis sebagai ESCAPE, bukan byte NUL asli di dalam berkas. Sebelumnya bytenya
+ * ditulis langsung: tidak terlihat di editor, membuat grep menganggap berkas ini biner,
+ * dan alat apa pun yang menormalkan encoding akan memakannya tanpa suara — begitu
+ * hilang, penandanya berubah jadi teks biasa "baru" dan dealer bernama "baru"
+ * menabraknya.
+ */
+const DEALER_BARU = '\u0000baru';
 
 /** Tampilkan kotak isian nama begitu "dealer baru" dipilih. */
 export function dealerChoiceChanged() {
@@ -410,16 +420,14 @@ document.addEventListener('keydown', (event) => {
 });
 
 /* ==========================================================================
-   TAMBAH POS DEALER DAN KELURAHAN
+   TAMBAH POS DEALER
    ==========================================================================
-   Keduanya menambah baris yang biasanya lahir dari impor bulanan. Bedanya besar:
+   Untuk pos yang sudah buka tapi belum muncul di Excel bulanan. Pos baru langsung utuh
+   — kolom geom_m-nya dibuat database dari lat/lng, jadi jangkauannya bisa dihitung saat
+   itu juga.
 
-   Pos baru langsung utuh — kolom geom_m-nya dibuat database dari lat/lng, jadi
-   jangkauannya bisa dihitung saat itu juga.
-
-   Kelurahan baru TIDAK utuh: batas wilayahnya datang dari pipeline geo, bukan dari
-   ketikan. Sampai poligonnya ada, penjualannya dikeluarkan dari persentase jangkauan
-   dan dilaporkan terpisah — lihat splitByCoverage() di filters.js.
+   Dulu ada pasangannya di sini, "Tambah Kelurahan", dan sekarang sudah dibuang. Lihat
+   bagian COCOKKAN NAMA KELURAHAN di bawah untuk sebabnya.
    ========================================================================== */
 
 function pesanModal(id, teks, jenis) {
@@ -503,47 +511,117 @@ export async function saveNewOutlet() {
   }
 }
 
-export function openNewVillage() {
-  ['nk-kode', 'nk-nama', 'nk-kecamatan', 'nk-kota'].forEach((id) => { $(id).value = ''; });
-  pesanModal('nk-pesan', '');
-  $('modal-kel-baru').classList.remove('hidden');
-  $('nk-kode').focus();
-}
+/* ==========================================================================
+   COCOKKAN NAMA KELURAHAN
+   ==========================================================================
+   Menggantikan "Tambah Kelurahan" yang dulu di sini. Fitur itu membuat kelurahan BARU
+   tanpa poligon; setelah seluruh Jateng + DIY masuk database berpoligon, itu hampir
+   selalu jawaban yang salah.
 
-export function closeNewVillage() {
-  $('modal-kel-baru').classList.add('hidden');
-}
+   Yang sebenarnya terjadi pada baris Excel yang tidak cocok: hampir semuanya varian
+   ejaan dari kelurahan yang SUDAH ada — TEGALREJO untuk Tegalreja, PABUARAN untuk
+   Pabuwaran. Menunjuk yang sudah ada langsung membawa poligonnya.
 
-export async function saveNewVillage() {
-  const kode = $('nk-kode').value.trim();
-  if (!/^\d{2}\.\d{2}\.\d{2}\.\d{4}$/.test(kode)) {
-    return pesanModal('nk-pesan',
-      'Kode harus format BPS bertitik, misalnya 34.04.01.2001.', 'error');
-  }
-  if (!$('nk-nama').value.trim()) {
-    return pesanModal('nk-pesan', 'Nama kelurahan wajib diisi.', 'error');
-  }
+   SERVER MENYARANKAN, ORANG MEMUTUSKAN. Tidak ada satu pun saran yang tersimpan sendiri.
+   ========================================================================== */
 
-  const tombol = $('nk-simpan');
-  tombol.disabled = true;
-  tombol.textContent = 'Menyimpan...';
-  pesanModal('nk-pesan', '');
+/** Isi kotak dialog yang sedang tampil. Dari server, bukan dari S — cuma dipakai di sini. */
+let matchList = [];
+
+export async function openMatchNames() {
+  $('modal-cocok').classList.remove('hidden');
+  $('mc-isi').innerHTML =
+    '<div class="text-center py-8 text-slate-400 text-sm">Memuat...</div>';
   try {
-    const { village } = await createVillage({
-      villageCode: kode,
-      villageName: $('nk-nama').value.trim(),
-      districtName: $('nk-kecamatan').value.trim(),
-      cityName: $('nk-kota').value.trim(),
-    });
-    closeNewVillage();
-    toast(`${village.name} ditambahkan (belum ada batas wilayah).`, 'ok');
-    await window.reloadSummary();
-    renderVillageTable();
+    const data = await fetchAliases();
+    matchList = data.unmatched;
+    $('mc-periode').textContent = data.period
+      ? `Dari impor periode ${data.period}` : 'Belum ada impor';
+    renderMatchList();
   } catch (error) {
-    pesanModal('nk-pesan', error.message, 'error');
-  } finally {
-    tombol.disabled = false;
-    tombol.textContent = 'Tambah';
+    $('mc-isi').innerHTML =
+      `<div class="text-center py-8 text-red-600 text-sm">${esc(error.message)}</div>`;
+  }
+}
+
+export function closeMatchNames() {
+  $('modal-cocok').classList.add('hidden');
+}
+
+/**
+ * Satu baris per nama yang belum cocok.
+ *
+ * Sarannya ditampilkan sebagai dropdown yang SUDAH terpilih di urutan teratas, bukan
+ * terisi otomatis lalu disimpan. Orang tetap harus menekan Cocokkan — dan kalau
+ * sarannya meleset, kandidat lain sekota ada di dropdown yang sama.
+ */
+function renderMatchList() {
+  if (!matchList.length) {
+    $('mc-isi').innerHTML = '<div class="text-center py-8 text-slate-400 text-sm">' +
+      'Semua nama kelurahan sudah cocok.</div>';
+    return;
+  }
+
+  $('mc-isi').innerHTML = matchList.map((u, i) => {
+    if (u.alias) {
+      return `<div class="px-4 py-3 flex items-center gap-3">` +
+        `<div class="min-w-0 flex-1"><div class="font-semibold text-slate-800">${esc(u.villageName)}</div>` +
+        `<div class="text-[11px] text-slate-400">${esc(u.districtName)} · ${esc(formatNumber(u.rowCount))} baris</div></div>` +
+        `<div class="text-xs text-emerald-700 text-right shrink-0">` +
+        `<i class="ph-fill ph-check-circle"></i> ${esc(u.alias.targetName)}` +
+        `<div class="text-[10px] text-slate-400">berlaku saat impor ulang</div></div>` +
+        `<button onclick="undoMatch(${i})" class="text-xs text-slate-400 hover:text-red-600 shrink-0" title="Batalkan">` +
+        `<i class="ph ph-x-circle text-lg"></i></button></div>`;
+    }
+
+    const pilihan = u.suggestions.length
+      ? u.suggestions.map((s) =>
+        `<option value="${esc(s.code)}">${esc(s.name)} — ${esc(s.district || '?')}` +
+        ` (beda ${esc(String(s.distance))} huruf)</option>`).join('')
+      : '<option value="">tidak ada kelurahan yang mirip di kabupaten ini</option>';
+
+    return `<div class="px-4 py-3 flex items-center gap-3">` +
+      `<div class="min-w-0 flex-1"><div class="font-semibold text-slate-800">${esc(u.villageName)}</div>` +
+      `<div class="text-[11px] text-slate-400">${esc(u.districtName)} · ${esc(formatNumber(u.rowCount))} baris</div></div>` +
+      `<select id="mc-pilih-${i}" class="px-2 py-1.5 rounded-lg border border-slate-200 text-xs bg-white max-w-[16rem] shrink-0"` +
+      (u.suggestions.length ? '' : ' disabled') + `>${pilihan}</select>` +
+      `<button onclick="confirmMatch(${i})" style="background:var(--astra-navy)"` +
+      ` class="px-3 py-1.5 rounded-lg text-white text-xs font-bold hover:opacity-90 shrink-0"` +
+      (u.suggestions.length ? '' : ' disabled') + `>Cocokkan</button></div>`;
+  }).join('');
+}
+
+export async function confirmMatch(index) {
+  const u = matchList[index];
+  const villageCode = $(`mc-pilih-${index}`).value;
+  if (!u || !villageCode) return;
+  try {
+    const { village } = await saveAlias({
+      cityCode: u.cityCode,
+      districtName: u.districtName,
+      villageName: u.villageName,
+      villageCode,
+    });
+    // Ditandai di daftar, TIDAK dihapus dari layar. Barisnya masih tercatat belum cocok
+    // sampai impor ulang — menghilangkannya dari sini akan terlihat seperti angka di
+    // halaman impor sudah ikut turun, padahal belum.
+    u.alias = { villageCode, targetName: village.name, targetDistrict: village.district };
+    renderMatchList();
+    toast(`${u.villageName} → ${village.name}. Berlaku setelah impor ulang.`, 'ok');
+  } catch (error) {
+    toast('Gagal: ' + error.message, 'error');
+  }
+}
+
+export async function undoMatch(index) {
+  const u = matchList[index];
+  if (!u) return;
+  try {
+    await deleteAlias(u.cityCode, u.districtName, u.villageName);
+    u.alias = null;
+    renderMatchList();
+  } catch (error) {
+    toast('Gagal: ' + error.message, 'error');
   }
 }
 

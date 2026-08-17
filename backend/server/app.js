@@ -22,15 +22,15 @@ function buildApp(config) {
   app.use(cookieParser());
 
   /** Aset statis boleh tanpa login: CSS dan library tidak memuat data apa pun. */
-  app.use('/vendor', express.static(path.join(config.publicDir, 'vendor'),
+  app.use('/vendor', express.static(path.join(config.frontendDir, 'vendor'),
     { maxAge: '365d', immutable: true }));
-  app.use('/css', express.static(path.join(config.publicDir, 'css')));
+  app.use('/css', express.static(path.join(config.frontendDir, 'css')));
 
   app.get('/login', (req, res) => {
     if (readSession(config.sessionSecret, req.cookies[COOKIE_NAME])) {
       return res.redirect('/');
     }
-    res.sendFile(path.join(config.publicDir, 'login.html'));
+    res.sendFile(path.join(config.frontendDir, 'login.html'));
   });
 
   app.post('/login', (req, res) => {
@@ -107,7 +107,7 @@ function buildApp(config) {
     },
   }));
 
-  app.use(express.static(config.publicDir, { index: 'index.html' }));
+  app.use(express.static(config.frontendDir, { index: 'index.html' }));
 
   /**
    * 404 yang bisa dibaca orang.
