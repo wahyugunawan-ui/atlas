@@ -3,6 +3,12 @@
 Entri baru ditambahkan di bawah. Jangan hapus atau tulis ulang entri lama; kalau
 sebuah keputusan dibatalkan, tulis entri baru yang menyebut entri mana yang diganti.
 
+Apa yang produk ini harus bisa ada di [PRD.md](PRD.md).
+
+> **Catatan untuk entri lama.** Sejak 2026-08-17 folder `src/` jadi `backend/` dan
+> `public/` jadi `frontend/`. Entri lama masih memakai nama lama dan sengaja tidak
+> ditulis ulang, mengikuti aturan di atas.
+
 ## [2026-08-08] Simpan agregat, bukan baris per konsumen
 
 **Konteks:** Import bulanan ~17rb baris dari Excel. Baseline menyimpan tiap konsumen
@@ -614,3 +620,47 @@ sah, luasnya tetap masuk akal, jangkauannya cuma jadi 0% di mana-mana. Karena it
 `checkOrientation()` berjalan sebelum satu baris pun masuk database, dan batas kotaknya
 diukur dari 8.999 kelurahan sungguhan (-8,212..-5,725) — bukan ditebak dari peta
 daratan, yang menolak Karimunjawa.
+
+## [2026-08-17] Struktur folder jadi `backend/` + `frontend/`
+
+**Konteks:** Pertanyaan pemilik proyek: "harusnya ada folder backend, frontend gitu biar
+langsung keliatan bagian front dan back?" Struktur sebelumnya `src/core`, `src/server`,
+`public/`, `src/styles`.
+**Keputusan:** Dipindah jadi `backend/core`, `backend/server`, `frontend/`,
+`frontend/styles`.
+**Alasan:** `src/` + `public/` itu konvensi Express yang sah dan bukan kesalahan, jadi
+alasannya bukan "yang lama salah". Yang menentukan dua hal yang diukur lebih dulu.
+Pertama, pemisahannya sudah bersih — `public/js/` tidak meng-import apa pun dari `src/`,
+nol — jadi memotongnya di situ jujur, bukan mengganti nama supaya kelihatan rapi.
+Kedua, `src/styles/` memang salah tempat: dia sumber frontend yang duduk di sisi
+backend, dan itu keliru terlepas dari konvensi mana yang dipakai. Konvensi
+`backend/`+`frontend/` biasanya untuk sistem yang dibangun dan dideploy terpisah, yang
+BUKAN kasus di sini; yang dimenangkan cuma keterbacaan sekali lihat, dan itu memang
+yang diminta.
+**Konsekuensi:** Require relatif di dalam tree yang pindah tidak berubah. Yang berubah
+cuma yang mengeja `src/` atau `public/` utuh — 43 berkas, plus tiga yang lolos karena
+merakit path per segmen (`path.join(ROOT, 'src', 'server', ...)`) dan baru ketahuan
+waktu `npm test` merah. `@source` di Tailwind ikut berubah dan itu titik paling rawan:
+path yang salah TIDAK melempar error, cuma menghasilkan CSS tanpa kelas yang tidak
+ditemukannya. Entri lama di ROADMAP dan DECISIONS sengaja tetap memakai nama lama.
+
+## [2026-08-17] PRD ditulis mundur; PLAN.md diarsipkan, bukan diperbarui
+
+**Konteks:** Proyek berjalan enam fase tanpa PRD. `docs/PLAN.md` — yang ditunjuk
+`CLAUDE.md` sebagai "rencana lengkap" — masih menjelaskan SQLite, folder `logika/`
+`publik/` `tes/`, dan tabel bernama Indonesia. Tidak satu pun masih benar.
+**Keputusan:** `docs/PRD.md` baru, ditulis dari sistem yang berjalan. `PLAN.md` dipindah
+ke `docs/archive/PLAN-2026-08-12.md` **tanpa disunting**, diberi tabel "yang di sini
+sudah tidak benar" di kepalanya.
+**Alasan:** Memperbarui PLAN.md di tempat akan menghapus jejak bahwa rancangan awalnya
+berbeda, dan nama berkasnya tetap "PLAN" walau isinya PRD. Menghapusnya membuang
+satu-satunya sumber tertulis untuk alasan "laptop dulu, VPS menyusul". Mengarsipkan
+menahan keduanya: sejarahnya utuh, dan tidak bisa lagi menyesatkan karena peringatannya
+dibaca lebih dulu.
+**Konsekuensi:** 68 kebutuhan ber-ID (`KF-*`, `KNF-*`), masing-masing menyebut berkas
+tes yang menjaganya; delapan ditandai `belum dijaga` apa adanya. `docs.test.js` menjaga
+daftar itu supaya tidak membusuk: berkas tes yang disebut harus ada, ID tidak boleh
+kembar, berkas kode yang disebut harus ada, dan dokumen aktif tidak boleh menunjuk
+PLAN.md lagi. Penjaga folder sengaja dibedakan — berkas diperiksa di mana pun, folder
+telanjang hanya di dalam blok peta struktur, supaya prosa tetap boleh menyebut nama
+lama waktu bercerita tentang masa lalu.

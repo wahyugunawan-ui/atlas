@@ -3,7 +3,13 @@
 Berkas pelacak. Satu tempat untuk menjawab "sudah sampai mana" dan "kenapa berhenti".
 Diperbarui tiap akhir sesi kerja. Jangan hapus entri lama — coret atau pindahkan.
 
-Rencana lengkapnya ada di `PLAN.md`. Keputusan arsitektur di `DECISIONS.md`.
+Apa yang produk ini harus bisa ada di [PRD.md](PRD.md). Keputusan arsitektur di
+[DECISIONS.md](DECISIONS.md).
+
+> **Catatan untuk entri lama.** Sejak 2026-08-17 folder `src/` jadi `backend/` dan
+> `public/` jadi `frontend/`. Entri di bawah masih memakai nama lama dan **sengaja tidak
+> ditulis ulang** — ini catatan berurut waktu, dan merapikannya berarti memalsukan
+> catatan. Struktur yang berlaku sekarang ada di `PRD.md` dan `CLAUDE.md`.
 
 ---
 
@@ -108,10 +114,10 @@ cuma perluasan ke Sulawesi ke timur.
 
 ### Sisanya
 
-- **165 baris masih belum cocok**, dan sifatnya sudah berubah — bukan lagi soal
-  cakupan. 116 Jateng + 20 DIY itu ketidakcocokan EJAAN NAMA di kota yang
-  kelurahannya sudah ada (butuh tabel alias); 29 sisanya pembeli luar provinsi yang
-  sudah diputuskan dibiarkan.
+- **31 nama / 136 baris menunggu dikonfirmasi manusia** di Master Kelurahan &rarr;
+  Cocokkan Nama. Alatnya sudah ada dan sarannya sudah dihitung; yang belum adalah
+  KEPUTUSANNYA, dan itu memang bukan pekerjaan program. 29 baris sisanya pembeli luar
+  provinsi yang sudah diputuskan dibiarkan.
 - **Belum ada penjalan migrasi skema.** `schema.sql` cuma `CREATE TABLE IF NOT
   EXISTS`, jadi perubahan tipe kolom hanya berlaku untuk database yang belum ada.
   Ditandai `ponytail:` di `db.js`. Baru mendesak saat ada mesin kedua — dan jadi
@@ -126,6 +132,125 @@ cuma perluasan ke Sulawesi ke timur.
 ---
 
 ## Selesai
+
+### PRD ditulis mundur, struktur jadi backend/ + frontend/ (2026-08-17)
+
+Proyek ini dibangun tanpa PRD. Enam dokumen yang ada semuanya menjawab "bagaimana",
+"kenapa", atau "kapan" — tidak satu pun menjawab **apa yang produk ini harus bisa**.
+Untuk tahu itu, orang harus membaca 1.600 baris lalu menyimpulkan sendiri.
+
+**`docs/PLAN.md` bukan cuma kosong, dia menyesatkan.** Isinya SQLite, folder `logika/`
+`publik/` `tes/`, tabel `agregat` `pos` `kode_kel`. Tidak satu pun masih benar — dan
+`CLAUDE.md` menunjuknya sebagai "rencana lengkap". Dipindah ke
+`docs/archive/PLAN-2026-08-12.md` dengan tabel "yang di sini sudah tidak benar" di
+kepalanya. **Isinya sengaja tidak disunting**: dokumen sejarah yang dirapikan berhenti
+jadi dokumen sejarah.
+
+**Yang paling mahal hilangnya bukan daftar fitur, tapi definisi angkanya.** Tidak ada
+satu tempat pun yang menuliskan apa arti "jangkauan", kenapa penyebut "Kelurahan Kosong"
+4.003 dan bukan 8.999, atau kenapa satu baris Excel = satu unit tanpa dedupe. Semuanya
+ada, terserak di komentar kode. Salah paham di situ menghasilkan angka yang terlihat
+benar lalu dilaporkan ke manajemen. Itu bagian 3 di PRD.
+
+**68 kebutuhan ber-ID, masing-masing menyebut berkas tes yang menjaganya** — 49
+fungsional, 19 non-fungsional. Delapan ditandai `belum dijaga` apa adanya: treemap,
+basemap satelit, pin cepat, lompat ke peta, dan empat kebutuhan non-fungsional yang
+memang diukur manual. Daftar itu berguna justru karena jujur. Dijaga
+`docs.test.js`: berkas tes yang disebut harus ada, ID tidak boleh kembar, berkas kode
+yang disebut harus ada, dan dokumen aktif tidak boleh menunjuk PLAN.md lagi.
+
+**Struktur folder diubah** setelah pertanyaan "harusnya ada folder backend/frontend
+biar langsung kelihatan?". Diperiksa dulu sebelum dijawab: `public/js/` ternyata tidak
+meng-import apa pun dari `src/` — nol. Jadi masalahnya murni nama yang tidak berbicara,
+bukan front dan back yang tercampur, dan pemotongannya aman.
+
+```
+backend/core/     <- src/core        frontend/         <- public
+backend/server/   <- src/server      frontend/styles/  <- src/styles
+```
+
+`src/styles/` memang salah tempat: dia sumber frontend yang duduk di sisi backend.
+
+**Dua hal yang ditemukan justru karena diverifikasi, bukan diasumsikan:**
+
+1. **Tiga path lolos dari penggantian teks** karena dirakit per segmen
+   (`path.join(ROOT, 'src', 'server', ...)`, bukan `'src/server/...'`). `npm test`
+   langsung merah di tiga berkas — itu memang gunanya menjalankan tes lebih dulu.
+2. **Angka jangkauan di ROADMAP ternyata basi.** Tertulis 7,6 / 15,1 / 23,5 / 34,2;
+   yang sungguhan **7,5 / 14,8 / 23,0 / 33,5**. Waktu ekspansi Jateng + DIY selesai,
+   cuma angka 5 km yang diperbarui dan tiga sisanya tertinggal. Ketahuan karena tiap
+   angka di PRD diukur ulang ke database, bukan disalin dari sini.
+
+Entri lama di ROADMAP dan DECISIONS **tetap memakai `src/` dan `public/`** dan sengaja
+tidak ditulis ulang — ini catatan berurut waktu, dan merapikannya berarti memalsukan
+catatan. Penandanya ditaruh di kepala kedua berkas.
+
+18/18 tes, 6/6 mutasi penjaga dokumen tertangkap.
+
+**Yang belum diverifikasi:** tampilan dashboard sesudah pindah folder, karena sesi
+browser habis dan sandinya tidak ada pada saya. Diganti pemeriksaan yang tidak butuh
+login — 53 aset dan import ES ditelusuri ke berkas di disk, nol hilang, dan
+`/css`, `/vendor` dicek langsung ke server. Sisanya perlu satu kali klik manusia.
+
+### "Tambah Kelurahan" diganti alat pencocokan nama (2026-08-17)
+
+Dua permintaan: warna tombol tambah yang nyaru, dan konsep tambah kelurahan yang
+seharusnya memilih kelurahan yang sudah ada supaya poligonnya langsung ikut.
+
+**Warnanya memang salah.** Empat tombol buatan saya memakai `bg-slate-900` generik
+sementara seluruh tombol aksi lain memakai `var(--astra-navy)`. Diperbaiki, dan
+diperiksa di browser: `rgb(11, 47, 107)`, sama persis dengan tombol Tambah Pos.
+
+**Konsepnya juga salah, dan itu baru ketahuan setelah 8.999 kelurahan masuk.** Fitur
+"Tambah Kelurahan" dibuat waktu database cuma memuat 3.466 kelurahan, saat nama yang
+tidak cocok memang sering berarti kelurahan yang belum ada. Sekarang tidak lagi.
+Diukur pada 50 nama / 165 baris yang tersisa:
+
+| | nama | baris |
+|---|---|---|
+| Punya padanan dekat di kabupaten yang sama | 31 | 136 |
+| — di antaranya saran teratas sekecamatan | 29 | |
+| Tidak ada yang mirip (pembeli luar provinsi) | 19 | 29 |
+
+**82% cuma beda ejaan:** TEGALREJO/Tegalreja (18 baris), PABUARAN/Pabuwaran (11),
+KEWAYUHAN/Kuwayuhan (7), TIRTA RAHAYU/Tirtorahayu (7). Membuat kelurahan baru untuk
+nama-nama itu justru menghasilkan duplikat tanpa poligon — persis kebalikan dari yang
+dibutuhkan. Jadi fiturnya dibuang, bukan ditambal, dan diganti tabel `village_aliases`
++ modal Cocokkan Nama.
+
+**Yang dijaga paling ketat: program MENYARANKAN, orang MEMUTUSKAN.** `src/core/matching.js`
+menghitung kemiripan dan mengurutkannya, tapi hasilnya tidak pernah sampai ke importer.
+Yang masuk indeks pencocokan hanya alias yang sudah diklik manusia. Uji mutasi yang
+membuat importer memakai saran terbaiknya sendiri langsung merah — tanpa itu, penjualan
+bisa menempel ke kelurahan yang salah tanpa satu pun gejala di layar.
+
+**Kecamatan menang atas jarak** dalam peringkat saran. Cilacap punya dua "Tambakreja" di
+kecamatan berbeda; jarak sunting saja tidak bisa memisahkan mereka, dan mengurutkan
+dengan jarak saja akan menyodorkan kelurahan yang salah di posisi pertama — tempat yang
+paling mungkin diklik tanpa dibaca. Levenshtein ditulis sendiri, bukan memakai ekstensi
+`fuzzystrmatch`: `CREATE EXTENSION` butuh superuser, dan tim ini tidak punya orang IT.
+
+**Alias berlaku pada impor berikutnya, bukan surut.** Baris penjualan yang sudah tertulis
+tidak diubah dari sini — impor ulang berkas yang sama sudah cukup dan jalur itu sudah
+teruji idempoten. Jalur kedua yang mengubah data penjualan adalah jalur yang biasanya
+menyimpang. Modalnya menyebut ini apa adanya, bukan menyembunyikannya.
+
+**Dua bug ditemukan sambil mengerjakan, dua-duanya tidak terkait permintaan:**
+
+1. **Byte NUL asli di `tables.js`.** Penanda `DEALER_BARU` ditulis sebagai byte NUL
+   sungguhan, bukan escape — tak terlihat di editor, membuat grep menganggap berkasnya
+   biner, dan alat apa pun yang menormalkan encoding akan memakannya tanpa suara. Begitu
+   hilang, penandanya jadi teks biasa "baru" dan dealer bernama "baru" menabraknya.
+2. **CSS Tailwind tidak ikut terbangun.** Modal barunya memakai kelas yang belum pernah
+   ada di halaman (`max-w-3xl`, `max-h-[55vh]`), dan kelas yang tidak ada di CSS
+   terkompilasi TIDAK melempar error — dia cuma tidak berlaku. Kotaknya jadi 1504x3244
+   piksel dengan separuh isinya di atas layar dan tidak bisa dijangkau. Cuma ketahuan
+   karena diperiksa di browser; `npm test` hijau sepanjang waktu itu. **Setelah mengubah
+   kelas Tailwind di HTML atau JS, `npm run css` wajib dijalankan.**
+
+18/18 berkas tes, 6/6 mutasi tertangkap. Round trip simpan-batalkan diuji di browser
+terhadap database sungguhan, dan database dikembalikan ke keadaan semula (0 alias) —
+50 keputusan pencocokan itu milik pengguna, bukan milik saya.
 
 ### Seluruh Jateng + DIY disiapkan di database (2026-08-17)
 
@@ -189,6 +314,12 @@ lat/lng, jadi pos berkoordinat langsung dihitung jangkauannya. Kodenya diketik m
 tidak dibuatkan server — kode itu harus sama dengan yang dipakai Astra di Excel, dan
 kalau beda, impor berikutnya membuat outlet KEDUA untuk pos yang sama dan penjualannya
 terbelah tanpa gejala. Kode yang sudah dipakai ditolak dengan menyebut pemakainya.
+
+> **Bagian "tambah kelurahan" di bawah SUDAH DIBUANG** pada hari yang sama, setelah
+> seluruh Jateng + DIY masuk database berpoligon membuat premisnya tidak berlaku lagi.
+> Lihat entri "Tambah Kelurahan diganti alat pencocokan nama" di atas. Yang tetap
+> berlaku dan sengaja dipertahankan: penanganan `hasGeom` / `noBoundary` yang dijelaskan
+> di sini, sekarang sebagai jaring pengaman yang tidak bergantung pada fitur mana pun.
 
 **Tambah kelurahan punya jebakan yang harus diputuskan sadar,** dan keputusannya
 diambil pemilik proyek: kelurahan yang ditambah manual TIDAK punya poligon — batas

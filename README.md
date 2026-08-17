@@ -156,6 +156,7 @@ dan tidak menyentuh bulan lain. Suntingan yang dibuat lewat halaman Master Pos D
 ```
 npm start                  jalankan server (sama dengan start.bat)
 npm test                   semua tes — butuh PostgreSQL jalan
+npm run css                bangun ulang CSS — WAJIB setelah mengubah kelas Tailwind
 ops/backup.bat             backup sekarang juga
 ops\install-tasks.ps1      pasang auto-start + backup harian
 npm run set-password       ganti sandi login
@@ -187,6 +188,23 @@ npm run seed-coverage  # hitung jangkauan kalau ada pos di sana
 Yang dikirim ke browser tetap disaring ke kelurahan yang punya penjualan atau masuk
 radius sebuah pos — 4.003 dari 8.999. Database lengkap tidak membuat halaman berat.
 
+### Kalau ada nama kelurahan yang belum cocok
+
+Buka **Master Kelurahan** &rarr; tombol **Cocokkan Nama** (angkanya menunjukkan berapa
+yang menunggu). Hampir semuanya cuma beda ejaan dari kelurahan yang sudah ada:
+`TEGALREJO` untuk Tegalreja, `PABUARAN` untuk Pabuwaran.
+
+Aplikasi menyarankan padanan terdekat beserta selisih hurufnya, **tapi tidak pernah
+mencocokkan sendiri.** Periksa kecamatannya, baru tekan Cocokkan. Salah pilih bisa
+dibatalkan lewat tombol silang di baris yang sama.
+
+Pencocokan **berlaku pada impor berikutnya** — baris yang sudah tersimpan tidak berubah
+sendiri. Untuk menerapkannya ke bulan yang sedang dilihat, impor ulang berkas Excel yang
+sama; mengimpor ulang berkas yang sama aman dan tidak menggandakan data.
+
+Nama yang tidak punya saran sama sekali biasanya pembeli dari luar Jawa Tengah + DIY.
+Itu memang dibiarkan, dan tetap dilaporkan sebagai belum cocok.
+
 ---
 
 ## Kalau ada yang salah
@@ -204,6 +222,7 @@ radius sebuah pos — 4.003 dari 8.999. Database lengkap tidak membuat halaman b
 | Aplikasi mati sendiri dan tidak hidup lagi | tugas terjadwal belum dipasang — jalankan `ops\install-tasks.ps1` |
 | Ingin tahu apa yang terjadi kemarin | `C:/astra-data/logs/server-YYYY-MM-DD.log`, disimpan 30 hari |
 | Kode sudah diperbaiki tapi perilakunya tidak berubah | server masih memegang kode lama — **restart dulu**, lihat di bawah |
+| Tata letak berantakan setelah mengubah tampilan | kelas Tailwind baru belum ikut terbangun — jalankan `npm run css` |
 
 ### Setelah kode diperbarui, RESTART
 
@@ -221,5 +240,6 @@ Start-ScheduledTask -TaskName 'Astra Command Center'
 
 Pindah ke laptop atau VPS lain: lihat **[PINDAH.md](docs/PINDAH.md)**.
 
-Untuk yang mengembangkan: **[CLAUDE.md](CLAUDE.md)** (aturan kode),
+Untuk yang mengembangkan, mulai dari **[PRD.md](docs/PRD.md)** — apa yang aplikasi ini
+harus bisa dan arti tiap angkanya. Lalu **[CLAUDE.md](CLAUDE.md)** (aturan kode),
 **[ROADMAP.md](docs/ROADMAP.md)** (status), **[DECISIONS.md](docs/DECISIONS.md)** (kenapa begini).

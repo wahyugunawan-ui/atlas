@@ -91,5 +91,95 @@ for (const wajib of ['start.bat', 'ops/install-tasks.ps1', 'ops/backup.bat',
     `README menyebut ${wajib}, tapi berkasnya tidak ada`);
 }
 
+/* ==========================================================================
+   PRD
+   ==========================================================================
+   PRD memuat daftar kebutuhan beserta berkas tes yang menjaganya. Daftar itu cuma
+   berguna kalau isinya benar, dan tiga cara dia jadi salah semuanya gagal dengan diam:
+   tes diganti nama, ID disalin-tempel tanpa diubah, dan folder dipindah.
+   ========================================================================== */
+
+const prd = fs.readFileSync(path.join(ROOT, 'docs', 'PRD.md'), 'utf8');
+
+// --- 4. berkas tes yang disebut PRD benar-benar ada ---
+//
+// Tanpa ini, mengganti nama satu berkas tes membuat PRD menunjuk penjaga yang tidak
+// ada. Tidak ada yang gagal; daftarnya cuma diam-diam bohong.
+const tesHilang = [];
+for (const m of prd.matchAll(/`(test\/[\w.-]+\.js)`/g)) {
+  if (!fs.existsSync(path.join(ROOT, m[1]))) tesHilang.push(m[1]);
+}
+assert.deepStrictEqual([...new Set(tesHilang)], [],
+  'PRD menyebut berkas tes yang tidak ada:\n  ' + tesHilang.join('\n  '));
+
+// --- 5. ID kebutuhan unik ---
+//
+// Dua kebutuhan berbeda ber-ID sama membuat rujukan silangnya tidak berarti, dan
+// salin-tempel adalah cara paling mudah itu terjadi.
+const idBaris = [...prd.matchAll(/^\| (KN?F-[A-Z]+-\d+) \|/gm)].map((m) => m[1]);
+const kembar = idBaris.filter((id, i) => idBaris.indexOf(id) !== i);
+assert.deepStrictEqual([...new Set(kembar)], [],
+  'ID kebutuhan dipakai lebih dari sekali di PRD: ' + kembar.join(', '));
+assert.ok(idBaris.length > 40,
+  `cuma ${idBaris.length} ID kebutuhan terbaca — polanya tidak cocok lagi dengan tabelnya`);
+
+// --- 6. berkas dan folder yang DIKLAIM ADA benar-benar ada ---
+//
+// Peta folder yang masih menyebut `src/` setelah pindah ke `backend/` adalah tepat
+// jenis kesalahan yang tidak membuat apa pun gagal — sampai ada yang mencarinya.
+//
+// Dua aturan berbeda, dan bedanya disengaja:
+//
+//   berkas (ada titik-ekstensi)  diperiksa DI MANA PUN dia disebut
+//   folder telanjang             diperiksa HANYA di dalam blok peta struktur
+//
+// Sebabnya prosa boleh menyebut nama lama. "Sampai 2026-08-17 folder ini bernama
+// `src/`" itu kalimat sejarah yang benar, dan penjaga yang melarangnya memaksa
+// dokumennya berbohong tentang masa lalu. Blok peta struktur lain urusannya: di situ
+// tiap baris adalah klaim tentang keadaan sekarang.
+const claude = fs.readFileSync(path.join(ROOT, 'CLAUDE.md'), 'utf8');
+const AKAR = '(?:backend|frontend|src|public|test|scripts|ops|docs|prototype|data)';
+const hilang = [];
+
+for (const m of (prd + claude).matchAll(new RegExp('`(' + AKAR + '/[\\w./-]*\\.\\w+)`', 'g'))) {
+  if (!fs.existsSync(path.join(ROOT, m[1]))) hilang.push(`berkas ${m[0]}`);
+}
+
+for (const isi of [prd, claude]) {
+  for (const blok of isi.matchAll(/```\n([\s\S]*?)```/g)) {
+    for (const baris of blok[1].split('\n')) {
+      // Baris yang menandai dirinya DI LUAR GIT memang tidak ada di repositori —
+      // `data/` diatur lewat DATA_DIR di `.env` dan `frontend/vendor/` dibangun
+      // `npm run vendor`. Tandanya sudah tertulis di barisnya; penjaga ini
+      // membacanya, bukan menyimpan daftar pengecualian sendiri yang bisa menyimpang.
+      if (/DI LUAR GIT/.test(baris)) continue;
+      const m = baris.match(new RegExp('^(' + AKAR + '/[\\w./-]*)'));
+      if (m && !fs.existsSync(path.join(ROOT, m[1]))) hilang.push(`folder ${m[1]}`);
+    }
+  }
+}
+
+assert.deepStrictEqual([...new Set(hilang)], [],
+  'PRD atau CLAUDE.md menyebut sesuatu yang tidak ada:\n  ' + hilang.join('\n  '));
+
+// --- 7. tidak ada TAUTAN yang mengirim pembaca ke PLAN.md ---
+//
+// PLAN.md menjelaskan SQLite, folder lama, dan tabel bernama Indonesia. Tidak satu pun
+// masih benar, dan CLAUDE.md pernah menunjuknya sebagai "rencana lengkap".
+//
+// Yang dilarang TAUTAN, bukan penyebutan. Dokumen boleh — malah harus — bercerita
+// kenapa berkas itu diarsipkan, dan entri ROADMAP yang mencatat pengarsipannya wajib
+// menyebut namanya. Yang berbahaya cuma penunjuk yang benar-benar mengirim orang ke
+// sana. Penyebutan sebagai path ber-backtick di PRD dan CLAUDE sudah ditangkap
+// pemeriksaan 6 di atas.
+for (const nama of ['CLAUDE.md', 'README.md', 'docs/ROADMAP.md', 'docs/PRD.md',
+  'docs/DECISIONS.md']) {
+  const isi = fs.readFileSync(path.join(ROOT, nama), 'utf8');
+  assert.ok(!/\]\((?:docs\/)?PLAN\.md\)/.test(isi),
+    `${nama} menautkan ke PLAN.md — sudah pindah ke docs/archive/, dan isinya ` +
+    'menjelaskan rancangan yang sudah ditinggalkan');
+}
+
 console.log(`OK docs — ${files.length} berkas teks, nol karakter kontrol, ` +
-  'nol tautan putus, berkas yang disebut README ada');
+  `nol tautan putus, berkas yang disebut README ada, ` +
+  `${idBaris.length} kebutuhan PRD ber-ID unik dengan penjaga yang ada`);
