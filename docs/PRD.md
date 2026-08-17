@@ -252,6 +252,7 @@ satelit di bawahnya — dengan ubin yang dijawab 200 OK dan tanpa satu pun error
 | KNF-PRIVASI-2 | `DROP DATABASE astra_customers` mematikan fiturnya dan meninggalkan sisanya jalan penuh — **tanpa menyunting satu baris kode** | `test/import.test.js` |
 | KNF-PRIVASI-3 | Tidak ada PII di `/api/summary` maupun di berkas yang dikirim ke browser | `test/import.test.js`, `test/page.test.js` |
 | KNF-PRIVASI-4 | Rute yang mengembalikan PII dibatasi 30 permintaan per menit per IP | `test/server-auth.test.js` |
+| KNF-PRIVASI-6 | Di belakang proksi lokal, `req.ip` tetap IP pengunjung — dan `X-Forwarded-For` hanya dipercaya dari loopback | `test/server-auth.test.js` |
 | KNF-PRIVASI-5 | Arsip unggahan memuat PII, jadi dibuang setelah 90 hari | `test/hardening.test.js` |
 
 Dasarnya bukan cuma kehati-hatian: datanya PII menurut UU PDP No. 27/2022, dan satu akun

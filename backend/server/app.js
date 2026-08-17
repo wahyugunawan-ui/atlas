@@ -17,6 +17,27 @@ function buildApp(config) {
   const limiter = new RateLimiter(5, 60 * 1000);
 
   app.disable('x-powered-by');
+
+  /**
+   * Percayai `X-Forwarded-For` HANYA dari loopback.
+   *
+   * Kalau aplikasi diletakkan di belakang proksi lokal — Tailscale Funnel, Caddy, nginx
+   * — seluruh permintaan tiba dari 127.0.0.1. Tanpa setelan ini `req.ip` bernilai sama
+   * untuk SEMUA pengunjung, dan tiga hal ikut rusak sekaligus:
+   *
+   *   - pembatas login 5/menit ditanggung bersama; satu orang salah ketik sandi bisa
+   *     mengunci semua orang
+   *   - pembatas PII 30/menit ditanggung bersama
+   *   - catatan akses PII merekam 127.0.0.1, bukan pengunjungnya — jejak auditnya
+   *     kehilangan artinya, padahal satu akun dipakai bersama dan itulah gunanya
+   *
+   * 'loopback', BUKAN `true`. `true` berarti header itu dipercaya dari mana pun,
+   * termasuk dari orang di LAN yang sama — dan siapa pun bisa menuliskan IP palsu di
+   * sana untuk melewati pembatas PII. Dengan 'loopback', sambungan langsung dari LAN
+   * tetap memakai IP aslinya dan headernya diabaikan.
+   */
+  app.set('trust proxy', 'loopback');
+
   app.use(express.urlencoded({ extended: false, limit: '10kb' }));
   app.use(express.json({ limit: '10kb' }));
   app.use(cookieParser());

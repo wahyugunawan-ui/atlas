@@ -133,6 +133,28 @@ cuma perluasan ke Sulawesi ke timur.
 
 ## Selesai
 
+### Siap diakses dari luar untuk pitch: trust proxy (2026-08-17)
+
+Kebutuhannya sederhana — teman bisa membuka dashboard waktu pitch. Vercel dibahas dan
+**ditolak**: batas body 4,5 MB (Excel sekarang sudah 2,3–3,4 MB), filesystem read-only
+mematikan arsip unggahan dan log, dan pembatas PII yang disimpan di memori proses jadi
+tidak berfungsi di banyak instance. Jalannya Tailscale Funnel — sudah terpasang di
+laptop, memberi HTTPS asli, dan bisa dimatikan lagi dengan satu perintah.
+
+**Yang ditemukan sambil menyiapkan, dan hampir merusak pitch-nya:** aplikasi belum
+menyetel `trust proxy`. Di belakang proksi lokal seluruh permintaan tiba dari
+`127.0.0.1`, jadi tiga hal rusak sekaligus — pembatas login 5/menit ditanggung bersama
+(satu orang salah ketik sandi mengunci semua orang), pembatas PII 30/menit ditanggung
+bersama, dan catatan akses PII merekam `127.0.0.1` alih-alih pengunjungnya.
+
+Disetel `'loopback'`, **bukan `true`**. `true` berarti header itu dipercaya dari mana
+pun termasuk dari LAN yang sama, dan siapa pun bisa menuliskan IP palsu tiap permintaan
+untuk melewati pembatas PII. Pembatas yang bisa dilewati begitu sama saja dengan tidak
+ada. Bedanya itu yang dijaga `test/server-auth.test.js`; dua-duanya tertangkap uji
+mutasi.
+
+`KNF-PRIVASI-6` baru di PRD.
+
 ### Citra satelit tidak pernah muncul — satu lapisan lupa dimatikan (2026-08-17)
 
 Laporannya "render opsi peta satelit masih lama". Ternyata bukan lambat sama sekali:

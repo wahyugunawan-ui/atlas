@@ -48,12 +48,32 @@ function request(port, method, path, { body, cookie } = {}) {
 }
 
 async function test() {
+  const app = buildApp(config);
   const server = await new Promise((resolve) => {
-    const s = buildApp(config).listen(0, '127.0.0.1', () => resolve(s));
+    const s = app.listen(0, '127.0.0.1', () => resolve(s));
   });
   const port = server.address().port;
 
   try {
+    /* --------------------------------------------------------------------
+       X-Forwarded-For cuma dipercaya dari loopback
+       --------------------------------------------------------------------
+       Diperlukan begitu aplikasi berada di belakang proksi lokal (Tailscale Funnel,
+       Caddy, nginx): tanpa itu SELURUH pengunjung ber-IP 127.0.0.1, pembatas login
+       dan pembatas PII jadi ditanggung bersama, dan catatan akses PII kehilangan
+       artinya — padahal satu akun dipakai bersama dan justru itu gunanya.
+
+       Tapi 'loopback' BUKAN `true`, dan bedanya itu yang dijaga di sini. Dengan
+       `true`, siapa pun yang bisa menjangkau server — termasuk dari LAN yang sama —
+       boleh menuliskan IP palsu di header dan melewati pembatas PII dengan mengganti
+       nilainya tiap permintaan. Pembatas yang bisa dilewati begitu sama saja dengan
+       tidak ada.
+       -------------------------------------------------------------------- */
+    assert.strictEqual(app.get('trust proxy'), 'loopback',
+      "trust proxy harus 'loopback'. `true` membuat pembatas PII bisa dilewati siapa " +
+      'pun yang memalsukan X-Forwarded-For; tanpa setelan sama sekali, semua ' +
+      'pengunjung di balik proksi berbagi satu jatah dan jejak auditnya jadi 127.0.0.1');
+
     // --- tanpa login ---
     const guarded = await request(port, 'GET', '/');
     assert.strictEqual(guarded.status, 302, 'halaman tanpa login harus dialihkan');
@@ -181,7 +201,8 @@ async function test() {
       '/api/customers tidak ikut dibatasi — pembatasnya cuma dipasang di satu rute');
 
     console.log('OK server-auth — rute tak dikenal ikut terjaga, cookie HttpOnly/Lax, ' +
-      'cookie palsu ditolak, pembatas login dan pembatas PII aktif di rute');
+      'cookie palsu ditolak, pembatas login dan pembatas PII aktif di rute, ' +
+      'X-Forwarded-For cuma dipercaya dari loopback');
   } finally {
     server.close();
   }
