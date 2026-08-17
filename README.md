@@ -207,6 +207,28 @@ Itu memang dibiarkan, dan tetap dilaporkan sebagai belum cocok.
 
 ---
 
+## Supaya orang luar kantor bisa membuka (pitch/demo)
+
+Untuk sesi sementara, bukan untuk dipakai sehari-hari. Lewat Tailscale Funnel:
+
+```
+ops\akses-luar-nyala.bat     buka ke internet, dapat alamat https://<nama>.ts.net
+ops\akses-luar-mati.bat      TUTUP LAGI — jalankan setelah selesai
+```
+
+Yang dibuka pakai HTTPS asli (sertifikat Let's Encrypt otomatis), jadi sandi dan cookie
+tidak lagi lewat sebagai teks polos seperti di LAN.
+
+**Tapi selama menyala, siapa pun di internet bisa menjangkau halaman login — dan kalau
+sandinya diketahui, seluruh data konsumen ikut terjangkau.** Yang melindungi cuma sandi
+tim, dan sandi itu dipakai bersama. Nyalakan sebelum, matikan sesudah; jangan dibiarkan
+menyala karena lupa.
+
+Laptop harus tetap menyala dan servernya jalan. Permintaan pertama bisa makan 15 detik
+(pemanasan) — buka linknya sekali beberapa menit sebelum mulai, jangan di depan orang.
+
+---
+
 ## Kalau ada yang salah
 
 | Gejala | Sebabnya biasanya |

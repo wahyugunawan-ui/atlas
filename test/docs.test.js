@@ -64,6 +64,30 @@ assert.deepStrictEqual(kotor, [],
   'karakter kontrol di berkas teks — hampir pasti dari escape \\a atau \\b:\n  ' +
   kotor.join('\n  '));
 
+// --- 1b. berkas .bat WAJIB berakhiran CRLF ---
+//
+// cmd.exe mengurai berkas batch per baris dan memerlukan CRLF. Dengan LF saja dia
+// salah memenggal dan memuntahkan galat seperti "'M' is not recognized as an internal
+// or external command" — potongan dari kata REM yang terbelah.
+//
+// Sudah terjadi: ops\akses-luar-nyala.bat ditulis dengan LF dan tiga baris REM-nya
+// dieksekusi sebagai perintah. Skripnya tetap "jalan", jadi gampang dikira wajar —
+// dan yang dipakai orang non-IT di hari pitch tidak boleh memuntahkan galat merah
+// yang tidak berarti apa-apa.
+const lfSaja = [];
+for (const file of files.filter((f) => f.endsWith('.bat'))) {
+  const buf = fs.readFileSync(file);
+  for (let i = 0; i < buf.length; i++) {
+    if (buf[i] === 0x0a && (i === 0 || buf[i - 1] !== 0x0d)) {
+      lfSaja.push(path.relative(ROOT, file));
+      break;
+    }
+  }
+}
+assert.deepStrictEqual(lfSaja, [],
+  'berkas .bat berakhiran LF, bukan CRLF — cmd.exe akan salah mengurai barisnya:\n  ' +
+  lfSaja.join('\n  '));
+
 // --- 2. tautan markdown menunjuk berkas yang ada ---
 const putus = [];
 for (const file of files.filter((f) => f.endsWith('.md'))) {
