@@ -174,6 +174,16 @@ siapa pun, dan banyak orang login bersamaan jalan dengan sendirinya.
 | KF-IMPOR-9 | Tiap impor tercatat: waktu, IP, nama berkas, jumlah baris, hasil — termasuk yang gagal | `test/import.test.js` |
 | KF-IMPOR-10 | Berkas asli diarsipkan; arsip yang lewat 90 hari dibuang sendiri | `test/hardening.test.js` |
 | KF-IMPOR-11 | Data konsumen hanya tersimpan kalau diminta eksplisit | `test/import.test.js` |
+| KF-IMPOR-12 | Satu periode bisa dihapus seluruhnya — penjualan, daftar belum cocok, dan data konsumennya | `test/import.test.js` |
+| KF-IMPOR-13 | Menghapus periode **wajib mengetik ulang periodenya**, dan itu diperiksa di server, bukan cuma di layar | `test/server-auth.test.js` |
+| KF-IMPOR-14 | Berkas Excel di arsip **tidak** ikut terhapus — impor ulang berkas yang sama memulihkan keadaannya persis | `test/import.test.js` |
+| KF-IMPOR-15 | Penghapusan periode tercatat di riwayat impor | `test/import.test.js` |
+
+**KF-IMPOR-14 adalah jalan pulih satu-satunya, dan itu keputusan sadar.** "Hapus bulan"
+tidak menghapus berkas Excel-nya, jadi salah klik masih bisa dibatalkan dengan mengimpor
+ulang berkas yang sama — dan idempotensi (`KF-IMPOR-2`) yang membuat hasilnya persis
+sama. Konsekuensinya PII di arsip belum hilang saat itu juga; dia terbuang lewat
+retensi 90 hari (`KNF-PRIVASI-5`).
 
 ### KF-PETA — Insight & Peta
 

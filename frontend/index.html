@@ -568,6 +568,30 @@
   </div>
 </div>
 
+<div id="modal-hapus-periode" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[300] flex items-center justify-center p-4" onclick="if(event.target===this) closeDeletePeriod()">
+  <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 relative rise-in">
+    <button onclick="closeDeletePeriod()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><i class="ph ph-x text-xl"></i></button>
+    <div id="hp-judul" class="text-lg font-extrabold text-slate-800 pr-8">Hapus periode?</div>
+    <p id="hp-rincian" class="text-xs text-slate-500 mt-1 mb-4"></p>
+
+    <div class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-900 leading-snug mb-3">
+      <b>Tidak bisa dibatalkan.</b> Penjualan, daftar nama yang belum cocok, dan data konsumen bulan ini dihapus dari database.
+    </div>
+    <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600 leading-snug mb-4">
+      <b>Berkas Excel aslinya tidak ikut dihapus.</b> Kalau ternyata salah hapus, impor ulang berkas yang sama mengembalikan keadaannya persis seperti semula.
+    </div>
+
+    <label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Ketik <span id="hp-target" class="mono text-slate-700"></span> untuk mengonfirmasi</label>
+    <input id="hp-ketik" oninput="deletePeriodTyped()" type="text" autocomplete="off" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm mono mb-3">
+
+    <div id="hp-pesan" class="text-xs mb-3"></div>
+    <div class="flex gap-2">
+      <button id="hp-hapus" onclick="confirmDeletePeriod()" disabled class="flex-1 px-4 py-2.5 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-700 disabled:bg-slate-200 disabled:text-slate-400">Hapus permanen</button>
+      <button onclick="closeDeletePeriod()" class="px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600">Batal</button>
+    </div>
+  </div>
+</div>
+
 <div id="modal-cocok" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[300] flex items-center justify-center p-4" onclick="if(event.target===this) closeMatchNames()">
   <div class="bg-white rounded-2xl shadow-2xl max-w-3xl w-full p-6 relative rise-in">
     <button onclick="closeMatchNames()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><i class="ph ph-x text-xl"></i></button>

@@ -531,6 +531,68 @@ async function test() {
     assert.strictEqual(cariPersen.total, 0,
       "'%' yang diketik pengguna diperlakukan sebagai wildcard, bukan sebagai karakter");
 
+    /* --------------------------------------------------------------------
+       HAPUS SATU PERIODE
+       --------------------------------------------------------------------
+       Untuk bulan yang salah diimpor. Yang dijaga di sini bukan "hapusnya jalan" —
+       itu terlihat sendiri — tapi tiga hal yang gagalnya diam: bulan lain ikut
+       terbawa, PII tertinggal untuk bulan yang sudah hilang dari layar, dan
+       penghapusan yang tidak meninggalkan jejak padahal satu akun dipakai bersama.
+       -------------------------------------------------------------------- */
+
+    const juliSebelum = await store.one(db,
+      "SELECT COALESCE(SUM(quantity),0) AS n FROM sales WHERE period = '2026-07'");
+    const konsumenAgustus = await store.one(store.customers(),
+      "SELECT COUNT(*) AS n FROM customers WHERE period = '2026-08'");
+    assert.ok(konsumenAgustus.n > 0, 'prasyarat tes: Agustus harus punya data konsumen');
+
+    // Periode yang tidak ada datanya ditolak, bukan diam-diam "berhasil menghapus nol
+    // baris" — pesan sukses untuk sesuatu yang tidak terjadi membuat orang mengira
+    // bulannya sudah hilang.
+    await assert.rejects(() => repo.deletePeriod('2020-01'), /tidak punya data/i);
+
+    const dihapus = await repo.deletePeriod('2026-08', '10.0.0.9');
+    assert.strictEqual(dihapus.units, 3);
+    assert.strictEqual(dihapus.customers, konsumenAgustus.n,
+      'jumlah data konsumen yang terhapus tidak dilaporkan apa adanya');
+
+    assert.strictEqual(
+      (await store.one(db, "SELECT COUNT(*) AS n FROM sales WHERE period='2026-08'")).n, 0);
+    assert.strictEqual(
+      (await store.one(db, "SELECT COUNT(*) AS n FROM unmatched WHERE period='2026-08'")).n,
+      0, 'daftar nama belum cocok bulan itu ikut tertinggal');
+
+    // PII bulan itu HARUS ikut hilang. Kalau tertinggal, yang tersisa adalah nama dan
+    // alamat untuk bulan yang tidak muncul di mana pun — PII yang tidak terlihat siapa
+    // pun dan tidak ada yang tahu masih ada.
+    assert.strictEqual((await store.one(store.customers(),
+      "SELECT COUNT(*) AS n FROM customers WHERE period='2026-08'")).n, 0,
+    'data konsumen bulan yang dihapus masih tertinggal di database PII');
+
+    // Bulan lain TIDAK boleh tersentuh.
+    assert.strictEqual((await store.one(db,
+      "SELECT COALESCE(SUM(quantity),0) AS n FROM sales WHERE period='2026-07'")).n,
+    juliSebelum.n, 'menghapus Agustus ikut membawa Juli');
+
+    // Jejaknya tercatat di riwayat impor. Satu akun dipakai bersama, jadi penghapusan
+    // sebulan data tanpa jejak berarti tidak ada yang bisa menjawab "kok hilang?".
+    const jejak = (await repo.imports(10)).find((h) => h.result === 'hapus');
+    assert.ok(jejak, 'penghapusan periode tidak tercatat di riwayat impor');
+    assert.strictEqual(jejak.period, '2026-08');
+    assert.match(jejak.message, /arsip tidak ikut dihapus/i,
+      'catatannya harus menyebut bahwa berkas Excel-nya masih ada — itu jalan pulihnya');
+
+    // JALAN PULIHNYA BENAR-BENAR BEKERJA. Ini alasan berkas Excel di arsip sengaja
+    // tidak ikut dihapus: impor ulang berkas yang sama mengembalikan keadaan persis
+    // seperti semula, karena impornya idempoten.
+    const pulih = await runImport({
+      file, period: '2026-08', fileName: 'agustus.csv', withCustomers: true, config });
+    assert.strictEqual(pulih.rowsUsed, 3, 'impor ulang setelah dihapus tidak memulihkan');
+    assert.strictEqual((await store.one(db,
+      "SELECT COALESCE(SUM(quantity),0) AS n FROM sales WHERE period='2026-08'")).n, 3);
+    assert.strictEqual((await repo.unmatched('2026-08')).length, 1,
+      'daftar belum cocok tidak ikut pulih');
+
     // PII bisa dicabut: DROP DATABASE, sisanya tetap jalan penuh.
     await dropCustomerDatabase(config);
     assert.strictEqual(repo.hasCustomers(), false);
@@ -540,6 +602,17 @@ async function test() {
       'tanpa database konsumen browseCustomers harus null, bukan melempar error');
     assert.strictEqual((await repo.summary()).sales.length > 0, true,
       'menghapus database konsumen mematikan sisanya juga');
+
+    // Menghapus periode tetap bekerja TANPA database konsumen. Jalur ini menyentuh dua
+    // database, dan yang kedua boleh saja tidak ada — itu justru sifat yang dijanjikan
+    // KNF-PRIVASI-2. Tanpa tes ini, `store.customers()` yang null akan melempar dan
+    // fitur hapus mati diam-diam di pemasangan yang tidak memakai PII sama sekali.
+    const tanpaPii = await repo.deletePeriod('2026-08');
+    assert.strictEqual(tanpaPii.customers, 0);
+    // store.db() dipanggil lagi, BUKAN memakai `db` di atas: dropCustomerDatabase()
+    // menutup lalu membuka ulang pool utamanya, jadi pegangan lama sudah mati.
+    assert.strictEqual((await store.one(store.db(),
+      "SELECT COUNT(*) AS n FROM sales WHERE period='2026-08'")).n, 0);
 
     // --- multipart: nama berkas dari pengguna tidak boleh dipercaya ---
     const boundary = '----uji';

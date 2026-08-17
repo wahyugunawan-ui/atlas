@@ -426,6 +426,70 @@ async function unmatchedWithSuggestions(period) {
   }));
 }
 
+/**
+ * Hapus seluruh data satu periode.
+ *
+ * Untuk bulan yang salah diimpor: berkas Excel keliru, periode salah pilih, atau data
+ * uji yang ikut masuk. Impor ulang sudah menimpa periode yang sama, jadi ini BUKAN
+ * untuk memperbaiki isi — ini untuk membuang bulan yang memang tidak seharusnya ada.
+ *
+ * BERKAS EXCEL DI ARSIP SENGAJA TIDAK IKUT DIHAPUS. Dia satu-satunya jalan pulih kalau
+ * salah hapus: impor ulang berkas yang sama mengembalikan keadaan persis seperti semula,
+ * karena impornya idempoten. Arsipnya tetap terbuang sendiri setelah 90 hari lewat
+ * pruneUploads(), jadi PII di dalamnya tidak menetap selamanya.
+ *
+ * URUTANNYA PII DULU, dan itu bukan kebetulan. Dua database berbeda, jadi tidak mungkin
+ * satu transaksi. Kalau penjualan dihapus lebih dulu lalu langkah kedua gagal, yang
+ * tersisa adalah nama dan alamat untuk bulan yang sudah hilang dari layar — PII yang
+ * tidak terlihat siapa pun dan tidak ada yang tahu masih ada. Kebalikannya jauh lebih
+ * ringan: penjualan tanpa PII, dan itu keadaan normal untuk impor tanpa `--konsumen`.
+ */
+async function deletePeriod(period, ip) {
+  const db = store.db();
+
+  const sebelum = await store.one(db, `
+    SELECT COALESCE(SUM(quantity), 0) AS units, COUNT(*) AS rows
+    FROM sales WHERE period = ?`, [period]);
+  if (!Number(sebelum.rows)) {
+    throw new Error(`Periode ${period} tidak punya data penjualan.`);
+  }
+
+  let customers = 0;
+  const customerDb = store.customers();
+  if (customerDb) {
+    customers = (await store.run(customerDb,
+      'DELETE FROM customers WHERE period = ?', [period])).rowCount || 0;
+  }
+
+  await store.transaction(db, async (conn) => {
+    await conn.query('DELETE FROM sales WHERE period = ?', [period]);
+    await conn.query('DELETE FROM unmatched WHERE period = ?', [period]);
+  });
+
+  // Jejaknya masuk tabel `imports`, bukan tabel sendiri.
+  //
+  // Satu akun dipakai bersama, jadi menghapus sebulan data WAJIB meninggalkan jejak —
+  // dan tempat orang mencarinya adalah riwayat impor, satu daftar berurut waktu tentang
+  // apa yang pernah terjadi pada data. Penghapusan yang dicatat di tempat lain sama
+  // saja dengan tidak dicatat.
+  const now = new Date().toISOString();
+  await store.run(db, `
+    INSERT INTO imports (started_at, finished_at, ip, file_name, period,
+                         rows_read, rows_used, new_outlets, result, message)
+    VALUES (?, ?, ?, NULL, ?, NULL, ?, NULL, 'hapus', ?)`,
+  [now, now, ip || null, period, Number(sebelum.units),
+    `Periode dihapus: ${sebelum.units} unit, ${sebelum.rows} baris` +
+    (customers ? `, ${customers} data konsumen` : '') +
+    '. Berkas Excel di arsip tidak ikut dihapus.']);
+
+  return {
+    period,
+    units: Number(sebelum.units),
+    sales: Number(sebelum.rows),
+    customers,
+  };
+}
+
 /** Apakah data konsumen tersedia sama sekali. */
 function hasCustomers() {
   return Boolean(store.customers());
@@ -541,7 +605,7 @@ async function updateOutlet(code, patch, config) {
 module.exports = {
   summary, unmatched, imports, periodSummary,
   customersInVillage, browseCustomers, hasCustomers, logCustomerAccess, updateOutlet,
-  resolveDealer, createOutlet,
+  resolveDealer, createOutlet, deletePeriod,
   aliases, saveAlias, deleteAlias, latestUnmatchedPeriod, unmatchedWithSuggestions,
   BROWSE_LIMIT,
 };

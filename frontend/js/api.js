@@ -39,6 +39,19 @@ export const fetchPeriods = () => request(API + 'periods');
 
 export const fetchImports = () => request(API + 'imports');
 
+/**
+ * Hapus seluruh data satu bulan.
+ *
+ * `confirm` harus sama persis dengan periodenya — server menolak kalau tidak, dan itu
+ * disengaja. Penjaga yang cuma ada di layar bisa dilewati satu permintaan langsung ke
+ * API, jadi konfirmasinya ikut dikirim, bukan cuma diperiksa di halaman.
+ */
+export function deletePeriod(period) {
+  const query = new URLSearchParams({ confirm: period });
+  return request(`${API}periods/${encodeURIComponent(period)}?${query}`,
+    { method: 'DELETE' });
+}
+
 export const fetchUnmatched = (period) =>
   request(`${API}unmatched?period=${encodeURIComponent(period)}`);
 

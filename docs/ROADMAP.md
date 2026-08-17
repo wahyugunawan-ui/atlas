@@ -133,6 +133,44 @@ cuma perluasan ke Sulawesi ke timur.
 
 ## Selesai
 
+### Hapus satu bulan (2026-08-18)
+
+Untuk bulan yang salah diimpor: berkas keliru, periode salah pilih, atau data uji yang
+ikut masuk. Impor ulang sudah menimpa periode yang sama, jadi ini bukan untuk
+memperbaiki isi — ini untuk membuang bulan yang memang tidak seharusnya ada.
+
+Logika hapusnya sudah ada dan sudah teruji: importer memakainya untuk idempotensi.
+Yang baru cuma jalur dan pengamannya.
+
+**Dua keputusan yang diambil pemilik proyek:**
+
+1. **Berkas Excel di arsip TIDAK ikut dihapus.** Dia satu-satunya jalan pulih kalau
+   salah hapus — impor ulang berkas yang sama mengembalikan keadaan persis seperti
+   semula. Ditukar dengan: PII di arsip belum hilang saat itu juga, dan baru terbuang
+   lewat retensi 90 hari. Jalan pulihnya diuji, bukan cuma dijanjikan di komentar.
+2. **Konfirmasinya mengetik ulang periodenya**, bukan dialog ya/tidak. Tombolnya
+   bersebelahan dengan "impor ulang bulan ini" di kartu yang sama, dan yang satu
+   membuang 18.915 baris.
+
+**Urutan PII dulu, dan itu bukan kebetulan.** Dua database berbeda, jadi tidak mungkin
+satu transaksi. Kalau penjualan dihapus lebih dulu lalu langkah kedua gagal, yang
+tersisa adalah nama dan alamat untuk bulan yang sudah hilang dari layar — PII yang tidak
+terlihat siapa pun dan tidak ada yang tahu masih ada. Kebalikannya jauh lebih ringan:
+penjualan tanpa PII, dan itu keadaan normal untuk impor tanpa `--konsumen`.
+
+Jejaknya masuk tabel `imports` dengan `result = 'hapus'`, bukan tabel sendiri. Satu akun
+dipakai bersama, dan tempat orang mencari "apa yang terjadi pada data" adalah riwayat
+impor. Penghapusan yang dicatat di tempat lain sama saja dengan tidak dicatat.
+
+**Uji mutasi menangkap satu tes yang tidak menjaga apa-apa.** Mutasi yang mencabut
+pemeriksaan konfirmasi di server awalnya LOLOS: di `server-auth.test.js` database belum
+terbuka, jadi permintaan yang lolos penjaga pun berakhir 400 — dari kegagalan query,
+bukan dari penolakan. Memeriksa status saja membuat tesnya hijau walaupun penjaganya
+dicabut. Diperbaiki jadi memeriksa pesannya. 6/6 setelah itu.
+
+`KF-IMPOR-12` sampai `KF-IMPOR-15` baru di PRD. 18/18 tes, dan dialognya dicoba di
+browser sampai gerbang ketiknya — tanpa benar-benar menghapus data Agustus.
+
 ### Siap diakses dari luar untuk pitch: trust proxy (2026-08-17)
 
 Kebutuhannya sederhana — teman bisa membuka dashboard waktu pitch. Vercel dibahas dan

@@ -200,9 +200,52 @@ async function test() {
     assert.strictEqual(perKelurahan.status, 429,
       '/api/customers tidak ikut dibatasi — pembatasnya cuma dipasang di satu rute');
 
+    /* ----------------------------------------------------------------------
+       Hapus periode: konfirmasinya diperiksa DI SERVER
+       ----------------------------------------------------------------------
+       Halaman meminta orang mengetik ulang periodenya sebelum tombolnya hidup. Kalau
+       penjaganya cuma di sana, satu permintaan langsung ke API melewatinya begitu saja
+       — dan yang dilewati adalah penghapusan belasan ribu baris tanpa jalan kembali.
+
+       Ditolak SEBELUM database disentuh, jadi tes ini tidak butuh data sama sekali.
+       ---------------------------------------------------------------------- */
+    // PESANNYA yang diperiksa, bukan cuma statusnya. Tanpa database terbuka, permintaan
+    // yang LOLOS penjaga konfirmasi juga berakhir 400 — dari kegagalan query, bukan
+    // dari penolakan. Memeriksa status saja membuat tes ini hijau walaupun penjaganya
+    // dicabut; sudah dibuktikan lewat uji mutasi.
+    const wajibKonfirmasi = /konfirmasi tidak cocok/i;
+
+    const tanpaKonfirmasi = await request(port, 'DELETE', '/api/periods/2026-08',
+      { cookie: sesi });
+    assert.strictEqual(tanpaKonfirmasi.status, 400);
+    assert.match(tanpaKonfirmasi.text, wajibKonfirmasi,
+      'menghapus periode tanpa konfirmasi tidak ditolak oleh penjaganya — ' +
+      'penjaga itu cuma ada di layar, dan satu permintaan langsung ke API melewatinya');
+
+    const konfirmasiSalah = await request(port, 'DELETE',
+      '/api/periods/2026-08?confirm=2026-07', { cookie: sesi });
+    assert.match(konfirmasiSalah.text, wajibKonfirmasi,
+      'konfirmasi periode LAIN diterima — salah ketik bisa menghapus bulan yang salah');
+
+    const konfirmasiAsal = await request(port, 'DELETE',
+      '/api/periods/2026-08?confirm=1', { cookie: sesi });
+    assert.match(konfirmasiAsal.text, wajibKonfirmasi,
+      'nilai apa pun diterima sebagai konfirmasi — harus sama persis dengan periodenya');
+
+    const bentukSalah = await request(port, 'DELETE',
+      '/api/periods/agustus?confirm=agustus', { cookie: sesi });
+    assert.strictEqual(bentukSalah.status, 400);
+    assert.match(bentukSalah.text, /YYYY-MM/,
+      'periode yang bukan YYYY-MM diterima');
+
+    // Dan rutenya tetap butuh sesi, sama seperti rute lain.
+    const tanpaSesi = await request(port, 'DELETE', '/api/periods/2026-08?confirm=2026-08');
+    assert.strictEqual(tanpaSesi.status, 401,
+      'menghapus periode bisa dilakukan tanpa login');
+
     console.log('OK server-auth — rute tak dikenal ikut terjaga, cookie HttpOnly/Lax, ' +
       'cookie palsu ditolak, pembatas login dan pembatas PII aktif di rute, ' +
-      'X-Forwarded-For cuma dipercaya dari loopback');
+      'X-Forwarded-For cuma dipercaya dari loopback, hapus periode wajib konfirmasi');
   } finally {
     server.close();
   }

@@ -34,6 +34,7 @@ import {
   switchTab,
 } from './tables.js';
 import {
+  askDeletePeriod, closeDeletePeriod, confirmDeletePeriod, deletePeriodTyped,
   dragLeave, dragOver, dropFile, fileChosen, finishImport, importPeriodChanged,
   importStep, pickFile, refreshImportTab, reimportPeriod, reviewImport, runUpload,
   setupImportTab,
@@ -57,6 +58,7 @@ const HANDLERS = {
   // impor
   importStep, importPeriodChanged, pickFile, fileChosen, dropFile, dragOver, dragLeave,
   runUpload, reviewImport, finishImport, reimportPeriod, refreshImportTab,
+  askDeletePeriod, closeDeletePeriod, deletePeriodTyped, confirmDeletePeriod,
   // pencarian di dalam dropdown; dengan 51 dealer dan 78 pos, menggulir daftar
   // sepanjang itu lebih lambat daripada mengetik tiga huruf
   filterSelectOptions,

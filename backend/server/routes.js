@@ -80,6 +80,44 @@ function build(config) {
     res.json({ periods: await repo.periodSummary() });
   });
 
+  /**
+   * Hapus seluruh data satu periode.
+   *
+   * Satu-satunya rute yang membuang data bisnis dalam jumlah besar, jadi pengamannya
+   * ada DI SINI, bukan cuma di layar. Halaman meminta orang mengetik ulang periodenya;
+   * kalau penjaganya cuma di sana, satu permintaan langsung ke API melewatinya begitu
+   * saja.
+   *
+   * Konfirmasinya diminta sebagai `confirm` yang harus SAMA PERSIS dengan periodenya,
+   * bukan `?yakin=1`. Flag bernilai benar bisa terkirim karena salah salin; mengetik
+   * "2026-08" tidak bisa terjadi tanpa sengaja.
+   *
+   * Ditolak selagi ada impor berjalan. Impor menghapus lalu menulis ulang periodenya
+   * sendiri di dalam satu transaksi, dan menghapus di tengah itu menghasilkan setengah
+   * keadaan yang tidak pernah diuji siapa pun.
+   */
+  api.delete('/periods/:period', async (req, res) => {
+    const period = String(req.params.period || '');
+    if (!PERIOD.test(period)) {
+      return res.status(400).json({ error: 'Periode harus format YYYY-MM.' });
+    }
+    if (String(req.query.confirm || '') !== period) {
+      return res.status(400).json({
+        error: `Konfirmasi tidak cocok. Ketik ${period} persis untuk menghapusnya.`,
+      });
+    }
+    if (isRunning()) {
+      return res.status(409).json({
+        error: 'Sedang ada impor berjalan. Tunggu sampai selesai, baru hapus.',
+      });
+    }
+    try {
+      res.json(await repo.deletePeriod(period, req.ip));
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
   api.get('/imports', async (req, res) => {
     res.json({ imports: await repo.imports(20), running: isRunning() });
   });
