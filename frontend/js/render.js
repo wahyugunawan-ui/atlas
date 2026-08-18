@@ -214,6 +214,12 @@ function dealerCardHtml(compact) {
     stat(esc((100 - percent).toFixed(0)) + '%', 'Di luar', '', 'style="color:var(--astra-red)"') +
     `</div>` +
     `<div class="flex items-center gap-2 shrink-0">` +
+    // Tombolnya cuma di kartu penuh. Kartu ringkas di atas peta memang dibuat sependek
+    // mungkin supaya tidak menutupi wilayah yang justru sedang dilihat.
+    (compact ? '' :
+      `<button onclick="openDealerDetail('${esc(code)}')" style="background:var(--astra-navy)" ` +
+      `class="px-3 py-2 rounded-xl text-white text-xs font-bold hover:opacity-90 whitespace-nowrap">` +
+      `<i class="ph ph-list-magnifying-glass mr-1"></i>Rincian per kelurahan</button>`) +
     `<button onclick="closeDealerCard()" class="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50">Tutup</button>` +
     `</div></div>` +
     (compact

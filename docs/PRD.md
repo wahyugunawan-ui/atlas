@@ -204,6 +204,8 @@ retensi 90 hari (`KNF-PRIVASI-5`).
 | KF-PETA-10 | Treemap kontribusi dealer dan pos | belum dijaga |
 | KF-PETA-11 | Basemap bisa diganti antara peta lokal, citra satelit, dan polos | `test/page.test.js` |
 | KF-PETA-12 | Basemap yang tidak dipilih dimatikan **seluruhnya**, termasuk lapisan yang tidak punya `source` | `test/page.test.js` |
+| KF-PETA-13 | Klik dealer bisa dibuka jadi sebaran per kabupaten lalu per kelurahan, lengkap dengan unit dan % jangkauannya | `test/coverage-split.test.js` |
+| KF-PETA-14 | Sebaran itu dihitung di browser — nol permintaan ke server sampai satu kelurahan diklik | `test/coverage-split.test.js` |
 
 **KF-PETA-11 satu-satunya fitur yang butuh internet**, dan itu disengaja: citra
 satelitnya dari Esri, diminta di meeting. Peta lokal (PMTiles) tetap jalan penuh tanpa

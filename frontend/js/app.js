@@ -24,6 +24,7 @@ import {
 import { S } from './state.js';
 import {
   acceptMapPoint, closeOutletEditor, closeVillageDetail, jumpToVillage,
+  openDealerDetail, toggleDealerCity, jumpFromDealer,
   closeNewOutlet, closeMatchNames, confirmMatch, customerPage, dealerChoiceChanged,
   newOutletDealerChanged, openMatchNames, undoMatch,
   openNewOutlet, saveNewOutlet,
@@ -52,6 +53,7 @@ const HANDLERS = {
   selectOutlet, closeSelectionInfo, openVillageDetail, closeVillageDetail,
   // tabel
   switchTab, renderOutletTable, renderVillageTable, showOnMap, jumpToVillage, promptPin,
+  openDealerDetail, toggleDealerCity, jumpFromDealer,
   renderCustomerTable, searchCustomers, customerPage,
   openNewOutlet, closeNewOutlet, newOutletDealerChanged, saveNewOutlet,
   openMatchNames, closeMatchNames, confirmMatch, undoMatch,
@@ -147,7 +149,12 @@ export function renderAll() {
     drawMarkers();
     redrawMap();
   }
-  if (S.selectedVillage) openVillageDetail(S.selectedVillage);
+  // Panel geser digambar ulang mengikuti ISINYA, bukan selalu dianggap kelurahan.
+  // Sebelum ada panel dealer, baris ini cukup berbunyi "kalau ada kelurahan terpilih,
+  // buka lagi" — dan begitu panel dealer ada, tiap filter disentuh panelnya akan
+  // tertimpa jadi panel kelurahan tanpa ada yang meminta.
+  if (S.panelView && S.panelView.kind === 'dealer') openDealerDetail(S.panelView.code);
+  else if (S.selectedVillage) openVillageDetail(S.selectedVillage);
 }
 
 /* ==========================================================================

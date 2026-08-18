@@ -11,7 +11,7 @@ import {
   TABLE_ROW_LIMIT,
 } from './config.js';
 import { $, esc, formatNumber, sumBy, toast } from './dom.js';
-import { activeRows, filterValue } from './filters.js';
+import { activeRows, dealerBreakdown, filterValue } from './filters.js';
 import { selectOutlet } from './outlets.js';
 import { S } from './state.js';
 
@@ -29,14 +29,185 @@ function sectionHeader(icon, title, count) {
     `<span class="ml-auto mono text-slate-400">${esc(formatNumber(count))}</span></div>`;
 }
 
-export function openVillageDetail(code) {
+/* ==========================================================================
+   PANEL RINCIAN DEALER
+   ==========================================================================
+   Kartu dealer menjawab "berapa persen di dalam radius". Panel ini menjawab pertanyaan
+   yang selalu datang sesudahnya: "di kelurahan mana saja?".
+
+   DUA TINGKAT, dan itu hasil pengukuran. Dealer terbesar menyentuh 1.157 kelurahan dan
+   677 di antaranya cuma satu unit — daftar datar sepanjang itu isinya hampir seluruhnya
+   "1 unit". Kabupaten memampatkannya jadi 25 baris; kelurahannya menyusul waktu diklik.
+
+   Panelnya PANEL YANG SAMA dengan klik-kelurahan, bukan panel kedua. Di atas peta yang
+   sempit, dua panel bersanding menutupi justru wilayah yang sedang dilihat.
+
+   Nama konsumen tidak ikut di sini. Dia baru diambil waktu satu kelurahan diklik, dan
+   itu bukan pilihan rancangan: /api/customers menolak permintaan tanpa kode kelurahan,
+   supaya satu akun bersama tidak bisa menyedot seluruh basis data konsumen.
+   ========================================================================== */
+
+/**
+ * Jadwal menyembunyikan panel, supaya bisa DIBATALKAN.
+ *
+ * closeVillageDetail() menyelesaikan animasi geser dulu sebelum memasang `hidden`,
+ * jadi ada jendela 300 ms. Panel yang dibuka di dalam jendela itu akan disembunyikan
+ * lagi oleh jadwal lama yang belum sempat berjalan — panelnya tampak tidak terbuka
+ * sama sekali, tanpa satu pun pesan. Gejalanya bergantung waktu, jadi kadang muncul
+ * kadang tidak, dan itu yang membuatnya paling sulit dipercaya waktu dilaporkan.
+ */
+let hideTimer = null;
+
+/** Tampilkan panel geser, sekaligus batalkan jadwal sembunyi yang masih menggantung. */
+function showPanel() {
+  clearTimeout(hideTimer);
+  const panel = $('kelurahanDetailPanel');
+  panel.classList.remove('hidden');
+  requestAnimationFrame(() => panel.classList.remove('translate-x-full'));
+}
+
+/** Kabupaten yang sedang mekar. Bertahan waktu bolak-balik dari panel kelurahan. */
+const dealerCityOpen = new Set();
+
+/** Kelurahan per kabupaten yang ditampilkan sekaligus. Sisanya diringkas satu baris. */
+const VILLAGE_CHUNK = 200;
+
+function coverageBar(inside, covered) {
+  const percent = covered ? (inside / covered) * 100 : 0;
+  return `<div class="bar-jangkauan w-16 shrink-0" title="${esc(percent.toFixed(0))}% dalam jangkauan">` +
+    `<span style="width:${esc(percent.toFixed(1))}%"></span></div>`;
+}
+
+export function openDealerDetail(dealerCode) {
+  S.panelView = { kind: 'dealer', code: dealerCode };
+  // Sorotan kelurahan di peta dilepas: panel ini bicara tentang dealer, dan
+  // membiarkan satu kelurahan tetap tersorot membuat orang mengira daftarnya
+  // sedang disaring ke kelurahan itu.
+  S.selectedVillage = null;
+  if (S.layersReady) S.map.setFilter('kel-terpilih', ['==', ['get', 'kode'], '']);
+  const name = S.dealerNames[dealerCode] || dealerCode;
+
+  // Baris dealer ini pada periode dan wilayah aktif — TIDAK dipersempit filter pos,
+  // sama seperti kartu dealernya. Kalau berbeda, angka di panel dan di kartu tidak
+  // akan bersambung dan tidak ada yang tahu mana yang benar.
+  const period = filterValue('filter-periode');
+  const city = filterValue('filter-kota');
+  const province = filterValue('filter-provinsi');
+  const rows = S.sales.filter((r) => {
+    if (r.dealer !== dealerCode) return false;
+    if (period !== 'ALL' && r.period !== period) return false;
+    const village = S.villageByCode[r.village];
+    if (!village) return false;
+    if (city !== 'ALL' && village.cityCode !== city) return false;
+    if (province !== 'ALL' && village.provinceCode !== province) return false;
+    return true;
+  });
+
+  const cities = dealerBreakdown(rows);
+  const total = cities.reduce((sum, k) => sum + k.units, 0);
+  const villageCount = cities.reduce((sum, k) => sum + k.villages.length, 0);
+
+  $('kelurahanDetailTitle').textContent = name;
+  $('kelurahanDetailMeta').textContent =
+    `${formatNumber(cities.length)} kabupaten · ${formatNumber(villageCount)} kelurahan`;
+
+  $('kelurahanDetailList').innerHTML =
+    `<div class="pb-3 border-b border-slate-200">` +
+    `<div class="text-[11px] uppercase font-bold text-slate-400">Total penjualan</div>` +
+    `<div class="text-3xl font-extrabold text-slate-900 mono">${esc(formatNumber(total))}</div></div>` +
+    sectionHeader('buildings', 'Sebaran per Kabupaten', cities.length) +
+    (cities.length
+      ? cities.map((k) => dealerCityHtml(k, dealerCode)).join('')
+      : '<p class="text-xs text-slate-400 text-center py-4">Tidak ada penjualan pada filter ini.</p>');
+
+  showPanel();
+}
+
+function dealerCityHtml(kota, dealerCode) {
+  const open = dealerCityOpen.has(kota.cityCode);
+  const percent = kota.covered ? (kota.inside / kota.covered) * 100 : 0;
+
+  const shown = kota.villages.slice(0, VILLAGE_CHUNK);
+  const isi = open
+    ? shown.map((v) => {
+      const vp = v.covered ? (v.inside / v.covered) * 100 : 0;
+      return `<div class="flex items-center gap-2 pl-4 pr-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer" ` +
+        `onclick="jumpFromDealer('${esc(v.code)}','${esc(dealerCode)}')">` +
+        `<div class="flex-1 min-w-0">` +
+        `<div class="text-xs text-slate-700 truncate">${esc(v.name)}</div>` +
+        `<div class="text-[10px] text-slate-400 truncate">${esc(v.district)}</div></div>` +
+        (v.covered
+          ? coverageBar(v.inside, v.covered) +
+            `<span class="text-[10px] mono text-slate-400 w-8 text-right shrink-0">${esc(vp.toFixed(0))}%</span>`
+          : `<span class="text-[10px] text-amber-600 shrink-0" title="Belum ada batas wilayah">tanpa batas</span>`) +
+        `<span class="text-xs font-bold mono text-slate-800 w-8 text-right shrink-0">${esc(formatNumber(v.units))}</span>` +
+        `</div>`;
+    }).join('') +
+      (kota.villages.length > shown.length
+        ? `<div class="pl-4 py-1.5 text-[10px] text-slate-400">` +
+          `Menampilkan ${esc(formatNumber(shown.length))} dari ` +
+          `${esc(formatNumber(kota.villages.length))} kelurahan.</div>`
+        : '')
+    : '';
+
+  // Nama kabupaten diberi BARIS SENDIRI, bilah jangkauan turun ke baris kedua.
+  //
+  // Versi pertama menaruh semuanya sebaris — nama, bilah, persen, unit — dan di panel
+  // selebar 320 px nama kabupatennya terpotong jadi "Kabupat…". Cilacap dan Cirebon
+  // jadi tidak bisa dibedakan, dan itu menghapus satu-satunya hal yang membuat baris
+  // ini berguna.
+  return `<div class="border-b border-slate-100 last:border-0">` +
+    `<div class="flex items-start gap-2 px-2 py-2 rounded-lg hover:bg-slate-50 cursor-pointer" ` +
+    `onclick="toggleDealerCity('${esc(kota.cityCode)}','${esc(dealerCode)}')">` +
+    `<i class="ph ph-caret-${open ? 'down' : 'right'} text-slate-400 shrink-0 mt-0.5"></i>` +
+    `<div class="flex-1 min-w-0">` +
+    `<div class="text-sm font-semibold text-slate-800 truncate">${esc(kota.cityName)}</div>` +
+    `<div class="flex items-center gap-1.5 mt-0.5">` +
+    `<span class="text-[10px] text-slate-400 shrink-0">${esc(formatNumber(kota.villages.length))} kel</span>` +
+    coverageBar(kota.inside, kota.covered) +
+    `<span class="text-[10px] mono text-slate-400 shrink-0">${esc(percent.toFixed(0))}%</span>` +
+    `</div></div>` +
+    `<span class="text-sm font-bold mono text-slate-900 shrink-0">${esc(formatNumber(kota.units))}</span>` +
+    `</div>${isi}</div>`;
+}
+
+export function toggleDealerCity(cityCode, dealerCode) {
+  if (dealerCityOpen.has(cityCode)) dealerCityOpen.delete(cityCode);
+  else dealerCityOpen.add(cityCode);
+  openDealerDetail(dealerCode);
+}
+
+/**
+ * Dari panel dealer ke panel kelurahan, dengan jalan pulang.
+ *
+ * Kabupaten yang sedang mekar SENGAJA tidak direset — orang yang menelusuri satu
+ * kabupaten lalu kembali akan menemukannya persis seperti yang ditinggalkan.
+ */
+export function jumpFromDealer(villageCode, dealerCode) {
+  openVillageDetail(villageCode, dealerCode);
+}
+
+/**
+ * Panel rincian satu kelurahan.
+ *
+ * @param {string} code        kode kelurahan
+ * @param {string} [fromDealer] kalau dibuka dari panel dealer, kode dealernya —
+ *   panel diberi tautan kembali supaya orang tidak kehilangan jalur telusurnya
+ */
+export function openVillageDetail(code, fromDealer) {
   S.selectedVillage = code;
+  S.panelView = { kind: 'village', code: code };
   const village = S.villageByCode[code] || {};
   const rows = activeRows().filter((r) => r.village === code);
   const perOutlet = sumBy(rows, 'outlet');
   const total = Object.values(perOutlet).reduce((sum, n) => sum + n, 0);
   const order = Object.keys(perOutlet).sort((a, b) => perOutlet[b] - perOutlet[a]);
 
+  $('kelurahanDetailBack').innerHTML = fromDealer
+    ? `<button onclick="openDealerDetail('${esc(fromDealer)}')" ` +
+      `class="text-[11px] font-bold text-slate-500 hover:text-slate-800">` +
+      `&lsaquo; kembali ke ${esc(S.dealerNames[fromDealer] || fromDealer)}</button>`
+    : '';
   $('kelurahanDetailTitle').textContent = village.name || code;
   $('kelurahanDetailMeta').textContent =
     `${village.district || ''} · ${village.cityName || ''} · ${code}`;
@@ -69,9 +240,7 @@ export function openVillageDetail(code) {
         '<p class="text-xs text-slate-400 text-center py-3" id="village-customers">memuat…</p>'
       : '');
 
-  const panel = $('kelurahanDetailPanel');
-  panel.classList.remove('hidden');
-  requestAnimationFrame(() => panel.classList.remove('translate-x-full'));
+  showPanel();
 
   if (S.hasCustomers) loadVillageCustomers(code);
 }
@@ -125,8 +294,9 @@ async function loadVillageCustomers(code) {
 export function closeVillageDetail() {
   const panel = $('kelurahanDetailPanel');
   panel.classList.add('translate-x-full');
-  setTimeout(() => panel.classList.add('hidden'), 300);
+  hideTimer = setTimeout(() => panel.classList.add('hidden'), 300);
   S.selectedVillage = null;
+  S.panelView = null;
   if (S.layersReady) S.map.setFilter('kel-terpilih', ['==', ['get', 'kode'], '']);
 }
 

@@ -133,6 +133,56 @@ cuma perluasan ke Sulawesi ke timur.
 
 ## Selesai
 
+### Panel rincian dealer: sebaran per kabupaten lalu kelurahan (2026-08-18)
+
+Klik dealer sebelumnya cuma menjawab satu pertanyaan — berapa persen di dalam radius —
+lalu berhenti. Pertanyaan yang selalu datang sesudahnya, *"di kelurahan mana saja?"*,
+tidak terjawab di mana pun.
+
+**Diukur dulu, dan hasilnya mengubah bentuknya.** Dealer terbesar menyentuh 1.157
+kelurahan, tapi 677 di antaranya (59%) cuma satu unit; yang ≥5 unit cuma 62. Daftar
+datar sepanjang itu isinya hampir seluruhnya "1 unit" — panjang, tapi tidak menjawab
+apa pun. Jadi tingkat pertamanya **kabupaten** (23 baris untuk dealer itu), kelurahannya
+mekar waktu diklik.
+
+**Nol permintaan ke server untuk tiga tingkat pertama.** `S.sales` di browser sudah
+memuat `{village, dealer, units}` dan `S.coverage` sudah memuat rasio per (pos,
+kelurahan), jadi seluruh hitungan dealer → kabupaten → kelurahan murni di halaman.
+Nama konsumen baru diambil waktu satu kelurahan diklik — dan itu bukan pilihan
+rancangan, `/api/customers` menolak permintaan tanpa kode kelurahan. Diperiksa di
+browser: membuka panel dan memekarkan kabupaten menghasilkan **nol** permintaan, klik
+satu kelurahan menghasilkan **tepat satu**.
+
+Hitungannya di `dealerBreakdown()` yang murni, memakai ulang `splitByCoverage()` yang
+sama dengan seluruh aplikasi — bukan disalin. Aturan "kelurahan tanpa poligon
+dikeluarkan dari persentase" itu halus dan sudah pernah salah; satu-satunya cara
+memastikan tidak menyimpang adalah tidak punya salinan keduanya.
+
+**Dua hal yang cuma ketahuan karena dibuka di browser, bukan dari tes:**
+
+1. **Nama kabupaten terpotong jadi "Kabupat…"** di panel selebar 320 px, karena satu
+   baris dijejali nama, bilah, persen, dan unit. Cilacap dan Cirebon jadi tidak bisa
+   dibedakan — menghapus satu-satunya hal yang membuat baris itu berguna. Bilahnya
+   diturunkan ke baris kedua.
+2. **Jadwal sembunyi panel yang tidak bisa dibatalkan.** `closeVillageDetail()`
+   memasang `hidden` lewat `setTimeout` 300 ms supaya animasi gesernya selesai dulu.
+   Panel yang dibuka di dalam jendela itu disembunyikan lagi oleh jadwal lama —
+   panelnya tampak tidak terbuka sama sekali, tanpa pesan. Gejalanya bergantung waktu,
+   jadi kadang muncul kadang tidak. Timernya sekarang disimpan dan dibatalkan tiap
+   panel dibuka.
+
+**Angkanya diperiksa bersambung, bukan cuma terlihat masuk akal:** total di panel
+(2.099) sama persis dengan total di kartu dealer, dan sama dengan jumlah 23 kabupaten.
+Selisih dari ukuran awal saya (2.169) ternyata tepat 70 — total dealer itu di periode
+demo, karena SQL awal saya tidak menyaring periode. Cocok sampai satuannya.
+
+6/6 mutasi tertangkap: dikelompokkan per kecamatan, jangkauan dihitung dari seluruh
+baris dealer, dua pengurutan dibuang, jangkauan kabupaten dipaksa nol, dan kelurahan
+tanpa poligon dimasukkan ke penyebut. Yang keempat awalnya LOLOS — tesnya tidak pernah
+memeriksa `inside` tingkat kabupaten sama sekali.
+
+18/18 tes.
+
 ### Centang simpan data konsumen dibuang; impor lewat halaman selalu menyimpan (2026-08-18)
 
 Menggantikan entri beberapa jam sebelumnya yang baru menyalakannya secara bawaan.

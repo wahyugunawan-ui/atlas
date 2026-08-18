@@ -15,6 +15,7 @@ export const S = {
   lastImport: null,
   hasCustomers: false,
   pendingNames: 0,         // nama kelurahan yang menunggu dicocokkan manusia
+  panelView: null,         // {kind:'village'|'dealer', code} — isi panel geser
 
   // --- indeks, dibangun sekali saat muat ---
   villageByCode: {},

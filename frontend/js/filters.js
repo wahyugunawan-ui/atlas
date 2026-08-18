@@ -106,6 +106,71 @@ export function splitByCoverage(rows) {
 }
 
 /**
+ * Sebaran penjualan satu dealer: kabupaten -> kelurahan.
+ *
+ * DUA TINGKAT, dan itu hasil pengukuran bukan selera. Dealer terbesar menyentuh 1.157
+ * kelurahan, dan 677 di antaranya (59%) cuma satu unit. Daftar datar sepanjang itu
+ * isinya hampir seluruhnya "1 unit" — panjang, tapi tidak menjawab apa pun. Kabupaten
+ * memampatkannya jadi 25 baris yang terbaca sekali lihat, dan kelurahannya menyusul
+ * waktu diklik.
+ *
+ * Jangkauan tiap kelurahan dihitung lewat splitByCoverage() yang sama dengan seluruh
+ * aplikasi, BUKAN disalin ulang di sini. Aturan "kelurahan tanpa poligon dikeluarkan
+ * dari persentase dan dilaporkan terpisah" itu halus dan sudah pernah salah; satu-
+ * satunya cara memastikan dia tidak menyimpang adalah tidak punya salinan keduanya.
+ *
+ * @param {Array} rows  baris penjualan yang SUDAH disaring ke satu dealer
+ * @return {Array} kabupaten urut unit terbanyak, kelurahan di dalamnya juga
+ */
+export function dealerBreakdown(rows) {
+  const perKota = {};
+
+  rows.forEach((row) => {
+    const village = S.villageByCode[row.village];
+    if (!village) return;
+    const kota = perKota[village.cityCode] || (perKota[village.cityCode] = {
+      cityCode: village.cityCode,
+      cityName: village.cityName || village.cityCode,
+      units: 0,
+      byVillage: {},
+    });
+    kota.units += row.units;
+    (kota.byVillage[row.village] || (kota.byVillage[row.village] = [])).push(row);
+  });
+
+  return Object.values(perKota).map((kota) => {
+    const villages = Object.entries(kota.byVillage).map(([code, barisnya]) => {
+      // splitByCoverage dipanggil dengan baris KELURAHAN INI saja. Memanggilnya dengan
+      // seluruh baris dealer akan menghasilkan angka yang sama di tiap baris — masuk
+      // akal dilihat sekilas, dan salah di semuanya.
+      const split = splitByCoverage(barisnya);
+      const village = S.villageByCode[code] || {};
+      return {
+        code,
+        name: village.name || code,
+        district: village.district || '',
+        units: barisnya.reduce((sum, r) => sum + r.units, 0),
+        inside: split.inside,
+        covered: split.total,
+        noBoundary: split.noBoundary,
+      };
+    }).sort((a, b) => b.units - a.units || a.name.localeCompare(b.name));
+
+    return {
+      cityCode: kota.cityCode,
+      cityName: kota.cityName,
+      units: kota.units,
+      // Dijumlahkan dari kelurahannya, bukan dihitung ulang dari baris kabupaten.
+      // Kalau dihitung terpisah, dua angka di layar bisa tidak bersambung dan tidak
+      // ada yang tahu mana yang benar.
+      inside: villages.reduce((sum, v) => sum + v.inside, 0),
+      covered: villages.reduce((sum, v) => sum + v.covered, 0),
+      villages,
+    };
+  }).sort((a, b) => b.units - a.units || a.cityName.localeCompare(b.cityName));
+}
+
+/**
  * Kalimat yang menjelaskan 100%-nya siapa.
  *
  * Ada karena heatmapnya relatif: kelas warnanya dihitung ulang dari data yang lolos
