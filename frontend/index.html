@@ -371,12 +371,16 @@
           <button onclick="runUpload()" class="px-4 py-2 rounded-xl text-white text-xs font-bold shrink-0" style="background:var(--astra-navy)">Proses</button>
         </div>
 
-        <!-- Data konsumen adalah PII. Tidak ikut tersimpan kecuali dinyalakan di
-             sini, dan pilihannya sengaja mati secara bawaan. -->
+        <!-- Data konsumen adalah PII, dan centangnya MENYALA secara bawaan.
+             Keputusan pemilik proyek: tim memang memerlukan nama dan alamat tiap bulan,
+             dan default mati berarti tiap bulan ada peluang lupa lalu harus impor ulang.
+             Yang tidak berubah: server tetap tidak menyimpan apa pun kalau centangnya
+             dimatikan, dan datanya tetap masuk database terpisah astra_customers. -->
         <label class="mt-4 flex items-start gap-2 text-xs text-slate-600 cursor-pointer">
-          <input id="imp-konsumen" type="checkbox" class="mt-0.5">
+          <input id="imp-konsumen" type="checkbox" class="mt-0.5" checked>
           <span>Simpan juga <b>nama dan alamat konsumen</b> supaya bisa dilihat per kelurahan.
-          Tanpa ini, tidak ada satu pun data pribadi yang tersimpan di server.</span>
+          <b>Hilangkan centangnya</b> kalau bulan ini tidak perlu data pribadi &mdash; yang tersimpan
+          cuma angka penjualan.</span>
         </label>
 
         <button onclick="importStep(1)" class="mt-4 text-xs font-bold text-slate-400 hover:text-slate-700">&larr; kembali</button>

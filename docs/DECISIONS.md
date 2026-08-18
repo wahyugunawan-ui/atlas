@@ -664,3 +664,34 @@ kembar, berkas kode yang disebut harus ada, dan dokumen aktif tidak boleh menunj
 PLAN.md lagi. Penjaga folder sengaja dibedakan — berkas diperiksa di mana pun, folder
 telanjang hanya di dalam blok peta struktur, supaya prosa tetap boleh menyebut nama
 lama waktu bercerita tentang masa lalu.
+
+## [2026-08-18] Simpan data konsumen jadi menyala secara bawaan di halaman impor
+
+**Konteks:** Centang "simpan juga nama dan alamat konsumen" di halaman impor sebelumnya
+mati secara bawaan — opt-in. Pemilik proyek menunjukkan bahwa tim memang memerlukan data
+itu tiap bulan, jadi default mati berarti tiap bulan ada peluang lupa lalu harus impor
+ulang.
+**Keputusan:** Centangnya menyala secara bawaan di halaman. `npm run import` di baris
+perintah TETAP memerlukan `--konsumen` eksplisit.
+**Alasan:** Default seharusnya mencerminkan apa yang biasanya benar, dan di sini yang
+biasanya benar adalah menyimpannya. Opt-in melindungi dari menyimpan PII yang tidak
+diperlukan — tapi PII ini memang diperlukan, jadi yang dicegah bukan risiko, cuma
+pekerjaan yang terlewat. CLI dibedakan karena dipakai untuk skrip dan perbaikan cepat,
+dan perintah yang menyimpan data pribadi tanpa diminta adalah kejutan yang salah arah.
+**Alternatif yang ditolak:** Menyalakan keduanya — ditolak, lihat alasan CLI di atas.
+Membiarkan keduanya mati — ditolak, itu pertanyaan yang sudah dijawab pemilik proyek.
+**Konsekuensi:** Jaminan sisi server tidak berubah sedikit pun dan itu yang penting:
+`runImport` tanpa `withCustomers` tetap tidak menyentuh `astra_customers`, database
+konsumen tetap terpisah, dan `DROP DATABASE` tetap mencabut semuanya. Yang berpindah
+cuma nilai bawaan di satu atribut HTML.
+
+Dua jebakan yang lahir dari keputusan ini, dan penangkalnya:
+
+1. **Beda perilaku halaman dan CLI.** Orang yang terbiasa dengan halaman akan mengira
+   CLI sama, lalu bingung kenapa tab Data Konsumen kosong. CLI sekarang menyebutkannya
+   di layar tiap kali dijalankan tanpa `--konsumen`.
+2. **Atribut `checked` bisa hilang tanpa gejala.** Impor berikutnya tetap berjalan mulus
+   dan angkanya tetap benar; yang hilang cuma data konsumen, dan baru ketahuan
+   berminggu kemudian. `test/page.test.js` menjaga atribut itu, dan menjaga labelnya
+   tetap menjelaskan cara mematikannya — dengan default menyala, itu satu-satunya
+   petunjuk bahwa menolak menyimpan PII masih mungkin.

@@ -169,8 +169,13 @@ npm run seed-regions       isi ulang tabel kelurahan dan poligonnya
 npm run seed-coverage      hitung ulang SEMUA rasio jangkauan
 ```
 
-`--konsumen` menyimpan nama dan alamat konsumen. Tanpa itu, tidak ada satu pun PII yang
-masuk ke server.
+`--konsumen` menyimpan nama dan alamat konsumen ke database `astra_customers`. Tanpa itu,
+tidak ada satu pun PII yang masuk ke server.
+
+**Beda dengan halaman impor, dan itu disengaja:** centang "simpan nama dan alamat" di
+halaman **menyala secara bawaan**, karena tim memang memerlukannya tiap bulan. Di baris
+perintah tidak — perintah yang menyimpan data pribadi tanpa diminta adalah kejutan yang
+salah arah. Kalau dijalankan tanpa `--konsumen`, CLI menyebutkannya di layar.
 
 Menggeser pin satu pos lewat aplikasi **tidak** perlu `seed-coverage` — pos itu dihitung
 ulang sendiri waktu disimpan.

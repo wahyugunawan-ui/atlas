@@ -133,6 +133,38 @@ cuma perluasan ke Sulawesi ke timur.
 
 ## Selesai
 
+### Centang simpan data konsumen jadi menyala secara bawaan (2026-08-18)
+
+Sebelumnya mati secara bawaan — opt-in. Diubah setelah pemilik proyek menyebut alasan
+yang sederhana dan benar: tim **memang** memerlukan nama dan alamat tiap bulan, jadi
+default mati berarti tiap bulan ada peluang lupa lalu harus impor ulang.
+
+**Yang berubah cuma kenyamanannya, bukan jaminannya.** Tiga sifat yang menjadi dasar
+seluruh penanganan PII di proyek ini tidak tersentuh:
+
+- datanya tetap masuk database TERPISAH `astra_customers`, jadi `DROP DATABASE` masih
+  mencabut semuanya tanpa menyunting satu baris kode (`KNF-PRIVASI-2`)
+- server tetap tidak menyimpan apa pun kalau permintaannya tidak meminta — itu jaminan
+  di sisi server, bukan di centang, dan tetap dijaga `test/import.test.js`
+- pembatas laju dan catatan akses tetap berlaku
+
+**CLI sengaja TIDAK ikut berubah.** `npm run import` tetap butuh `--konsumen` eksplisit:
+perintah yang menyimpan data pribadi tanpa diminta adalah kejutan yang salah arah, dan
+CLI dipakai untuk skrip serta perbaikan cepat. Tapi bedanya jadi jebakan sendiri — orang
+yang terbiasa dengan halaman akan mengira keduanya sama, lalu bingung kenapa tab Data
+Konsumen kosong. Jadi CLI sekarang menyebutkannya di layar tiap kali dijalankan tanpa
+flag itu.
+
+**Dijaga karena gagalnya diam.** Kalau atribut `checked` hilang waktu markup dirapikan,
+impor bulan berikutnya berjalan mulus, angkanya benar, dan tidak ada satu pun error —
+yang hilang cuma data konsumen, dan baru ketahuan berminggu kemudian waktu ada yang
+mencari nama yang tidak pernah tersimpan. `test/page.test.js` memeriksa atribut itu ADA,
+dan memeriksa labelnya masih menjelaskan cara mematikannya: dengan default menyala, itu
+satu-satunya petunjuk bahwa menolak menyimpan PII masih mungkin.
+
+`KF-IMPOR-11` diperbarui bunyinya (dari "hanya tersimpan kalau diminta eksplisit" jadi
+jaminan sisi server), `KF-IMPOR-16` baru. 18/18 tes, 2/2 mutasi tertangkap.
+
 ### Hapus satu bulan (2026-08-18)
 
 Untuk bulan yang salah diimpor: berkas keliru, periode salah pilih, atau data uji yang

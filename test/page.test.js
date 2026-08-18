@@ -342,6 +342,35 @@ function test() {
   assert.ok(!themeLayers.some((l) => l.id === 'polos'),
     'tema punya lapisan bernama `polos` juga — namanya bertabrakan dengan latar kita');
 
+  /* ------------------------------------------------------------------------
+     10. centang simpan data konsumen: MENYALA secara bawaan
+     ------------------------------------------------------------------------
+     Keputusan pemilik proyek 2026-08-18: tim memang memerlukan nama dan alamat tiap
+     bulan, dan default mati berarti tiap bulan ada peluang lupa lalu harus impor ulang.
+
+     Dijaga karena gagalnya DIAM. Kalau atribut `checked` hilang waktu markup dirapikan,
+     impor bulan berikutnya berjalan mulus, angkanya benar, dan tidak ada satu pun error
+     — yang hilang cuma data konsumen, dan baru ketahuan berminggu kemudian waktu ada
+     yang mencari nama yang tidak pernah tersimpan.
+
+     Yang TIDAK dijaga di sini, karena sudah dijaga test/import.test.js: server tetap
+     tidak menyimpan apa pun kalau permintaannya tidak meminta. Default centang ini soal
+     kenyamanan, bukan pelonggaran jaminan.
+     ------------------------------------------------------------------------ */
+
+  const centang = html.match(/<input[^>]*id="imp-konsumen"[^>]*>/);
+  assert.ok(centang, 'centang simpan data konsumen hilang dari markup');
+  assert.match(centang[0], /\bchecked\b/,
+    'centang simpan data konsumen tidak lagi menyala secara bawaan. Impor berikutnya ' +
+    'akan berjalan mulus tanpa menyimpan nama dan alamat, dan tidak ada yang ' +
+    'menyadarinya sampai ada yang mencarinya');
+
+  // Labelnya harus menyebut cara mematikannya. Dengan default menyala, orang yang TIDAK
+  // mau menyimpan PII bulan itu perlu tahu bahwa pilihannya ada.
+  assert.match(html, /Hilangkan centangnya/i,
+    'label centang tidak lagi menjelaskan cara mematikannya — dengan default menyala, ' +
+    'itu satu-satunya petunjuk bahwa menyimpan PII bisa ditolak');
+
   const totalLines = files.reduce((sum, f) => sum + source[f].split('\n').length, 0);
   console.log(`OK page — ${files.length} modul (${totalLines} baris), ` +
     `${new Set(handlers).size} handler terdaftar, ${new Set(usedIds).size} id, ` +

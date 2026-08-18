@@ -173,7 +173,8 @@ siapa pun, dan banyak orang login bersamaan jalan dengan sendirinya.
 | KF-IMPOR-8 | Nama berkas dari pengguna tidak bisa keluar dari folder tujuan | `test/import.test.js` |
 | KF-IMPOR-9 | Tiap impor tercatat: waktu, IP, nama berkas, jumlah baris, hasil — termasuk yang gagal | `test/import.test.js` |
 | KF-IMPOR-10 | Berkas asli diarsipkan; arsip yang lewat 90 hari dibuang sendiri | `test/hardening.test.js` |
-| KF-IMPOR-11 | Data konsumen hanya tersimpan kalau diminta eksplisit | `test/import.test.js` |
+| KF-IMPOR-11 | Server tidak menyimpan data konsumen kalau permintaannya tidak meminta | `test/import.test.js` |
+| KF-IMPOR-16 | Centang simpan data konsumen **menyala secara bawaan** di halaman impor, dan labelnya menjelaskan cara mematikannya | `test/page.test.js` |
 | KF-IMPOR-12 | Satu periode bisa dihapus seluruhnya — penjualan, daftar belum cocok, dan data konsumennya | `test/import.test.js` |
 | KF-IMPOR-13 | Menghapus periode **wajib mengetik ulang periodenya**, dan itu diperiksa di server, bukan cuma di layar | `test/server-auth.test.js` |
 | KF-IMPOR-14 | Berkas Excel di arsip **tidak** ikut terhapus — impor ulang berkas yang sama memulihkan keadaannya persis | `test/import.test.js` |

@@ -31,6 +31,16 @@ async function main() {
   console.log(`\n  Mengimpor ${file} sebagai periode ${period}...`);
   if (withCustomers) {
     console.log('  Data konsumen IKUT disimpan (nama dan alamat) ke database astra_customers.');
+  } else {
+    // Diperingatkan, bukan diam-diam dilewati.
+    //
+    // Centang di halaman impor MENYALA secara bawaan, jalur ini tidak. Bedanya
+    // disengaja — CLI dipakai untuk skrip dan perbaikan cepat, dan perintah yang
+    // menyimpan PII tanpa diminta adalah kejutan yang salah arah. Tapi orang yang
+    // terbiasa dengan halaman akan mengira keduanya sama, lalu bingung kenapa tab
+    // Data Konsumen kosong. Satu baris ini yang mencegahnya.
+    console.log('  Data konsumen TIDAK disimpan. Tambahkan --konsumen kalau perlu.');
+    console.log('  (Centang di halaman impor menyala secara bawaan; di sini tidak.)');
   }
 
   try {
