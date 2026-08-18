@@ -23,7 +23,8 @@
     "seed-coverage": "node scripts/seed-coverage.js",
     "fetch-boundaries": "node scripts/fetch-boundaries.js",
     "seed-boundaries": "node scripts/seed-boundaries.js",
-    "export-geo": "node scripts/export-geo.js"
+    "export-geo": "node scripts/export-geo.js",
+    "demo-excel": "node scripts/make-demo-excel.js"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",

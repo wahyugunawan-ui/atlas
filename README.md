@@ -164,6 +164,7 @@ npm run import -- <berkas> <YYYY-MM> [--konsumen]
 npm run fetch-boundaries   unduh berkas batas wilayah Jateng + DIY (sekali)
 npm run seed-boundaries    muat 8.999 kelurahan + poligonnya ke database
 npm run export-geo         segarkan berkas peta untuk browser
+npm run demo-excel -- <tujuan.xlsx>   berkas Excel dummy untuk latihan/demo
 npm run seed-regions       isi ulang tabel kelurahan dan poligonnya
 npm run seed-coverage      hitung ulang SEMUA rasio jangkauan
 ```
@@ -204,6 +205,25 @@ sama; mengimpor ulang berkas yang sama aman dan tidak menggandakan data.
 
 Nama yang tidak punya saran sama sekali biasanya pembeli dari luar Jawa Tengah + DIY.
 Itu memang dibiarkan, dan tetap dilaporkan sebagai belum cocok.
+
+---
+
+## Latihan impor tanpa menyentuh data asli
+
+```
+npm run demo-excel -- C:\astra-data\demo\DEMO-September-2026.xlsx
+```
+
+301 baris berisi kelurahan dan pos sungguhan supaya angkanya masuk akal, tapi nama dan
+alamat konsumennya dikarang. Sengaja tidak sempurna: lima nama kelurahan dieja salah
+satu huruf dan satu pos belum terdaftar, jadi yang bisa ditunjukkan bukan cuma "impor
+berhasil" tapi juga baris yang belum cocok, alat Cocokkan Nama, dan deteksi pos baru.
+
+**Pilih bulan yang belum ada datanya.** Periodenya ditentukan di halaman, bukan dari
+isi berkasnya — dan impor menghapus lalu menulis ulang periode yang dipilih. Berkas demo
+yang diimpor ke bulan yang sudah berisi data asli akan menimpanya.
+
+Setelah selesai, hapus bulannya lewat **Import Data → Periode Tersimpan → hapus**.
 
 ---
 
