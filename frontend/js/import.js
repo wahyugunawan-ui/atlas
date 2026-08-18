@@ -106,13 +106,10 @@ export async function runUpload() {
   $('imp-bar').style.width = '0%';
   $('imp-proc-step').textContent = '';
 
-  const withCustomers = $('imp-konsumen').checked;
-
   try {
     const result = await uploadImport({
       file: STATE.file,
       period,
-      withCustomers,
       onProgress: (ratio) => {
         // Unggah cuma separuh cerita; sisanya server yang bekerja. Bar berhenti di
         // 60% lalu berpindah ke pesan "diproses" supaya tidak terlihat menggantung

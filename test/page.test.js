@@ -343,33 +343,34 @@ function test() {
     'tema punya lapisan bernama `polos` juga — namanya bertabrakan dengan latar kita');
 
   /* ------------------------------------------------------------------------
-     10. centang simpan data konsumen: MENYALA secara bawaan
+     10. simpan data konsumen tidak lagi bisa dimatikan dari halaman
      ------------------------------------------------------------------------
-     Keputusan pemilik proyek 2026-08-18: tim memang memerlukan nama dan alamat tiap
-     bulan, dan default mati berarti tiap bulan ada peluang lupa lalu harus impor ulang.
+     Centangnya dibuang 2026-08-18 atas keputusan pemilik proyek: tim selalu memerlukan
+     nama dan alamat, jadi pilihannya cuma menyediakan peluang lupa.
 
-     Dijaga karena gagalnya DIAM. Kalau atribut `checked` hilang waktu markup dirapikan,
-     impor bulan berikutnya berjalan mulus, angkanya benar, dan tidak ada satu pun error
-     — yang hilang cuma data konsumen, dan baru ketahuan berminggu kemudian waktu ada
-     yang mencari nama yang tidak pernah tersimpan.
+     Yang dijaga di sini BUKAN hilangnya centang — itu perubahan yang terlihat. Yang
+     dijaga dua hal yang gagalnya diam:
 
-     Yang TIDAK dijaga di sini, karena sudah dijaga test/import.test.js: server tetap
-     tidak menyimpan apa pun kalau permintaannya tidak meminta. Default centang ini soal
-     kenyamanan, bukan pelonggaran jaminan.
+     1. Halaman tidak boleh diam-diam mengirim withCustomers=0. Kalau ada yang
+        menambahkannya kembali, impor berjalan mulus dan tab Data Konsumen kosong
+        selamanya tanpa satu pun error.
+     2. Pemberitahuannya harus tetap ada. Orang yang mengunggah tidak lagi bisa menolak
+        di sini, jadi setidaknya dia berhak TAHU bahwa data pribadi ikut tersimpan.
+        Menghapus pilihan boleh; menghapus pemberitahuannya tidak.
      ------------------------------------------------------------------------ */
 
-  const centang = html.match(/<input[^>]*id="imp-konsumen"[^>]*>/);
-  assert.ok(centang, 'centang simpan data konsumen hilang dari markup');
-  assert.match(centang[0], /\bchecked\b/,
-    'centang simpan data konsumen tidak lagi menyala secara bawaan. Impor berikutnya ' +
-    'akan berjalan mulus tanpa menyimpan nama dan alamat, dan tidak ada yang ' +
-    'menyadarinya sampai ada yang mencarinya');
+  assert.ok(!/imp-konsumen/.test(html),
+    'centang imp-konsumen muncul lagi di markup — pilihannya sudah dibuang, dan ' +
+    'menghidupkannya setengah jalan membuat halaman dan server tidak sepakat');
 
-  // Labelnya harus menyebut cara mematikannya. Dengan default menyala, orang yang TIDAK
-  // mau menyimpan PII bulan itu perlu tahu bahwa pilihannya ada.
-  assert.match(html, /Hilangkan centangnya/i,
-    'label centang tidak lagi menjelaskan cara mematikannya — dengan default menyala, ' +
-    'itu satu-satunya petunjuk bahwa menyimpan PII bisa ditolak');
+  assert.ok(!/withCustomers/.test(source['api.js']),
+    'api.js mengirim withCustomers lagi. Server memperlakukan absennya field sebagai ' +
+    '"simpan"; mengirimnya kembali membuka jalan mengirim 0 dan mematikan penyimpanan ' +
+    'data konsumen tanpa ada yang menyadarinya');
+
+  assert.match(html, /Nama dan alamat konsumen ikut tersimpan/i,
+    'pemberitahuan bahwa data pribadi ikut tersimpan hilang dari halaman impor. ' +
+    'Pilihannya memang dibuang, tapi pengunggah tetap berhak tahu apa yang terjadi');
 
   const totalLines = files.reduce((sum, f) => sum + source[f].split('\n').length, 0);
   console.log(`OK page — ${files.length} modul (${totalLines} baris), ` +

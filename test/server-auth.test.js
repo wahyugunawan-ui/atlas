@@ -8,6 +8,7 @@
 const assert = require('assert');
 const http = require('http');
 const { buildApp } = require('../backend/server/app');
+const { simpanKonsumen } = require('../backend/server/routes');
 const { hashPassword, createSession, COOKIE_NAME } = require('../backend/server/auth');
 
 const PASSWORD = 'sandi-uji-tim-channel';
@@ -199,6 +200,27 @@ async function test() {
       '/api/customers?village=34.04.01.2001', { cookie: sesi });
     assert.strictEqual(perKelurahan.status, 429,
       '/api/customers tidak ikut dibatasi — pembatasnya cuma dipasang di satu rute');
+
+    /* --------------------------------------------------------------------
+       Absennya withCustomers berarti SIMPAN
+       --------------------------------------------------------------------
+       Arah yang gampang terbalik, dan terbaliknya tidak berbunyi. Halaman impor tidak
+       lagi mengirim field ini sejak centangnya dibuang; kalau aturannya ditulis
+       `=== '1'`, halaman yang tidak mengirim apa-apa berarti TIDAK PERNAH menyimpan.
+       Impor tetap berjalan mulus, angka penjualannya tetap benar, dan tab Data
+       Konsumen diam-diam kosong selamanya.
+
+       Nilai '0' yang eksplisit tetap mematikannya, dan itu yang menjaga jalur CLI dan
+       tes tetap bisa mengimpor tanpa PII — dasar dari KNF-PRIVASI-2.
+       -------------------------------------------------------------------- */
+    assert.strictEqual(simpanKonsumen(undefined), true,
+      'field yang tidak dikirim diperlakukan sebagai "jangan simpan" — halaman impor ' +
+      'tidak mengirimnya sama sekali, jadi data konsumen tidak akan pernah tersimpan');
+    assert.strictEqual(simpanKonsumen(''), true);
+    assert.strictEqual(simpanKonsumen('1'), true);
+    assert.strictEqual(simpanKonsumen('0'), false,
+      "'0' yang eksplisit harus tetap mematikannya — itu jalan satu-satunya mengimpor " +
+      'tanpa PII, dan tes PII-bisa-dicabut bergantung padanya');
 
     /* ----------------------------------------------------------------------
        Hapus periode: konfirmasinya diperiksa DI SERVER

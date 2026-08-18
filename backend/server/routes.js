@@ -23,6 +23,22 @@ const MAX_UPLOAD = 25 * 1024 * 1024;
  */
 const UPLOAD_KEEP_DAYS = 90;
 
+/**
+ * Apakah impor ini ikut menyimpan nama dan alamat konsumen.
+ *
+ * ABSENNYA FIELD BERARTI YA, dan arah itu yang penting. Halaman impor tidak lagi
+ * mengirim field ini sama sekali — centangnya dibuang 2026-08-18 karena tim selalu
+ * memerlukan datanya. Kalau aturannya ditulis `=== '1'`, halaman yang tidak mengirim
+ * apa-apa berarti TIDAK PERNAH menyimpan: impor berjalan mulus, angkanya benar, dan
+ * tab Data Konsumen diam-diam kosong selamanya.
+ *
+ * Cuma nilai '0' yang eksplisit yang mematikannya. Itu menjaga jalur CLI dan tes tetap
+ * bisa mengimpor tanpa PII — jaminan yang mendasari KNF-PRIVASI-2.
+ */
+function simpanKonsumen(field) {
+  return String(field) !== '0';
+}
+
 const PERIOD = /^\d{4}-(0[1-9]|1[0-2])$/;
 const VILLAGE = /^\d{2}\.\d{2}\.\d{2}\.\d{4}$/;
 const CITY = /^\d{2}\.\d{2}$/;
@@ -396,7 +412,7 @@ function build(config) {
           period,
           fileName: path.basename(original),
           ip: req.ip,
-          withCustomers: String(parsed.fields.withCustomers) === '1',
+          withCustomers: simpanKonsumen(parsed.fields.withCustomers),
           config,
         });
         res.json(result);
@@ -483,4 +499,4 @@ function pruneUploads(dir) {
   return dibuang;
 }
 
-module.exports = { build, parseMultipart, pruneUploads, MAX_UPLOAD, UPLOAD_KEEP_DAYS };
+module.exports = { build, simpanKonsumen, parseMultipart, pruneUploads, MAX_UPLOAD, UPLOAD_KEEP_DAYS };

@@ -695,3 +695,28 @@ Dua jebakan yang lahir dari keputusan ini, dan penangkalnya:
    berminggu kemudian. `test/page.test.js` menjaga atribut itu, dan menjaga labelnya
    tetap menjelaskan cara mematikannya — dengan default menyala, itu satu-satunya
    petunjuk bahwa menolak menyimpan PII masih mungkin.
+
+## [2026-08-18] Pilihan simpan data konsumen dibuang dari halaman impor
+
+**Menggantikan keputusan [2026-08-18] "Simpan data konsumen jadi menyala secara bawaan"**
+yang diambil beberapa jam sebelumnya.
+**Konteks:** Setelah defaultnya dinyalakan, pemilik proyek menegaskan bahwa pilihannya
+sendiri tidak perlu ada — data nama dan alamat wajib tersimpan tiap bulan.
+**Keputusan:** Centangnya dibuang dari halaman impor. Impor lewat halaman selalu
+menyimpan. `npm run import` tetap memerlukan `--konsumen` eksplisit.
+**Alasan:** Pilihan yang jawabannya selalu sama bukan pilihan, cuma peluang salah. Yang
+hilang bukan perlindungan — perlindungannya ada di pemisahan database dan di jaminan
+sisi server, bukan di centang.
+**Konsekuensi:** Satu-satunya jalur mengimpor tanpa PII sekarang baris perintah. Semua
+impor lewat halaman, termasuk impor coba-coba dan berkas demo, menyimpan isi kolom nama
+dan alamat apa adanya.
+
+Dua hal yang dijaga karena keputusan ini:
+
+1. **Arah nilai bawaan.** Halaman tidak lagi mengirim field `withCustomers`, jadi aturan
+   `=== '1'` akan berarti tidak pernah menyimpan — kebalikan persis dari yang diminta,
+   tanpa error dan tanpa tes merah. Sekarang `!== '0'`, dikurung dalam
+   `simpanKonsumen()` yang diekspor supaya bisa diuji langsung.
+2. **Pemberitahuan tetap ada.** Pengunggah tidak lagi bisa menolak, jadi setidaknya
+   berhak tahu. Menghapus pilihan boleh; menghapus pemberitahuannya tidak, dan
+   `test/page.test.js` menjaganya.

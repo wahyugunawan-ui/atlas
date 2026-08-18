@@ -371,17 +371,18 @@
           <button onclick="runUpload()" class="px-4 py-2 rounded-xl text-white text-xs font-bold shrink-0" style="background:var(--astra-navy)">Proses</button>
         </div>
 
-        <!-- Data konsumen adalah PII, dan centangnya MENYALA secara bawaan.
-             Keputusan pemilik proyek: tim memang memerlukan nama dan alamat tiap bulan,
-             dan default mati berarti tiap bulan ada peluang lupa lalu harus impor ulang.
-             Yang tidak berubah: server tetap tidak menyimpan apa pun kalau centangnya
-             dimatikan, dan datanya tetap masuk database terpisah astra_customers. -->
-        <label class="mt-4 flex items-start gap-2 text-xs text-slate-600 cursor-pointer">
-          <input id="imp-konsumen" type="checkbox" class="mt-0.5" checked>
-          <span>Simpan juga <b>nama dan alamat konsumen</b> supaya bisa dilihat per kelurahan.
-          <b>Hilangkan centangnya</b> kalau bulan ini tidak perlu data pribadi &mdash; yang tersimpan
-          cuma angka penjualan.</span>
-        </label>
+        <!-- Dulu di sini ada centang untuk memilih. Dibuang 2026-08-18 atas keputusan
+             pemilik proyek: tim selalu memerlukan nama dan alamat, jadi pilihannya
+             cuma menyediakan peluang lupa.
+
+             Yang TIDAK ikut dibuang: pemberitahuannya. Orang yang mengunggah berhak
+             tahu bahwa data pribadi ikut tersimpan, walaupun dia tidak bisa menolaknya
+             di sini. Jalan untuk tidak menyimpan masih ada lewat baris perintah. -->
+        <div class="mt-4 flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          <i class="ph-fill ph-info text-slate-400 mt-0.5"></i>
+          <span><b>Nama dan alamat konsumen ikut tersimpan</b> supaya bisa dilihat per
+          kelurahan. Tersimpan di database terpisah dan tiap aksesnya dicatat.</span>
+        </div>
 
         <button onclick="importStep(1)" class="mt-4 text-xs font-bold text-slate-400 hover:text-slate-700">&larr; kembali</button>
       </div>

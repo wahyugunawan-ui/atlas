@@ -172,10 +172,13 @@ npm run seed-coverage      hitung ulang SEMUA rasio jangkauan
 `--konsumen` menyimpan nama dan alamat konsumen ke database `astra_customers`. Tanpa itu,
 tidak ada satu pun PII yang masuk ke server.
 
-**Beda dengan halaman impor, dan itu disengaja:** centang "simpan nama dan alamat" di
-halaman **menyala secara bawaan**, karena tim memang memerlukannya tiap bulan. Di baris
-perintah tidak — perintah yang menyimpan data pribadi tanpa diminta adalah kejutan yang
-salah arah. Kalau dijalankan tanpa `--konsumen`, CLI menyebutkannya di layar.
+**Beda dengan halaman impor, dan itu disengaja:** impor lewat halaman **selalu**
+menyimpan nama dan alamat — pilihannya sudah dibuang karena tim memerlukannya tiap
+bulan. Di baris perintah tidak: perintah yang menyimpan data pribadi tanpa diminta
+adalah kejutan yang salah arah, dan CLI dipakai untuk skrip serta perbaikan cepat.
+Kalau dijalankan tanpa `--konsumen`, CLI menyebutkannya di layar.
+
+Jadi **satu-satunya cara mengimpor tanpa PII sekarang lewat baris perintah.**
 
 Menggeser pin satu pos lewat aplikasi **tidak** perlu `seed-coverage` — pos itu dihitung
 ulang sendiri waktu disimpan.

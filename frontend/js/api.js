@@ -139,11 +139,10 @@ export function saveOutlet(code, patch) {
  * fetch belum punya cara melaporkannya. Berkasnya ±2,5 MB dan pengunggahnya
  * menunggu; bar yang bergerak itu yang membedakan "sedang jalan" dari "menggantung".
  */
-export function uploadImport({ file, period, withCustomers, onProgress }) {
+export function uploadImport({ file, period, onProgress }) {
   return new Promise((resolve, reject) => {
     const form = new FormData();
     form.append('period', period);
-    form.append('withCustomers', withCustomers ? '1' : '0');
     form.append('file', file);
 
     const xhr = new XMLHttpRequest();

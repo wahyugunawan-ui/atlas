@@ -133,6 +133,38 @@ cuma perluasan ke Sulawesi ke timur.
 
 ## Selesai
 
+### Centang simpan data konsumen dibuang; impor lewat halaman selalu menyimpan (2026-08-18)
+
+Menggantikan entri beberapa jam sebelumnya yang baru menyalakannya secara bawaan.
+Pemilik proyek menegaskan: pilihannya tidak perlu ada, datanya wajib.
+
+**Yang dibuang cuma pilihannya. Jaminan sisi server tidak berubah sedikit pun:**
+`runImport` tanpa `withCustomers` tetap tidak menyentuh `astra_customers`, database
+konsumen tetap terpisah, `DROP DATABASE` tetap mencabut semuanya, dan pembatas laju
+serta catatan akses tetap berlaku. Jalur mengimpor tanpa PII masih ada — sekarang hanya
+lewat `npm run import` tanpa `--konsumen`.
+
+**Jebakan terbesarnya arah nilai bawaan, dan hampir terpasang terbalik.** Halaman tidak
+lagi mengirim field `withCustomers` sama sekali, sementara rutenya berbunyi
+`String(field) === '1'`. Kalau dibiarkan, hasilnya kebalikan persis dari yang diminta:
+halaman yang tidak mengirim apa-apa berarti TIDAK PERNAH menyimpan — impor tetap
+berjalan mulus, angka penjualannya tetap benar, dan tab Data Konsumen diam-diam kosong
+selamanya. Tidak ada error, tidak ada tes merah.
+
+Diperbaiki jadi `!== '0'` dan dikurung dalam fungsi bernama `simpanKonsumen()` yang
+diekspor supaya bisa diuji langsung. Absennya field = simpan; hanya `0` yang eksplisit
+yang mematikannya, dan itu yang menjaga jalur CLI dan tes tetap bisa mengimpor tanpa PII.
+
+**Pemberitahuannya sengaja TIDAK ikut dibuang.** Pengunggah tidak lagi bisa menolak di
+halaman, jadi setidaknya dia berhak tahu apa yang terjadi. Centangnya diganti satu baris
+keterangan, dan `test/page.test.js` menjaga keterangan itu tetap ada: menghapus pilihan
+boleh, menghapus pemberitahuan tidak.
+
+Empat mutasi diuji, empat tertangkap — arah nilai bawaan dibalik, `api.js` mengirim
+`withCustomers=0` lagi, pemberitahuan dihapus, dan centang dihidupkan setengah jalan.
+
+`KF-IMPOR-16` ditulis ulang; `KF-IMPOR-17` dan `KF-IMPOR-18` baru. 18/18 tes.
+
 ### Centang simpan data konsumen jadi menyala secara bawaan (2026-08-18)
 
 Sebelumnya mati secara bawaan — opt-in. Diubah setelah pemilik proyek menyebut alasan
