@@ -372,6 +372,46 @@ function test() {
     'pemberitahuan bahwa data pribadi ikut tersimpan hilang dari halaman impor. ' +
     'Pilihannya memang dibuang, tapi pengunggah tetap berhak tahu apa yang terjadi');
 
+  /* ------------------------------------------------------------------------
+     11. lingkaran radius mengikuti radius yang DIPILIH
+     ------------------------------------------------------------------------
+     Pernah salah: lingkarannya digambar dengan konstanta RADIUS_METERS yang selalu
+     5.000, sementara tombol 3/5/7/10 km mengubah S.radiusM dan seluruh persentase di
+     layar. Tidak ada error — peta dan angka cuma menceritakan dua hal berbeda, dan
+     lingkaran itu justru yang dipakai orang untuk mempercayai angkanya.
+     ------------------------------------------------------------------------ */
+
+  // Dicocokkan sebagai teks biasa, bukan regex: polanya penuh tanda kurung dan titik,
+  // dan regex yang escape-nya meleset akan cocok dengan apa saja — penjaga yang tidak
+  // pernah bisa merah.
+  assert.ok(source['map.js'].includes('circle(outlet.lng, outlet.lat, S.radiusM)'),
+    'lingkaran radius tidak digambar dari S.radiusM. Kalau memakai konstanta, ' +
+    'menekan 3 km atau 10 km mengubah angkanya tapi lingkarannya diam di 5 km');
+
+  /* ------------------------------------------------------------------------
+     12. tooltip peta menghitung dari sumber yang SAMA dengan petanya
+     ------------------------------------------------------------------------
+     Tooltip menampilkan angka di atas poligon yang sedang diwarnai choropleth. Kalau
+     dia membaca S.sales langsung alih-alih activeRows(), angkanya berhenti mengikuti
+     filter — poligon gelap karena satu dealer, tapi tooltipnya menyebut total semua
+     dealer. Dua angka yang bertentangan di layar yang sama, tanpa satu pun error.
+     ------------------------------------------------------------------------ */
+
+  assert.ok(/villageTooltipData/.test(source['outlets.js']),
+    'fungsi data tooltip kelurahan hilang dari outlets.js');
+  assert.ok(!/S\.sales/.test(source['outlets.js']),
+    'outlets.js membaca S.sales langsung. Tooltip harus lewat activeRows() supaya ' +
+    'angkanya mengikuti filter yang sama dengan warna poligon di bawahnya');
+  assert.ok(source['outlets.js'].includes('const rows = activeRows();'),
+    'tooltip kelurahan tidak memakai activeRows()');
+
+  // Dan tooltipnya harus benar-benar terpasang ke gerakan kursor, bukan cuma ada.
+  assert.ok(source['app.js'].includes("S.map.on('mousemove', 'kel-isi'"),
+    'tooltip kelurahan tidak terpasang ke mousemove — fungsinya ada tapi tidak pernah ' +
+    'dipanggil, dan itu tidak membuat apa pun gagal');
+  assert.ok(/showVillageTooltip/.test(source['app.js']),
+    'app.js tidak memanggil showVillageTooltip');
+
   const totalLines = files.reduce((sum, f) => sum + source[f].split('\n').length, 0);
   console.log(`OK page — ${files.length} modul (${totalLines} baris), ` +
     `${new Set(handlers).size} handler terdaftar, ${new Set(usedIds).size} id, ` +

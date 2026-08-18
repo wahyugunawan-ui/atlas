@@ -7,7 +7,7 @@
  */
 import { dealerColor } from './colors.js';
 import { $, esc, formatNumber, sumBy } from './dom.js';
-import { activeRows, applyScope, filterValue } from './filters.js';
+import { activeRows, applyScope, filterValue, splitByCoverage } from './filters.js';
 import { S } from './state.js';
 
 export function drawMarkers() {
@@ -80,4 +80,87 @@ export function closeSelectionInfo() {
   S.selectedOutlet = null;
   $('filter-pos').value = 'ALL';
   window.renderAll();
+}
+
+/* ==========================================================================
+   TOOLTIP KELURAHAN DI PETA
+   ==========================================================================
+   Sebaran per kelurahan dan kabupaten terbaca TANPA mengklik apa pun — arahkan kursor,
+   angkanya muncul. Panel rincian tetap ada untuk menelusuri berurutan; ini untuk
+   pertanyaan yang muncul sambil melihat peta: "yang gelap di sini berapa?".
+
+   Mengikuti ruang lingkup yang sedang aktif. Kalau satu dealer sedang dipilih, yang
+   ditampilkan penjualan DEALER ITU di kelurahan tersebut — bukan total semua dealer.
+   Kalau tidak ada yang dipilih, ya totalnya. Angka di tooltip tidak boleh menghitung
+   hal yang berbeda dari peta yang sedang diwarnai di bawahnya.
+   ========================================================================== */
+
+/**
+ * Ringkasan satu kelurahan beserta kabupatennya, dari baris yang sedang aktif.
+ *
+ * Dihitung saat kursor lewat, bukan disiapkan di awal. 4.003 kelurahan x tiap perubahan
+ * filter berarti pekerjaan yang hampir seluruhnya terbuang — yang dilihat orang cuma
+ * satu per satu.
+ */
+export function villageTooltipData(villageCode) {
+  const village = S.villageByCode[villageCode];
+  if (!village) return null;
+
+  const rows = activeRows();
+  const diKelurahan = rows.filter((r) => r.village === villageCode);
+  const diKabupaten = rows.filter((r) => {
+    const v = S.villageByCode[r.village];
+    return v && v.cityCode === village.cityCode;
+  });
+
+  const kel = splitByCoverage(diKelurahan);
+  const kab = splitByCoverage(diKabupaten);
+  const kabVillages = new Set(diKabupaten.map((r) => r.village));
+
+  return {
+    name: village.name,
+    district: village.district,
+    cityName: village.cityName,
+    units: diKelurahan.reduce((sum, r) => sum + r.units, 0),
+    inside: kel.inside,
+    covered: kel.total,
+    hasGeom: village.hasGeom !== false,
+    city: {
+      units: diKabupaten.reduce((sum, r) => sum + r.units, 0),
+      inside: kab.inside,
+      covered: kab.total,
+      villages: kabVillages.size,
+    },
+  };
+}
+
+export function showVillageTooltip(villageCode, event) {
+  const d = villageTooltipData(villageCode);
+  const tip = $('tooltip');
+  if (!d) { tip.classList.remove('show'); return; }
+
+  const persen = (inside, covered) =>
+    covered ? `${(inside / covered * 100).toFixed(0)}% dalam jangkauan` : null;
+  const kelPersen = persen(d.inside, d.covered);
+  const kabPersen = persen(d.city.inside, d.city.covered);
+
+  tip.innerHTML =
+    `<div class="font-bold text-white">${esc(d.name)}</div>` +
+    `<div class="text-[11px] text-slate-300">${esc(d.district || '')}</div>` +
+    `<div class="text-[11px] text-slate-200 mt-1.5">` +
+    `<b>${esc(formatNumber(d.units))}</b> penjualan` +
+    (kelPersen ? ` · ${esc(kelPersen)}` : '') + `</div>` +
+    // Kelurahan tanpa batas wilayah disebut apa adanya, bukan ditampilkan 0%. Nol yang
+    // sebenarnya "belum bisa dihitung" adalah cara tercepat membuat orang salah simpul.
+    (d.hasGeom ? '' :
+      `<div class="text-[10px] text-amber-300 mt-0.5">belum ada batas wilayah — ` +
+      `jangkauannya tidak bisa dihitung</div>`) +
+    `<div class="text-[11px] text-slate-400 mt-1.5 pt-1.5 border-t border-slate-600">` +
+    `${esc(d.cityName || '')}<br>` +
+    `<b class="text-slate-300">${esc(formatNumber(d.city.units))}</b> penjualan di ` +
+    `${esc(formatNumber(d.city.villages))} kelurahan` +
+    (kabPersen ? ` · ${esc(kabPersen)}` : '') + `</div>`;
+
+  tip.classList.add('show');
+  moveTooltip(event);
 }

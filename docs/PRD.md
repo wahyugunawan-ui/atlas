@@ -206,6 +206,8 @@ retensi 90 hari (`KNF-PRIVASI-5`).
 | KF-PETA-12 | Basemap yang tidak dipilih dimatikan **seluruhnya**, termasuk lapisan yang tidak punya `source` | `test/page.test.js` |
 | KF-PETA-13 | Klik dealer bisa dibuka jadi sebaran per kabupaten lalu per kelurahan, lengkap dengan unit dan % jangkauannya | `test/coverage-split.test.js` |
 | KF-PETA-14 | Sebaran itu dihitung di browser — nol permintaan ke server sampai satu kelurahan diklik | `test/coverage-split.test.js` |
+| KF-PETA-15 | Kursor di atas kelurahan menampilkan unit dan % jangkauannya, plus angka kabupatennya — tanpa klik | `test/page.test.js` |
+| KF-PETA-16 | Lingkaran radius di peta mengikuti radius yang dipilih (3/5/7/10 km), bukan nilai tetap | `test/page.test.js` |
 
 **KF-PETA-11 satu-satunya fitur yang butuh internet**, dan itu disengaja: citra
 satelitnya dari Esri, diminta di meeting. Peta lokal (PMTiles) tetap jalan penuh tanpa

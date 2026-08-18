@@ -28,7 +28,14 @@ export const ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
 export const ATTRIBUTION_SATELLITE = 'Citra: Esri, Maxar, Earthstar Geographics';
 
-/** Radius acuan target di sekitar outlet. Acuan, bukan capaian. */
+/**
+ * Radius acuan target di sekitar outlet. Acuan, bukan capaian.
+ *
+ * NILAI AWAL saja. Radius yang sedang dipakai ada di S.radiusM dan berubah waktu
+ * tombol 3/5/7/10 km ditekan. Jangan dipakai untuk menggambar atau menghitung —
+ * lingkaran radius di peta pernah memakai konstanta ini dan akibatnya diam di 5 km
+ * sementara seluruh persentase di layar ikut berubah.
+ */
 export const RADIUS_METERS = 5000;
 
 /** Batas baris tabel. Di atas ini halaman jadi lambat tanpa menambah informasi. */

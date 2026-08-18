@@ -133,6 +133,51 @@ cuma perluasan ke Sulawesi ke timur.
 
 ## Selesai
 
+### Tooltip sebaran di peta, dan lingkaran radius yang akhirnya ikut berubah (2026-08-18)
+
+Dua permintaan sekaligus. Yang kedua ternyata bug yang sudah lama diam.
+
+**Lingkaran radius tidak pernah berubah.** Menekan 3 km atau 10 km mengubah `S.radiusM`,
+`S.coverage`, label, dan SELURUH persentase di layar — tapi lingkaran di peta digambar
+dengan konstanta `RADIUS_METERS` yang selalu 5.000. Tidak ada error. Yang terjadi cuma
+peta dan angka menceritakan dua hal berbeda, dan lingkaran itu justru yang dipakai orang
+untuk mempercayai angkanya. Diukur setelah diperbaiki: tombol 3/5/7/10 km menghasilkan
+jari-jari **3,00 / 5,00 / 7,00 / 10,00 km**; sebelumnya keempatnya 5,00.
+
+Konstantanya dibiarkan hidup sebagai nilai awal, dengan catatan tegas untuk tidak
+memakainya menggambar atau menghitung.
+
+**Sebaran per kelurahan dan kabupaten sekarang terbaca tanpa klik.** Arahkan kursor ke
+poligon mana pun: nama kelurahan, unit, % jangkauan, lalu kabupatennya beserta jumlah
+kelurahan dan persentasenya. Panel rincian tetap untuk menelusuri berurutan; tooltip
+untuk pertanyaan yang muncul sambil melihat peta.
+
+**Mengikuti ruang lingkup yang sedang aktif, dan itu yang paling penting.** Tooltip
+membaca `activeRows()` — sumber yang sama dengan warna poligon di bawahnya. Kalau dia
+membaca `S.sales` langsung, poligon bisa gelap karena satu dealer sementara tooltipnya
+menyebut total semua dealer: dua angka bertentangan di layar yang sama, tanpa error.
+Dijaga `test/page.test.js`, dan mutasinya merah.
+
+Diverifikasi silang di browser: tooltip menyebut "Kabupaten Temanggung 7 penjualan di 6
+kelurahan · 0%", panel rincian menyebut "Kabupaten Temanggung 6 kel 0% 7". Sama persis.
+
+**Dua kesalahan pengukuran saya sendiri, yang keduanya sempat terlihat seperti bug:**
+
+1. Lingkaran radius terbaca "KOSONG" — sumbernya `Feature` tunggal, bukan
+   `FeatureCollection`, jadi `data.features[0]` memang undefined. Kodenya benar sejak
+   awal; pembacaan saya yang salah.
+2. Angka Temanggung terlihat mencurigakan mirip periode demo. Dicek ke panel: memang
+   angka Agustus, kebetulan berdekatan.
+
+Keduanya dikejar sampai tuntas alih-alih dianggap wajar, dan itu memang yang seharusnya
+— tapi patut dicatat bahwa dua "temuan" pertama saya ternyata bukan temuan.
+
+Tooltip dipasang ke `mousemove`, bukan `mouseenter`. Satu kelurahan bisa selebar layar
+di zoom rendah, dan tooltip yang diam di titik masuk akan tertinggal jauh dari kursor
+lalu terbaca seperti milik kelurahan sebelah.
+
+`KF-PETA-15` dan `KF-PETA-16` baru di PRD. 18/18 tes, 3/3 mutasi tertangkap.
+
 ### Panel rincian dealer: sebaran per kabupaten lalu kelurahan (2026-08-18)
 
 Klik dealer sebelumnya cuma menjawab satu pertanyaan — berapa persen di dalam radius —

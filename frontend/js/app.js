@@ -15,7 +15,9 @@ import {
   addLayers, fitToScope, invalidateSalePoints, paintChoropleth, redrawMap, setBasemap,
   setRadius, setupMap, toggleFullscreen,
 } from './map.js';
-import { closeSelectionInfo, drawMarkers, selectOutlet } from './outlets.js';
+import {
+  closeSelectionInfo, drawMarkers, selectOutlet, showVillageTooltip,
+} from './outlets.js';
 import { filterSelectOptions } from './select-search.js';
 import {
   closeDealerCard, renderDealerCard, renderDealerLegend, renderKpi, renderLegend,
@@ -339,7 +341,21 @@ async function boot() {
     }
   });
   S.map.on('mouseenter', 'kel-isi', () => { S.map.getCanvas().style.cursor = 'pointer'; });
-  S.map.on('mouseleave', 'kel-isi', () => { S.map.getCanvas().style.cursor = ''; });
+  // Tooltip mengikuti kursor DI SEPANJANG poligon, bukan cuma muncul saat masuk.
+  // Satu kelurahan bisa selebar layar di zoom rendah; tooltip yang diam di titik
+  // masuk akan tertinggal jauh dari kursor dan terbaca seperti milik kelurahan
+  // sebelah — salah baca yang tidak pernah terasa seperti bug.
+  S.map.on('mousemove', 'kel-isi', (e) => {
+    if (S.pickingOnMap) return;
+    if (e.features && e.features.length) {
+      showVillageTooltip(e.features[0].properties.kode, e.originalEvent);
+    }
+  });
+
+  S.map.on('mouseleave', 'kel-isi', () => {
+    S.map.getCanvas().style.cursor = '';
+    $('tooltip').classList.remove('show');
+  });
 }
 
 boot();

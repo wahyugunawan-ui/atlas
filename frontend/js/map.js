@@ -3,7 +3,6 @@
  */
 import {
   ATTRIBUTION, ATTRIBUTION_SATELLITE, BASEMAP_PMTILES, BASEMAP_SATELLITE,
-  RADIUS_METERS,
 } from './config.js';
 import { classOf, dealerColor, percentileBreaks, RAMP, COLOR_EMPTY } from './colors.js';
 import { $, bbox, sumBy, toast } from './dom.js';
@@ -214,10 +213,16 @@ export function redrawMap() {
   const showMarkers = on('opt-titik');
   S.markers.forEach((m) => { m.getElement().style.display = showMarkers ? '' : 'none'; });
 
+  // Lingkarannya memakai S.radiusM — radius yang SEDANG DIPILIH — bukan konstanta.
+  //
+  // Sebelumnya di sini terpasang RADIUS_METERS yang selalu 5.000. Menekan 3 km atau
+  // 10 km mengubah seluruh persentase di layar, tapi lingkarannya diam di tempat.
+  // Tidak ada yang error; yang terjadi cuma peta dan angka menceritakan dua hal
+  // berbeda, dan lingkaran itu justru yang dipakai orang untuk mempercayai angkanya.
   const outlet = S.selectedOutlet ? S.outletByCode[S.selectedOutlet] : null;
   S.map.getSource('radius').setData(
     outlet && outlet.lat != null && on('opt-radius')
-      ? circle(outlet.lng, outlet.lat, RADIUS_METERS) : EMPTY_COLLECTION);
+      ? circle(outlet.lng, outlet.lat, S.radiusM) : EMPTY_COLLECTION);
 }
 
 /* ==========================================================================
