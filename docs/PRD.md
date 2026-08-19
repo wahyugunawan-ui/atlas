@@ -298,8 +298,13 @@ penjualan.
 | KNF-PORTABEL-3 | Tidak ada modul native yang perlu dikompilasi. |
 | KNF-PORTABEL-4 | Semua library CDN diunduh ke `frontend/vendor/` — jaringan kantor bisa memblokir CDN. |
 
+| KNF-PORTABEL-5 | `npm run offline-html` menulis satu berkas HTML mandiri (~10 MB) yang jalan lewat `file://` tanpa server, database, atau internet — untuk dibawa keluar jaringan kantor. Angka penjualan asli, nama konsumen dikarang, tombol yang menulis menolak dengan pesan jelas. | `test/page.test.js` |
+
 Belum dijaga tes; langkahnya di [PINDAH.md](PINDAH.md). KNF-PORTABEL-4 sebagian dijaga
-`test/page.test.js` yang menolak aset dari internet.
+`test/page.test.js` yang menolak aset dari internet. KNF-PORTABEL-5 dijaga sebagian:
+berkas hasil build WAJIB ada di `.gitignore` (dia memuat angka penjualan asli), dan itu
+yang diperiksa otomatis; alur bootnya sendiri diverifikasi manual di browser tiap kali
+`prototype/build-offline.js` berubah.
 
 ### KNF-KEAMANAN
 

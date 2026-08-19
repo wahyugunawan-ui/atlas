@@ -24,7 +24,8 @@
     "fetch-boundaries": "node scripts/fetch-boundaries.js",
     "seed-boundaries": "node scripts/seed-boundaries.js",
     "export-geo": "node scripts/export-geo.js",
-    "demo-excel": "node scripts/make-demo-excel.js"
+    "demo-excel": "node scripts/make-demo-excel.js",
+    "offline-html": "node prototype/build-offline.js"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",

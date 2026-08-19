@@ -28,6 +28,11 @@ frontend/vendor/
 # Hasil build prototipe (±5 MB). Dibangun ulang dengan: node prototype/build.js
 prototype/index.html
 
+# Salinan offline (~10 MB). Memuat angka penjualan ASLI, jadi tidak boleh masuk
+# git sama sekali — beda dari prototype/index.html yang cuma karangan. Dibangun
+# ulang dengan: npm run offline-html
+prototype/astra-offline.html
+
 # ==========================================================================
 # Keluaran sementara
 # ==========================================================================

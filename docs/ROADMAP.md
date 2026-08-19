@@ -133,6 +133,56 @@ cuma perluasan ke Sulawesi ke timur.
 
 ## Selesai
 
+### Salinan offline: satu berkas HTML untuk dibawa keluar kantor (2026-08-19)
+
+Diminta untuk keadaan tanpa WiFi — link Tailscale tidak menolong kalau memang tidak
+ada jaringan sama sekali. `npm run offline-html` menulis `prototype/astra-offline.html`
+(~10 MB), dobel-klik langsung jalan, tanpa server, database, maupun login.
+
+**Bukan `prototype/build.js` yang lama.** Yang itu dibuat untuk proposal 13 Agustus,
+menarik library dari CDN (mati tanpa internet — persis kebalikan dari kebutuhannya),
+dan memakai implementasi terpisah di `prototype/src/` dengan angka karangan yang sudah
+menyimpang dari aplikasi sungguhan. `build-offline.js` menggabung **modul frontend
+yang sungguhan** (`frontend/js/*.js`) jadi satu skrip biasa — mirip bukan karena
+ditiru, memang kode yang sama.
+
+**Tiga hal berbeda dari aplikasi, disengaja:**
+
+1. Nama dan alamat konsumen **dikarang**, dibangkitkan saat halaman dibuka dari baris
+   penjualan yang sudah ditanam — bukan disimpan terpisah, supaya jumlah konsumen per
+   kelurahan otomatis sama dengan angka penjualannya. Angka penjualannya sendiri
+   **asli**. Berkas ini berpindah tangan tanpa login dan tanpa pembatas laju; 18 ribu
+   nama asli di dalamnya risiko yang tidak sebanding dengan manfaat demonya.
+2. Basemap peta jalan tidak ikut (`.pmtiles` 27 MB, butuh range request yang tidak
+   ada di `file://`). Latarnya polos; poligon kelurahan berwarna tetap utuh.
+3. Tombol yang menulis (impor, simpan pos, hapus periode, cocokkan nama) menolak
+   dengan pesan jelas di UI, bukan diam.
+
+**Dua bug ketemu waktu membangun, dan keduanya gagal dengan diam:**
+
+Modul digabung ke satu lingkup datar di percobaan pertama, dan `dom.js` +
+`select-search.js` sama-sama mengekspor `fillSelect` — yang belakangan menimpa yang
+duluan. Gejalanya menunjuk ke berkas yang salah. Diperbaiki: tiap modul dibungkus IIFE
+dengan lingkupnya sendiri, persis seperti bundler sungguhan.
+
+Kejadian `load` MapLibre tidak pernah tertembak. Tambalan basemap pertama menimpa
+`window.setBasemap` SESUDAH peta dibuat — terlambat, karena style AWAL sudah memuat
+sumber vektor `pmtiles://...`, dan MapLibre menunggu sumber itu sebelum menembakkan
+`load`. `boot()` diam-diam berhenti sebelum sempat memanggil `renderAll()` — KPI tetap
+0 tanpa satu pun error di konsol. Diperbaiki dengan menukar sumbernya di teks `map.js`
+SEBELUM digabung.
+
+**`prototype/astra-offline.html` DI LUAR GIT** — memuat angka penjualan asli.
+`test/page.test.js` menjaga baris itu tetap ada di `.gitignore`; mutasi yang
+menghapusnya merah.
+
+Diverifikasi penuh di browser: boot selesai (78 marker, treemap, 53 dealer), panel
+rincian dealer → kabupaten → kelurahan jalan, 59 nama konsumen karangan muncul untuk
+Wedomartani — persis sama dengan 59 unit penjualannya — dan tombol simpan pos menolak
+dengan pesan yang tampil di UI, bukan diam.
+
+18/18 tes, 1/1 mutasi tertangkap.
+
 ### Tooltip sebaran di peta, dan lingkaran radius yang akhirnya ikut berubah (2026-08-18)
 
 Dua permintaan sekaligus. Yang kedua ternyata bug yang sudah lama diam.

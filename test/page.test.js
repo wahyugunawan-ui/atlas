@@ -276,6 +276,13 @@ function test() {
   const ignore = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8');
   assert.ok(/^data\/$/m.test(ignore),
     'folder data WAJIB ada di .gitignore — sekali ter-commit, PII ada di riwayat selamanya');
+  // Salinan offline memuat angka penjualan ASLI (prototype/build-offline.js). Kalau
+  // baris ini hilang dari .gitignore, satu 'git add -A' yang tidak hati-hati membuat
+  // angka penjualan Astra masuk riwayat git selamanya — dan git tidak lupa.
+  assert.ok(/^prototype\/astra-offline\.html$/m.test(ignore),
+    'prototype/astra-offline.html WAJIB ada di .gitignore — berkas itu memuat angka ' +
+    'penjualan asli');
+
 
   // 8. sumber data terpusat, supaya gampang dipindah waktu hosting berubah
   assert.ok(/export const API = '[^']*';/.test(source['config.js']),
