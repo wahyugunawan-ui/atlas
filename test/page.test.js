@@ -498,6 +498,24 @@ function test() {
   });
   assert.ok(!/<details open/.test(opsiBlok),
     'lipatan legenda terbuka secara bawaan — panelnya kembali tidak muat');
+
+  // Rumah bilah filter di layar penuh TIDAK boleh jadi wadah yang menggulir.
+  //
+  // Aturan `#map-shell.penuh .map-panel { overflow-y: auto }` memberi tiap panel
+  // melayang gulirannya sendiri — masuk akal untuk panel berisi daftar, dan salah
+  // untuk rumah bilah filter: dia cuma wadah, dan overflow di situ MEMOTONG dropdown
+  // yang membuka ke bawah keluar kotaknya. Itu penyebab "dropdown-nya kepotong" yang
+  // sempat dikira masalah z-index dan dikejar dua kali ke arah yang salah.
+  assert.match(html, /#map-shell\.penuh \.map-panel:not\(#fs-filter-host\)/,
+    'rumah bilah filter layar penuh ikut kena aturan overflow panel — dropdown-nya ' +
+    'akan terpotong sebatas kotak bilahnya');
+
+  // Bilahnya selebar isinya, bukan selebar ruang yang kebetulan tersisa. Karena
+  // rumahnya diletakkan di tengah, lebar "tersedia" cuma separuh layar — dan bilahnya
+  // melipat jadi dua baris padahal layarnya luas.
+  assert.match(html, /#fs-filter-host \{[^}]*width: max-content/,
+    'rumah bilah filter layar penuh tidak lagi selebar isinya — bilahnya melipat ' +
+    'jadi dua baris walau layarnya luas');
   assert.ok(!/id="cari-/.test(html),
     'kotak pencarian kembali ditulis langsung di markup bilah — tempatnya di dalam ' +
     'panel dropdown, dibangun combobox.js bersama daftarnya');

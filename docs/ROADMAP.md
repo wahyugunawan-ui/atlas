@@ -148,6 +148,41 @@ cuma perluasan ke Sulawesi ke timur.
 
 ## Selesai
 
+### Dropdown terpotong di layar penuh — penyebab yang sebenarnya (2026-08-30)
+
+Dikejar tiga kali; dua yang pertama ke arah yang salah. Ditulis lengkap karena yang
+berharga di sini bukan perbaikannya (satu selektor), tapi kenapa dua tebakan sebelumnya
+masuk akal dan tetap salah.
+
+**Tebakan 1 — ruang di bawah kurang.** Panelnya dibuat mengikuti ruang yang tersedia dan
+membuka ke atas kalau perlu. Perbaikan yang benar pada dirinya sendiri, tapi bukan ini.
+
+**Tebakan 2 — `backdrop-filter` di atas kanvas WebGL.** Masuk akal, tidak bisa
+direproduksi di sini, dan tetap dikerjakan karena latar padat lebih terbaca. Bukan ini
+juga.
+
+**Penyebab sebenarnya, terlihat dari DevTools yang dikirim tim:** badge `scroll` di
+`#fs-filter-host`. Aturan `#map-shell.penuh .map-panel { overflow-y: auto }` memberi
+tiap panel melayang gulirannya sendiri waktu layar penuh — masuk akal untuk panel berisi
+daftar, dan **salah untuk rumah bilah filter**: dia cuma wadah, dan `overflow` di situ
+memotong dropdown yang membuka ke bawah tepat di batas kotak bilahnya.
+
+Kenapa tidak pernah ketahuan: semua pemeriksaan sebelumnya dilakukan di mode **biasa**,
+dan bug-nya cuma ada di mode **layar penuh**. Foto pertama dari tim juga mode biasa —
+yang di situ memang masalah lain (panel kelurahan menutupi tombol). Baru foto ketiga,
+yang jelas-jelas layar penuh dan disertai DevTools, yang menunjukkannya.
+
+Perbaikannya satu selektor: `.map-panel:not(#fs-filter-host)`.
+
+**Sekalian: bilah filter di layar penuh jadi satu baris.** Rumahnya diletakkan di tengah
+(`left-1/2` + translate), jadi lebar yang "tersedia" cuma separuh layar dan bilahnya
+melipat dua baris padahal layarnya luas. `width: max-content` memberinya lebar satu baris
+penuh; `max-width: calc(100vw - 3rem)` menjaganya tetap melipat sendiri kalau layarnya
+memang sempit — tanpa media query.
+
+**Tes**: 19/19 hijau. Dua mutasi tertangkap: rumah bilah yang kembali ikut aturan
+overflow, dan lebar `max-content` yang dibuang.
+
 ### Dropdown hilang di atas peta, dan panel kanan yang harus digulir (2026-08-30)
 
 Dua keluhan yang datang setelah perbaikan sebelumnya belum menyelesaikannya.

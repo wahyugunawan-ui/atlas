@@ -248,6 +248,7 @@ menjawab pertanyaan yang sama dengan angka yang berbeda.
 | KF-PETA-22 | Tabel master mengisi tinggi yang tersisa, tanpa sisa ruang kosong di bawahnya | `test/page.test.js` |
 | KF-PETA-23 | Panel rincian kelurahan tidak menutupi tombol kendali peta | `test/page.test.js` |
 | KF-PETA-24 | Panel Opsi Peta muat seluruhnya tanpa digulir; legenda dilipat | `test/page.test.js` |
+| KF-PETA-25 | Di layar penuh, bilah filter satu baris dan dropdown-nya tidak terpotong wadahnya | `test/page.test.js` |
 | KF-FILTER-14 | Dropdown filter selalu muat di layar: tingginya mengikuti ruang yang ada, membuka ke atas kalau perlu | `test/page.test.js` |
 
 **KF-PETA-11 satu-satunya fitur yang butuh internet**, dan itu disengaja: citra
