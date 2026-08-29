@@ -59,10 +59,3 @@ export function sumBy(rows, key) {
   return out;
 }
 
-/** Isi <select> dengan pilihan, plus satu opsi "semua" di depan. */
-export function fillSelect(el, pairs, allLabel) {
-  if (!el) return;
-  el.innerHTML = `<option value="ALL">${esc(allLabel)}</option>` +
-    pairs.map(([value, label]) =>
-      `<option value="${esc(value)}">${esc(label)}</option>`).join('');
-}

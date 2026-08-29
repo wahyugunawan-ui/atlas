@@ -42,6 +42,7 @@ function simpanKonsumen(field) {
 const PERIOD = /^\d{4}-(0[1-9]|1[0-2])$/;
 const VILLAGE = /^\d{2}\.\d{2}\.\d{2}\.\d{4}$/;
 const CITY = /^\d{2}\.\d{2}$/;
+const PROVINCE = /^\d{2}$/;
 const OUTLET = /^[A-Za-z0-9._-]{1,32}$/;
 
 /**
@@ -168,14 +169,26 @@ function build(config) {
       });
     }
     const q = req.query;
+    // Periode jadi RENTANG. `period` yang lama tetap diterima dan diperlakukan sebagai
+    // rentang satu bulan — kalau tidak, tautan lama akan lolos validasi lunak di bawah
+    // sebagai "tanpa penyaring periode" dan mengembalikan seluruh basis data konsumen.
+    // Pelebaran senyap adalah kesalahan yang paling mahal di rute PII.
     const period = String(q.period || '');
+    const periodFrom = String(q.periodFrom || period);
+    const periodTo = String(q.periodTo || period);
+    const province = String(q.province || '');
     const village = String(q.village || '');
     const city = String(q.city || '');
     const outlet = String(q.outlet || '');
     const search = String(q.q || '').trim().slice(0, 80);
 
     const result = await repo.browseCustomers({
-      period: PERIOD.test(period) ? period : null,
+      periodFrom: PERIOD.test(periodFrom) ? periodFrom : null,
+      periodTo: PERIOD.test(periodTo) ? periodTo : null,
+      // Rentang terbalik sengaja TIDAK ditolak di sini: nol baris adalah jawaban yang
+      // benar untuk halaman yang dipakai sambil mengetik. Yang menolaknya rute
+      // /customers, yang aturannya memang keras.
+      province: PROVINCE.test(province) ? province : null,
       village: VILLAGE.test(village) ? village : null,
       city: CITY.test(city) ? city : null,
       outlet: OUTLET.test(outlet) ? outlet : null,
@@ -217,9 +230,22 @@ function build(config) {
         error: 'Sebutkan satu kode kelurahan, misalnya village=34.04.01.2001.',
       });
     }
+    // Berbeda dari /customers/browse yang mengabaikan penyaring cacat: di sini bentuk
+    // yang salah DITOLAK. Mengabaikannya berarti permintaannya melebar diam-diam jadi
+    // seluruh riwayat kelurahan itu, dan rute ini yang mengeluarkan nama dan alamat.
     const period = String(req.query.period || '');
+    const periodFrom = String(req.query.periodFrom || period);
+    const periodTo = String(req.query.periodTo || period);
+    if ((periodFrom && !PERIOD.test(periodFrom)) || (periodTo && !PERIOD.test(periodTo))) {
+      return res.status(400).json({ error: 'Periode harus format YYYY-MM.' });
+    }
+    if (periodFrom && periodTo && periodFrom > periodTo) {
+      return res.status(400).json({
+        error: 'Rentang periode terbalik: bulan "dari" lebih akhir daripada bulan "sampai".',
+      });
+    }
     const rows = await repo.customersInVillage(village,
-      PERIOD.test(period) ? period : null);
+      { from: periodFrom || null, to: periodTo || null });
     if (rows === null) {
       return res.status(404).json({ error: 'Data konsumen tidak tersedia di server ini.' });
     }

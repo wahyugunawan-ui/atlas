@@ -146,20 +146,42 @@ function periodSummary() {
  * satu-satunya hal yang mencegah satu akun bersama menyedot seluruh basis data
  * konsumen dalam satu permintaan.
  *
+ * Periodenya berupa RENTANG, dan opsinya sengaja dioper sebagai objek — bukan
+ * argumen berurutan. Dengan `(village, from, to)`, pemanggil lama
+ * `customersInVillage(v, '2026-08')` tetap jalan dan diam-diam berarti "Agustus dan
+ * seterusnya": hasilnya melebar tanpa error dan tanpa tes yang merah. Objek membuat
+ * panggilan lama gagal keras, dan itu memang yang diinginkan.
+ *
+ * @param {string} villageCode
+ * @param {{from?: string, to?: string, limit?: number}} [opsi] batas periode 'YYYY-MM'
  * @return {Array|null} null berarti database konsumen tidak ada — bukan error.
  */
-async function customersInVillage(villageCode, period, limit) {
+async function customersInVillage(villageCode, opsi) {
+  // Panggilan gaya lama gagal KERAS, bukan diam. `customersInVillage(v, '2026-08')`
+  // akan lolos begitu saja dan berarti "seluruh riwayat kelurahan itu" — lebih luas
+  // dari yang diminta, tanpa error dan tanpa tes merah. Di rute yang mengeluarkan
+  // nama dan alamat, pelebaran senyap tidak boleh mungkin.
+  if (typeof opsi === 'string') {
+    throw new TypeError('customersInVillage(village, {from, to}): periode dioper sebagai ' +
+      'objek, bukan argumen berurutan.');
+  }
   const db = store.customers();
   if (!db) return null;
 
-  const max = Number(limit) || 500;
-  return period
-    ? store.all(db, `SELECT id, name, address, outlet_code AS outlet, period
-                     FROM customers WHERE village_code = ? AND period = ?
-                     ORDER BY name LIMIT ?`, [villageCode, period, max])
-    : store.all(db, `SELECT id, name, address, outlet_code AS outlet, period
-                     FROM customers WHERE village_code = ?
-                     ORDER BY period DESC, name LIMIT ?`, [villageCode, max]);
+  const o = opsi || {};
+  const max = Number(o.limit) || 500;
+  const where = ['village_code = ?'];
+  const params = [villageCode];
+  // Periode dibandingkan sebagai TEKS, bukan tanggal. Kolomnya lebar-tetap 'YYYY-MM'
+  // dengan bulan ber-nol depan, jadi urutan leksikografisnya identik dengan urutan
+  // kronologis. Ini hanya benar selama nol depannya ada — dijaga regex PERIOD di
+  // routes.js dan oleh importir, jadi nilai seperti '2026-9' tidak bisa masuk.
+  if (o.from) { where.push('period >= ?'); params.push(o.from); }
+  if (o.to) { where.push('period <= ?'); params.push(o.to); }
+
+  return store.all(db, `SELECT id, name, address, outlet_code AS outlet, period
+                        FROM customers WHERE ${where.join(' AND ')}
+                        ORDER BY period DESC, name LIMIT ?`, params.concat([max]));
 }
 
 /**
@@ -200,7 +222,19 @@ async function browseCustomers(filters) {
   const where = [];
   const params = [];
 
-  if (f.period) { where.push('period = ?'); params.push(f.period); }
+  // Periode dibandingkan sebagai teks — alasannya sama persis dengan
+  // customersInVillage() di atas, dan sengaja tidak diulang panjang di sini.
+  if (f.periodFrom) { where.push('period >= ?'); params.push(f.periodFrom); }
+  if (f.periodTo) { where.push('period <= ?'); params.push(f.periodTo); }
+  // Provinsi TIDAK ikut rebutan dengan kota dan kelurahan di bawah: dia penyaring
+  // mandiri yang boleh dipakai bersama salah satunya. Kode kelurahan BPS memuat kode
+  // provinsi di paling depan ('33' -> '33.74.01.1001'), jadi awalannya cukup. Titiknya
+  // mutan EKUIVALEN persis seperti pada penyaring kota di bawah — kode provinsi selalu
+  // dua digit, jadi '33%' tidak mungkin menarik provinsi lain. Tetap ditulis.
+  if (f.province) {
+    where.push("village_code LIKE ? ESCAPE '\\'");
+    params.push(escapeLike(f.province) + '.%');
+  }
   if (f.village) { where.push('village_code = ?'); params.push(f.village); }
   else if (f.city) {
     // Titik setelah kode kota tidak menentukan perilaku selama kode BPS lebar-tetap

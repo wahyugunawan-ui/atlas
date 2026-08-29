@@ -188,13 +188,45 @@ ulang berkas yang sama — dan idempotensi (`KF-IMPOR-2`) yang membuat hasilnya 
 sama. Konsekuensinya PII di arsip belum hilang saat itu juga; dia terbuang lewat
 retensi 90 hari (`KNF-PRIVASI-5`).
 
+### KF-FILTER — bilah penyaring
+
+Satu bilah kendali yang sama untuk semua halaman, tapi nilainya berdiri sendiri di tiap
+halaman. Ditambahkan 2026-08-29 atas permintaan tim menjelang presentasi HO.
+
+| ID | Kebutuhan | Dijaga |
+|---|---|---|
+| KF-FILTER-1 | Bilah penyaring selalu terlihat, tidak ikut menggulir bersama isi halaman | `test/page.test.js` |
+| KF-FILTER-2 | Bilah muncul di semua halaman kecuali Import Data | `test/page.test.js` |
+| KF-FILTER-3 | Nilai penyaring **terpisah per halaman** — menyaring di Insight & Peta tidak mengubah angka di halaman lain | `test/filters.test.js` |
+| KF-FILTER-4 | Periode berupa **rentang** "bulan dari" – "bulan sampai"; bulan dan tahun dua-duanya dipilih dari daftar | `test/page.test.js` |
+| KF-FILTER-5 | Ujung rentang yang menyilang diseret, bukan ditolak — isian tidak pernah jadi jalan buntu | `test/filters.test.js` |
+| KF-FILTER-11 | Memilih tanda hubung berarti "tanpa batas di sisi itu", bukan hasil kosong | `test/filters.test.js` |
+| KF-FILTER-13 | Daftar tahun tidak dibatasi periode yang sudah diimpor | `test/page.test.js` |
+| KF-FILTER-6 | Periode dan provinsi selalu bisa dipakai; dari kabupaten, dealer, dan pos hanya **satu** yang aktif | `test/filters.test.js` |
+| KF-FILTER-7 | Berpindah di antara kabupaten/dealer/pos mereset yang sebelumnya, lewat dropdown maupun lewat klik di peta | `test/filters.test.js` |
+| KF-FILTER-8 | Rentang periode berlaku sampai ke database untuk halaman Data Konsumen | `test/import.test.js` |
+| KF-FILTER-9 | Rentang periode terbalik ditolak `/api/customers` (400) dan menghasilkan nol baris di `/api/customers/browse` | `test/server-auth.test.js` |
+| KF-FILTER-10 | Dropdown kabupaten, dealer, dan pos punya kotak pencarian DI DALAM panelnya | `test/page.test.js` |
+| KF-FILTER-12 | Filter yang sedang menyempitkan tampilan terlihat berbeda dari yang tidak | `test/page.test.js` |
+
+**KF-FILTER-6 dan KF-FILTER-7 dijamin oleh bentuk datanya, bukan oleh kode penjaga.**
+Kabupaten, dealer, dan pos berbagi satu slot `{scopeKind, scopeCode}`, jadi dua lingkup
+aktif bersamaan tidak bisa direpresentasikan sama sekali. Alasan lengkapnya di
+`docs/DECISIONS.md`. Konsekuensinya juga disengaja: drill-down "klik dealer lalu klik
+salah satu posnya" tidak ada lagi.
+
+**KF-FILTER-3 menutup kebocoran yang sudah ada sejak lama**, bukan cuma menambah fitur.
+Sebelumnya tabel Master Pos dan Master Kelurahan menyaring barisnya dengan penyaringnya
+sendiri tapi menghitung kolom angkanya dengan penyaring halaman Peta — dua halaman
+menjawab pertanyaan yang sama dengan angka yang berbeda.
+
 ### KF-PETA — Insight & Peta
 
 | ID | Kebutuhan | Dijaga |
 |---|---|---|
 | KF-PETA-1 | Peta choropleth kelurahan diwarnai menurut volume penjualan | `test/page.test.js` |
 | KF-PETA-2 | Empat KPI: Dealer Aktif, Total Penjualan, Kelurahan Terlayani, Kelurahan Kosong | `test/page.test.js` |
-| KF-PETA-3 | Penyaring periode, kabupaten, dealer, dan pos; seluruh panel ikut berubah | `test/colors.test.js` |
+| KF-PETA-3 | Penyaring periode, kabupaten, dealer, dan pos; seluruh panel ikut berubah (aturannya di KF-FILTER) | `test/colors.test.js` |
 | KF-PETA-4 | Warna dealer **stabil terhadap penyaring** — dealer yang bertahan tidak berganti warna | `test/colors.test.js` |
 | KF-PETA-5 | Panel performa pos menampilkan persen penjualan di dalam radius terpilih | `test/coverage-split.test.js` |
 | KF-PETA-6 | Radius bisa diganti antara 3/5/7/10 km tanpa hitung ulang | `test/coverage-store.test.js` |

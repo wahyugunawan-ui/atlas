@@ -52,7 +52,31 @@ Istilah wilayah memakai terjemahan resmi BPS supaya konsisten:
 
 ## Sedang dikerjakan
 
-Tidak ada.
+### Revisi pra-present HO (mulai 2026-08-29)
+
+Daftar revisi dari tim channel sebelum presentasi ke Head Office, dikerjakan **satu
+bagian per satu bagian**. Bagian pertama (FILTER) sudah selesai — entrinya di bawah.
+
+**Belum dikerjakan, urut sesuai daftar:**
+
+1. **Master Pos Dealer** — reset data pos dan dealer; isian "dealer induk" jadi dropdown
+   dengan opsi terakhir "tambahkan dealer induk"; kata "Sunting" jadi "Edit" dan "Peta"
+   jadi "Lihat di peta"; **tiga kolom baru: kecamatan ring 1, ring 2, ring 3**.
+2. **Peta: agregasi ring menggantikan agregasi radius.** Persentase "dalam/luar
+   jangkauan" jadi "ring 1 / ring 2 / ring 3 / di luar ketiganya". Kelompok ring tiap
+   dealer ditentukan di halaman Master Pos Dealer. Perlu batas kecamatan yang bisa
+   diklik, dan tombol "edit ring" waktu satu dealer atau pos dipilih di peta.
+   **Ini yang paling besar** — dia mengubah arti angka jangkauan di seluruh aplikasi,
+   dan `backend/core/coverage.js` + `coverage-store.js` ikut terdampak.
+3. **Blok Analisis Performa Pos** — tombol urut berdasarkan persentase terkecil.
+4. Minor: peta digeser ke bawah 4 blok ringkasan; tabel responsif tanpa ruang kosong;
+   Analisis Performa Pos berjalan otomatis (live, auto-loop); batas ring kuning tebal;
+   tombol pop-up layar penuh.
+
+**Ditemukan sambil mengerjakan filter, BELUM diperbaiki:** subtitel halaman Master Pos
+Dealer selalu berbunyi "0 pos dari 0 dealer" — elemen `#pos-count` dan
+`#pos-dealer-count` ada di markup tapi tidak pernah diisi satu baris kode pun. Bukan
+akibat perombakan filter; sudah salah sejak sebelumnya. Masuk ke bagian 1 di atas.
 
 ---
 
@@ -132,6 +156,110 @@ cuma perluasan ke Sulawesi ke timur.
 ---
 
 ## Selesai
+
+### Perombakan filter: bilah tetap, rentang periode, satu slot lingkup (2026-08-29)
+
+Bagian pertama revisi pra-present HO. Lima hal sekaligus, karena semuanya menyentuh
+tempat yang sama.
+
+**1. Nilai filter pindah dari DOM ke objek per halaman.** Sebelumnya sumber kebenaran
+filter adalah nilai `<select>`. Satu set `<select>` tidak bisa menyimpan empat halaman
+sekaligus, jadi nilainya sekarang di `S.filters[halaman]` dan `<select>` jadi cermin.
+Efek sampingnya yang paling berharga: `filters.js` jadi **bebas DOM** dan bisa
+di-`import()` langsung oleh tes Node — `test/filters.test.js` lahir dari situ.
+
+**2. Kebocoran antar-halaman tertutup.** Dulu `renderOutletTable()` dan
+`renderVillageTable()` menyaring barisnya dengan dropdown halaman sendiri tapi
+menghitung kolom angkanya dengan `activeRows()` milik halaman Peta. Memfilter di Peta
+diam-diam mengubah angka di Master Pos. Sekarang `activeRows()` mengikuti
+`S.filterPage`, dan `switchTab()` menyetelnya SEBELUM tabelnya digambar.
+
+**3. Periode jadi rentang: bulan dan tahun, dua dropdown per ujung.** Tanpa tombol
+"1 bulan" — diminta tim setelah versi pertama dicoba. Bentuknya berubah tiga kali dalam
+satu sesi, tiap kali karena tim mencoba yang sebelumnya:
+
+1. Dua `<select>` daftar bulan + tombol sakelar "1 bulan" → "langsung isi MM YY saja,
+   tombolnya tidak perlu".
+2. Dua `<input type="month">` bawaan browser, dibatasi `min`/`max` ke periode yang sudah
+   diimpor → "biasa aja, gaperlu ngikutin bulan tahun yang udah keupload". `min`/`max`
+   dilepas.
+3. `<input type="month">` masih menyisakan masalah: **tahunnya cuma bisa diketik**,
+   tidak ada daftarnya. Sekarang tiap ujung punya dua `<select>`: bulan (Jan–Des) dan
+   tahun (2020 sampai tahun depan), dalam satu pil.
+
+Daftar tahunnya daftar biasa, **tidak** diturunkan dari periode yang sudah diimpor.
+Memilih tanda hubung (`—`) di salah satu dropdown berarti "tanpa batas di sisi itu".
+
+Efek samping yang bagus dari langkah 3: `<select>` jalan di semua browser, jadi catatan
+"`type="month"` cuma didukung Chrome dan Edge" ikut hilang bersama masalahnya.
+
+**3b. Rentang itu sampai ke database.** `/api/customers/browse` dan
+`/api/customers` menerima `periodFrom`/`periodTo`; `period` yang lama tetap diterima dan
+diterjemahkan jadi rentang satu bulan — tanpa itu tautan lama akan lolos validasi lunak
+`/browse` sebagai "tanpa saringan" dan mengembalikan seluruh basis data konsumen.
+`customersInVillage()` tanda tangannya diubah jadi argumen OBJEK supaya panggilan
+posisional lama gagal keras, bukan melebar diam-diam.
+
+**4. Bilah keluar dari area gulir.** Ditaruh di antara `<nav>` dan `<main>`, tanpa
+`position: sticky` — `<main>` satu-satunya scroller, jadi yang di luarnya memang tidak
+pernah bergerak. Mode layar penuh **memindahkan node bilahnya** (`appendChild`), bukan
+mencerminkannya; `fs-periode`/`fs-kota`/`fs-dealer`/`fs-pos`, `FS_MIRROR`, dan
+`mirrorFilter()` dibuang seluruhnya.
+
+**5. Bug lama: pencarian di dalam dropdown mati sejak hari pertama.** Ada dua
+`fillSelect`. Yang dipakai `app.js` berasal dari `dom.js` dan tidak menyimpan apa-apa;
+yang menyimpan `S.allOptions` ada di `select-search.js` dan tidak pernah di-import siapa
+pun — sementara `S.allOptions` sendiri tidak pernah dideklarasikan. Mengetik satu huruf
+di "cari kota" melempar `TypeError`.
+
+**6. `<select>` diganti dropdown sendiri; pencariannya masuk ke dalam panel.** Diminta
+tim setelah versi pertama dicoba: kotak cari tidak lagi berdiri di sebelah dropdown, dia
+di dalamnya. `<select>` bawaan tidak bisa memuat apa pun, jadi `select-search.js`
+dibuang dan diganti `combobox.js` — tombol pil, panel kaca, kotak cari di atas daftar.
+Kotak carinya muncul hanya kalau daftarnya lebih dari 8 baris; provinsi (2 pilihan)
+tidak dapat. `fillSelect` di `dom.js` ikut hilang karena tidak ada lagi yang memakainya.
+
+Yang dijaga tetap sama seperti dulu: **yang tersimpan selalu KODE**, tidak pernah teks
+yang diketik. Kotak cari cuma menyaring; memilih harus menekan barisnya. Daftarnya
+menempel di elemen hostnya (`el._combo`), bukan di objek global berkunci id — pelajaran
+langsung dari `S.allOptions`, dan `test/page.test.js` menjaga keduanya.
+
+**7. Tampilan bilah: dari rata jadi punya bidang sendiri.** Diminta tim — "terlalu flat,
+mau menarik tapi tetap simple". Tanpa warna baru dan tanpa font baru:
+
+- Bilahnya dapat gradien setipis `#ffffff → #f6f8fc` plus garis rambut bawah, jadi dia
+  terbaca sebagai **rak** di bawah nav navy, bukan sambungan kosong.
+- Tiap filter jadi pil dengan nama sumbunya di dalam (10px, uppercase, tracking lebar) —
+  perangkat yang sudah dipakai kartu KPI, bukan perangkat baru.
+- Periode memakai **JetBrains Mono**. Dia satu-satunya filter yang berupa koordinat,
+  bukan nama, dan mono di aplikasi ini sudah berarti "ini angka".
+- **Pil MENYALA navy kalau filternya benar-benar menyempitkan tampilan.** Karena
+  kabupaten, dealer, dan pos berbagi satu slot, mustahil ada dua yang menyala bersamaan
+  — aturan yang jadi dasar seluruh perombakan ini akhirnya jadi sesuatu yang terlihat,
+  dan "kok kabupaten saya hilang?" menjawab dirinya sendiri.
+
+Bilahnya juga turun dari dua baris jadi satu: tiga `<input>` cari yang berdiri sendiri
+hilang, dan empat pil lebih rapat daripada empat `<select>` plus pemisahnya.
+
+**Yang HILANG dan itu disengaja:** drill-down "klik dealer lalu klik salah satu posnya".
+Kota, dealer, dan pos berbagi satu slot, jadi mengklik pos membuang dealernya. Dipilih
+sadar oleh tim supaya aturannya sama untuk klik peta dan untuk dropdown.
+
+**Diperiksa di browser sungguhan** (Playwright, nol error konsol): bilah tetap terlihat
+setelah menggulir 600 px, filter tiap halaman berdiri sendiri, Data Konsumen mulai tanpa
+batas periode sementara halaman lain mulai di bulan terakhir, klik peta menyamakan
+bilahnya, layar penuh memindahkan bilah dengan nilai utuh, dan kotak pencarian dropdown
+akhirnya bekerja.
+
+**Satu bug ditemukan saat pemeriksaan browser itu dan sudah diperbaiki:** `applyScope()`
+mengubah state lalu memanggil `renderAll()`, dan `renderAll()` belum menyamakan bilah —
+peta sudah berpindah sementara dropdown masih menunjukkan filter yang lama. Tes tidak
+menangkapnya karena `filters.test.js` sengaja bebas DOM dan `page.test.js` memeriksa
+markup, bukan perilaku. Dicatat di sini karena itu batas nyata dari kedua tes tersebut.
+
+**Tes**: 19/19 berkas hijau. Mutasi tertangkap: 11/11 di `filters.test.js`, 4/5 di
+repositori (satu mutan EKUIVALEN: titik pada awalan kode provinsi, sama seperti yang
+sudah dicatat untuk penyaring kota), 3/3 di rute.
 
 ### Salinan offline: satu berkas HTML untuk dibawa keluar kantor (2026-08-19)
 

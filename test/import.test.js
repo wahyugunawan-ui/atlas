@@ -420,7 +420,8 @@ async function test() {
     assert.strictEqual(withPii.customers, 3);
     assert.strictEqual(repo.hasCustomers(), true);
 
-    const inVillage = await repo.customersInVillage('34.04.06.2003', '2026-08');
+    const inVillage = await repo.customersInVillage('34.04.06.2003',
+      { from: '2026-08', to: '2026-08' });
     assert.strictEqual(inVillage.length, 2);
     assert.strictEqual(inVillage[0].name, 'Budi Santoso');
 
@@ -530,6 +531,86 @@ async function test() {
     const cariPersen = await repo.browseCustomers({ query: '%' });
     assert.strictEqual(cariPersen.total, 0,
       "'%' yang diketik pengguna diperlakukan sebagai wildcard, bukan sebagai karakter");
+
+    /* --------------------------------------------------------------------
+       RENTANG PERIODE DAN PENYARING PROVINSI
+       --------------------------------------------------------------------
+       Rentang menggantikan kesetaraan satu bulan. Yang gagal diam di sini ada tiga:
+       batas yang hilang (satu sisi rentang dibuang -> hasilnya melebar), pembanding
+       yang bergeser satu langkah (>= jadi >, <= jadi <), dan ujung yang diam-diam
+       ditukar supaya rentang terbalik "diperbaiki" jadi seluruh isi tabel.
+
+       Semua baris sampai titik ini periodenya 2026-08, jadi jumlahnya dipakai sebagai
+       titik acuan — bukan angka yang ditulis tangan dan lupa diperbarui.
+       -------------------------------------------------------------------- */
+
+    const hanyaAgustus = (await repo.browseCustomers({})).total;
+
+    const lain = [];
+    for (let i = 0; i < 4; i++) {
+      lain.push([`juli-${i}`, '2026-07', '34.04.06.2003', 'O01',
+        `Nama Juli ${i}`, `Jl. Juli ${i}`]);
+    }
+    for (let i = 0; i < 2; i++) {
+      lain.push([`sept-${i}`, '2026-09', '34.04.06.2003', 'O01',
+        `Nama September ${i}`, `Jl. September ${i}`]);
+    }
+    const chunkLain = store.bulkValues(lain);
+    await store.run(store.customers(), `
+      INSERT INTO customers (id, period, village_code, outlet_code, name, address)
+      VALUES ${chunkLain.text}`, chunkLain.params);
+
+    assert.strictEqual(
+      (await repo.browseCustomers({ periodFrom: '2026-08', periodTo: '2026-08' })).total,
+      hanyaAgustus,
+      'rentang satu bulan tidak sama dengan kesetaraan satu bulan');
+    assert.strictEqual(
+      (await repo.browseCustomers({ periodFrom: '2026-07', periodTo: '2026-08' })).total,
+      hanyaAgustus + 4,
+      'rentang dua bulan tidak menjumlahkan keduanya, atau ikut membawa September');
+    assert.strictEqual(
+      (await repo.browseCustomers({ periodTo: '2026-07' })).total, 4,
+      'batas atas sendirian tidak menyaring — batas bawahnya hilang bukan alasan');
+    assert.strictEqual(
+      (await repo.browseCustomers({ periodFrom: '2026-09' })).total, 2,
+      'batas bawah sendirian tidak menyaring');
+
+    // Rentang terbalik menghasilkan NOL, bukan seluruh tabel. Repositori tidak boleh
+    // "memperbaiki" urutan ujungnya sendiri: yang salah harus terlihat sebagai kosong,
+    // dan penolakannya jadi urusan rute yang aturannya keras.
+    assert.strictEqual(
+      (await repo.browseCustomers({ periodFrom: '2026-09', periodTo: '2026-07' })).total, 0,
+      'rentang terbalik diam-diam ditukar — hasilnya melebar, bukan kosong');
+
+    // Provinsi penyaring MANDIRI: dia hidup berdampingan dengan kota, tidak menggantikannya.
+    const perProvinsi = await repo.browseCustomers({ province: '33' });
+    assert.ok(perProvinsi.total > 0, 'penyaring provinsi tidak menemukan apa pun');
+    assert.strictEqual(perProvinsi.rows.every((r) => r.village.startsWith('33.')), true,
+      'penyaring provinsi membawa kelurahan dari provinsi lain');
+    assert.strictEqual((await repo.browseCustomers({ province: '34' })).total,
+      (await repo.browseCustomers({})).total - perProvinsi.total,
+      'provinsi 33 dan 34 tidak menghabiskan seluruh tabel — awalannya salah dipasang');
+
+    // Pintu satunya harus bergerak bersamaan; kalau tidak, dua tempat menjawab
+    // pertanyaan yang sama dengan angka yang berbeda.
+    assert.strictEqual(
+      (await repo.customersInVillage('34.04.06.2003', { from: '2026-07', to: '2026-07' })).length,
+      4, 'customersInVillage tidak ikut menghormati rentang');
+    assert.strictEqual(
+      (await repo.customersInVillage('34.04.06.2003', { from: '2026-09', to: '2026-07' })).length,
+      0, 'customersInVillage diam-diam menukar ujung rentang yang terbalik');
+
+    // Panggilan gaya lama gagal keras. Tanpa penjaga ini, customersInVillage(v, '2026-08')
+    // tetap jalan dan berarti "seluruh riwayat kelurahan itu" — lebih luas dari yang
+    // diminta, tanpa error, di rute yang mengeluarkan nama dan alamat.
+    await assert.rejects(
+      () => repo.customersInVillage('34.04.06.2003', '2026-08'),
+      /objek, bukan argumen berurutan/,
+      'panggilan periode gaya lama tidak ditolak — pelebarannya senyap');
+
+    // Bersihkan lagi supaya blok berikutnya berangkat dari keadaan yang sama.
+    await store.run(store.customers(),
+      "DELETE FROM customers WHERE period IN ('2026-07', '2026-09')");
 
     /* --------------------------------------------------------------------
        HAPUS SATU PERIODE

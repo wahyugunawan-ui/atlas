@@ -11,7 +11,8 @@ import {
   TABLE_ROW_LIMIT,
 } from './config.js';
 import { $, esc, formatNumber, sumBy, toast } from './dom.js';
-import { activeRows, dealerBreakdown, filterValue } from './filters.js';
+import { syncFilterBar } from './filter-bar.js';
+import { activeRows, clearScope, dealerBreakdown, pageFilters, scopeValue } from './filters.js';
 import { selectOutlet } from './outlets.js';
 import { S } from './state.js';
 
@@ -90,12 +91,13 @@ export function openDealerDetail(dealerCode) {
   // Baris dealer ini pada periode dan wilayah aktif — TIDAK dipersempit filter pos,
   // sama seperti kartu dealernya. Kalau berbeda, angka di panel dan di kartu tidak
   // akan bersambung dan tidak ada yang tahu mana yang benar.
-  const period = filterValue('filter-periode');
-  const city = filterValue('filter-kota');
-  const province = filterValue('filter-provinsi');
+  const f = pageFilters();
+  const city = f.scopeKind === 'kota' ? f.scopeCode : 'ALL';
+  const province = f.province;
   const rows = S.sales.filter((r) => {
     if (r.dealer !== dealerCode) return false;
-    if (period !== 'ALL' && r.period !== period) return false;
+    if (f.from !== 'ALL' && r.period < f.from) return false;
+    if (f.to !== 'ALL' && r.period > f.to) return false;
     const village = S.villageByCode[r.village];
     if (!village) return false;
     if (city !== 'ALL' && village.cityCode !== city) return false;
@@ -256,12 +258,13 @@ async function loadVillageCustomers(code) {
   const holder = $('village-customers');
   if (!holder) return;
   try {
-    const { customers } = await fetchCustomers(code, filterValue('filter-periode'));
+    const { from, to } = pageFilters();
+    const { customers } = await fetchCustomers(code, { from, to });
     // Kalau orangnya sudah pindah ke kelurahan lain sebelum ini selesai, jangan timpa.
     if (S.selectedVillage !== code) return;
 
-    const outletFilter = filterValue('filter-pos');
-    const dealerFilter = filterValue('filter-dealer');
+    const outletFilter = scopeValue('pos');
+    const dealerFilter = scopeValue('dealer');
     const list = customers.filter((c) => {
       const outlet = S.outletByCode[c.outlet] || {};
       if (outletFilter !== 'ALL' && c.outlet !== outletFilter) return false;
@@ -306,11 +309,15 @@ export function closeVillageDetail() {
 
 export function renderOutletTable() {
   const query = ($('mpos-search').value || '').toLowerCase();
-  const dealer = $('mpos-filter-dealer').value;
-  const perOutlet = sumBy(activeRows(), 'outlet');
+  const f = pageFilters('pos');
+  const perOutlet = sumBy(activeRows('pos'), 'outlet');
 
+  // Filter KOTA sengaja tidak menyaring daftar pos, cuma angkanya. Pos tidak punya
+  // kabupaten sendiri di data ini — yang punya kabupaten adalah kelurahan tempat
+  // penjualannya jatuh. Menebaknya dari koordinat pos akan salah tanpa gejala.
   const list = S.outlets.filter((o) =>
-    (dealer === 'ALL' || o.dealerCode === dealer) &&
+    (f.scopeKind !== 'dealer' || o.dealerCode === f.scopeCode) &&
+    (f.scopeKind !== 'pos' || o.code === f.scopeCode) &&
     (!query || o.name.toLowerCase().includes(query) || o.code.includes(query)))
     .sort((a, b) => (perOutlet[b.code] || 0) - (perOutlet[a.code] || 0));
 
@@ -340,7 +347,10 @@ export function renderOutletTable() {
 export function showOnMap(code) {
   switchTab('peta');
   setTimeout(() => {
-    S.selectedOutlet = null;               // paksa selectOutlet menyalakan, bukan mematikan
+    // Lingkupnya dikosongkan dulu supaya selectOutlet() pasti MENYALAKAN. Menekan
+    // tombol ini berarti "tampilkan pos ini"; tanpa ini, menekannya untuk pos yang
+    // kebetulan sedang aktif justru mematikannya.
+    clearScope();
     selectOutlet(code);
     toast('Heatmap dihitung ulang untuk ' + ((S.outletByCode[code] || {}).name || code), 'ok');
   }, 120);
@@ -531,16 +541,23 @@ export async function promptPin(code) {
 
 export function renderVillageTable() {
   const query = ($('mkel-search').value || '').toLowerCase();
-  const province = $('mkel-filter-provinsi').value;
-  const city = $('mkel-filter-kota').value;
-  const perVillage = sumBy(activeRows(), 'village');
+  const f = pageFilters('kelurahan');
+  const rows = activeRows('kelurahan');
+  const perVillage = sumBy(rows, 'village');
+
+  // Kalau lingkupnya dealer atau pos, yang ditampilkan adalah kelurahan yang BENAR-
+  // BENAR disentuh dealer atau pos itu — bukan seluruh kelurahan dengan angka nol.
+  // Daftar 8.999 baris yang 8.900 di antaranya nol tidak menjawab apa pun.
+  const disentuh = f.scopeKind === 'dealer' || f.scopeKind === 'pos'
+    ? new Set(rows.map((r) => r.village)) : null;
 
   // Sudah datang terurut dari server (provinsi -> kabupaten -> kecamatan ->
   // kelurahan). Diminta di meeting: urutan sebelumnya mengikuti volume, jadi
   // kelurahan dari kabupaten berbeda berselang-seling dan tidak bisa ditelusuri.
   const list = S.villages.filter((v) =>
-    (city === 'ALL' || v.cityCode === city) &&
-    (province === 'ALL' || v.provinceCode === province) &&
+    (f.scopeKind !== 'kota' || v.cityCode === f.scopeCode) &&
+    (f.province === 'ALL' || v.provinceCode === f.province) &&
+    (!disentuh || disentuh.has(v.code)) &&
     (!query || v.name.toLowerCase().includes(query) || v.code.includes(query)));
 
   const shown = list.slice(0, TABLE_ROW_LIMIT);
@@ -856,16 +873,19 @@ export async function renderCustomerTable(keepOffset) {
     return;
   }
 
-  const dealer = $('mkon-filter-dealer').value;
+  const f = pageFilters('konsumen');
   const filters = {
-    period: $('mkon-filter-periode').value,
-    city: $('mkon-filter-kota').value,
+    periodFrom: f.from,
+    periodTo: f.to,
+    province: f.province,
+    city: f.scopeKind === 'kota' ? f.scopeCode : 'ALL',
+    outlet: f.scopeKind === 'pos' ? f.scopeCode : null,
     query: ($('mkon-search').value || '').trim(),
     // Tabel konsumen tidak menyimpan kode dealer — itu milik tabel outlets di database
     // yang berbeda, jadi tidak bisa di-JOIN. Dealer diterjemahkan di sini jadi daftar
     // kode pos miliknya.
-    outlets: dealer === 'ALL' ? null
-      : S.outlets.filter((o) => o.dealerCode === dealer).map((o) => o.code),
+    outlets: f.scopeKind === 'dealer'
+      ? S.outlets.filter((o) => o.dealerCode === f.scopeCode).map((o) => o.code) : null,
     offset: customerOffset,
   };
 
@@ -928,6 +948,16 @@ export function switchTab(name) {
     if (section) section.classList.toggle('hidden', tab !== name);
     if (nav) nav.classList.toggle('active', tab === name);
   });
+
+  // Urutannya penting: halaman aktif ditetapkan SEBELUM tabelnya digambar, kalau tidak
+  // tabelnya membaca filter halaman sebelumnya. Halaman impor tidak punya filter, dan
+  // S.filterPage sengaja tidak diubah waktu masuk ke sana — begitu keluar, halaman
+  // yang tadi ditinggalkan masih ingat filternya.
+  if (name !== 'import') {
+    S.filterPage = name;
+    syncFilterBar();
+  }
+  $('filter-bar').classList.toggle('hidden', name === 'import');
 
   if (name === 'peta' && S.map) setTimeout(() => S.map.resize(), 60);
   if (name === 'pos') renderOutletTable();

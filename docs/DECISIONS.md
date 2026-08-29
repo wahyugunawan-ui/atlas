@@ -720,3 +720,167 @@ Dua hal yang dijaga karena keputusan ini:
 2. **Pemberitahuan tetap ada.** Pengunggah tidak lagi bisa menolak, jadi setidaknya
    berhak tahu. Menghapus pilihan boleh; menghapus pemberitahuannya tidak, dan
    `test/page.test.js` menjaganya.
+
+## [2026-08-29] Kota, dealer, dan pos berbagi satu slot filter
+
+Tim meminta: periode dan provinsi selalu bisa dipakai, plus **tepat satu** dari kota,
+dealer, atau pos — dan berpindah di antara ketiganya mereset yang sebelumnya.
+
+Cara yang jelas adalah menyimpan tiga field lalu menulis fungsi penjaga yang
+mengosongkan dua lainnya. Itu ditolak. Yang menulis lingkup di aplikasi ini ada enam
+jalur: dropdown, marker peta, blok treemap, baris panel performa, chip kartu dealer, dan
+poligon kelurahan. Penjaga yang harus dipanggil enam kali adalah penjaga yang suatu hari
+lupa dipanggil sekali, dan gagalnya diam — dua lingkup aktif bersamaan cuma terlihat
+sebagai panel kosong yang tidak dijelaskan siapa pun.
+
+Yang dipakai: satu slot, `{scopeKind, scopeCode}`. Dua lingkup aktif bersamaan **tidak
+bisa direpresentasikan**. Tidak ada kode "reset filter sebelumnya" karena tidak ada yang
+perlu direset — resetnya konsekuensi bentuk datanya.
+
+Provinsi sengaja TIDAK ikut ke dalam slot: tim memutuskan dia tetap penyaring mandiri
+yang boleh dipakai bersama salah satu dari ketiganya.
+
+Harganya nyata dan diterima sadar: drill-down "klik dealer lalu klik salah satu posnya"
+hilang. Mengklik pos membuang dealernya, di peta maupun di dropdown. Aturan yang sama di
+dua tempat lebih murah dijelaskan ke pengguna non-IT daripada dua perilaku yang mirip
+tapi berbeda.
+
+## [2026-08-29] Nilai filter di objek per halaman, bukan di `<select>`
+
+Sejak awal, sumber kebenaran filter adalah nilai `<select>` di DOM. Itu sederhana dan
+bertahan lama. Yang mematahkannya: tim meminta tiap halaman punya filter sendiri, dan
+satu set `<select>` tidak bisa menyimpan empat halaman sekaligus. Menyimpan-dan-memuat
+nilainya tiap kali tab berpindah bisa saja — tapi gagalnya diam kalau urutan di
+`switchTab()` bergeser sedikit.
+
+Sekarang nilainya di `S.filters[halaman]`, dan `<select>` cuma cermin satu arah
+(objek → DOM, lewat `syncFilterBar()`).
+
+Keuntungan yang tidak dicari tapi ternyata paling besar: `filters.js` jadi **bebas DOM**.
+Aturan saling-eksklusif, rentang periode, dan pemisahan per halaman sekarang bisa diuji
+dengan `import()` biasa di Node — `test/filters.test.js`, tanpa browser dan tanpa
+database. Selama nilainya di DOM, satu-satunya tes yang mungkin adalah pemeriksaan teks,
+dan CLAUDE.md sudah mencatat kelas kegagalan itu.
+
+Dua konsekuensi yang harus diingat:
+
+1. `renderAll()` sekarang berarti "gambar halaman Peta", bukan "gambar semuanya". Dia
+   berhenti di baris pertama kalau `S.filterPage !== 'peta'`.
+2. `renderAll()` juga yang memanggil `syncFilterBar()`. Semua jalur klik di peta
+   mengubah lingkup lewat `applyScope()` tanpa menyentuh `<select>` sama sekali; tanpa
+   baris itu, peta sudah berpindah sementara bilahnya masih menunjukkan filter lama.
+   Sudah pernah terjadi — ditemukan waktu memeriksa di browser, bukan oleh tes.
+
+## [2026-08-29] Periode: dropdown bulan + dropdown tahun, tanpa tombol "1 bulan"
+
+Bentuk kendali ini berubah tiga kali dalam satu sesi. Ditulis lengkap karena yang
+berharga bukan bentuk akhirnya, tapi kenapa dua bentuk sebelumnya gagal — dua-duanya
+terlihat benar di kepala dan baru salah waktu dipakai orang.
+
+**Versi 1 — dua `<select>` daftar bulan + sakelar "1 bulan".** Daftarnya diisi dari
+periode yang sudah diimpor, jadi mustahil salah pilih. Tim: *"langsung isi MM YY aja,
+gaperlu ada pilihan 1 bulan"*.
+
+**Versi 2 — dua `<input type="month">`, dibatasi `min`/`max` ke periode yang ada.**
+Nilainya sudah `YYYY-MM`, persis format kolom `period`. Rapi di atas kertas. Tim:
+*"biasa aja gaperlu ngikutin bulan tahun yang udah keupload"* — batas yang menolak
+bulan lain terasa seperti kotaknya rusak, bukan seperti aturan. `min`/`max` dilepas.
+
+**Versi 3 — dua `<select>` per ujung: bulan dan tahun.** Yang masih tersisa di versi 2:
+`type="month"` **tidak punya daftar tahun**. Bulannya bisa diklik dari pemilih tanggal,
+tahunnya cuma bisa diketik — dan mengetik bukan afordansi yang terlihat untuk pengguna
+non-IT. Tim: *"tahunnya juga harus bisa dipilih"*.
+
+Daftar tahunnya 2020 sampai tahun depan, **daftar biasa** yang tidak diturunkan dari
+data. Bulan yang belum ada datanya boleh dipilih dan jawabannya nol — nol yang terlihat
+apa adanya lebih jujur daripada dropdown yang diam-diam tidak memuat tahun yang dicari.
+
+**Efek samping yang bagus:** `<select>` jalan di semua browser. Peringatan versi 2
+(`type="month"` cuma didukung Chrome dan Edge; di Firefox dan Safari jatuh jadi kotak
+teks yang menerima apa saja) hilang bersama masalahnya.
+
+**Satu perbedaan halus yang wajib dijaga**, dan sudah sempat salah: "tanpa batas" harus
+datang dari orang MEMILIH tanda hubung, bukan dari salah satu dropdown yang kebetulan
+belum terisi. Waktu keduanya disamakan, memilih bulan dari keadaan kosong langsung
+dihapus lagi oleh `syncFilterBar()` — dari kosong, periodenya mustahil diisi. Sekarang
+`onPeriodChange` menerima elemen yang disentuh: nilainya kosong berarti dikosongkan
+sengaja; kalau tidak, sisi yang belum terisi **dilengkapi** (Januari untuk ujung awal,
+Desember untuk ujung akhir, tahun dari periode terakhir). Melengkapi tetap menebak, tapi
+tebakannya langsung tertulis di dropdown sebelahnya dan bisa diganti — itu yang
+membedakannya dari menebak diam-diam di dalam kode.
+
+Tombol "1 bulan" hilang berarti melihat satu bulan butuh dua tindakan, bukan satu.
+Ditukar sadar dengan bilah yang lebih sedikit isinya. Bersamanya ikut hilang field
+`single` di objek filter dan fungsi `setSingleMonth()` — perbedaan default antar halaman
+sekarang ditulis eksplisit di `fillFilterBar()`, di sebelah kode yang menyetelnya, bukan
+disimpulkan dari sebuah flag.
+
+## [2026-08-29] Dropdown sendiri menggantikan `<select>`, pencarian masuk ke dalamnya
+
+Versi pertama menempelkan kotak cari sebagai `<input>` terpisah di sebelah tiap
+`<select>`. Tim menolaknya: dua kendali untuk satu pilihan, dan yang kedua tidak terlihat
+seperti bagian dari yang pertama. Yang diminta: kotak carinya di dalam dropdown.
+
+`<select>` bawaan tidak bisa memuat apa pun di dalam daftarnya, jadi tidak ada jalan
+selain membuat sendiri. Yang dipertimbangkan dan ditolak: `<input list>` + `<datalist>`.
+Itu native dan nol komponen, tapi nilai yang tersimpan jadi **teks label**, bukan kode —
+dan menerjemahkan label balik ke kode berarti salah ketik diam-diam mengubah filter.
+Persis kelas kegagalan yang komentar `select-search.js` sudah memperingatkan sejak dulu.
+
+`combobox.js` (~120 baris) menggantikan `select-search.js`. Yang dijaga:
+
+- **Yang tersimpan selalu KODE.** Kotak cari hanya menyaring apa yang tampil; memilih
+  harus menekan salah satu barisnya. Tidak ada jalan nilai filter berasal dari ketikan.
+- **Daftar opsi menempel di elemen hostnya** (`el._combo`), bukan di objek global
+  berkunci id. Itu pelajaran langsung dari `S.allOptions` — objek global yang tidak
+  pernah dibuat siapa pun dan mematikan pencarian dropdown sejak hari pertama tanpa satu
+  pun tes merah. Sekarang yang membuat dan yang membaca ada di berkas yang sama.
+- **Kotak cari muncul hanya kalau daftarnya lebih dari 8 baris.** Provinsi punya dua
+  pilihan; kotak cari di situ cuma ribut.
+
+Yang sengaja TIDAK dibuat: navigasi panah atas/bawah di dalam daftar. Ditandai
+`ponytail:` di berkasnya. Daftarnya bisa dicari dan diklik; roving tabindex sekarang
+berarti menebak kebutuhan yang belum ada.
+
+## [2026-08-29] Pil yang menyala: aturan filter jadi sesuatu yang terlihat
+
+Tim bilang bilah filternya "terlalu flat, mau menarik tapi tetap simple". Perbaikan yang
+gampang adalah menambah bayangan, ikon, dan badge jumlah di tiap filter. Itu ditolak:
+menarik dan ramai bukan hal yang sama, dan penggunanya melihat bilah ini tiap hari.
+
+Yang dipakai, tanpa satu pun warna atau font baru:
+
+1. Bilahnya dapat gradien setipis `#ffffff → #f6f8fc` dan garis rambut bawah, supaya dia
+   punya bidang sendiri di bawah nav navy alih-alih terbaca sebagai sambungan kosong.
+2. Nama sumbu masuk ke dalam pil sebagai teks kecil uppercase — perangkat yang sudah
+   dipakai kartu KPI, bukan perangkat baru yang harus dipelajari.
+3. Periode memakai JetBrains Mono. Dia satu-satunya filter yang berupa **koordinat**,
+   bukan nama, dan mono di aplikasi ini sudah berarti "ini angka".
+4. **Pil menyala navy kalau filternya benar-benar sedang menyempitkan tampilan.**
+
+Nomor 4 itu yang sebenarnya dikerjakan. Karena kabupaten, dealer, dan pos berbagi satu
+slot, tidak akan pernah ada dua di antara ketiganya yang menyala bersamaan — jadi aturan
+yang jadi dasar seluruh perombakan ini berhenti jadi sesuatu yang harus dijelaskan dan
+mulai jadi sesuatu yang terlihat. "Kok kabupaten saya hilang waktu saya pilih dealer?"
+menjawab dirinya sendiri.
+
+Kesederhanaannya dijaga dengan membuang, bukan menahan diri: tidak ada badge jumlah,
+tidak ada ikon per filter, tidak ada animasi pil. Satu ikon corong, satu caret, dan satu
+transisi 120 md waktu panelnya muncul.
+
+## [2026-08-29] Bilah filter di luar area gulir, bukan `position: sticky`
+
+Permintaannya "filter fix di bawah panel halaman, selalu ada meski di-scroll". Judul tiap
+halaman ada DI DALAM area yang menggulir, jadi satu bilah tidak bisa sekaligus "di bawah
+judul" dan "selalu terlihat". Tim memilih bilah di ATAS judul.
+
+Bilahnya ditaruh sebagai saudara `<main>`, bukan di dalamnya. `<main>` satu-satunya
+elemen yang menggulir, jadi apa pun di luarnya memang tidak pernah bergerak — nol baris
+CSS, dan tidak bisa mati diam kalau suatu hari ada ancestor ber-`overflow` yang membuat
+`position: sticky` berhenti bekerja tanpa error.
+
+Mode layar penuh peta (`position: fixed; inset: 0`) menutupi bilah itu. Jawabannya bukan
+bilah kedua: `appendChild` MEMINDAH node ke dalam panel layar penuh dan mengembalikannya
+saat keluar. Nilai tiap `<select>` ikut utuh karena memang elemen yang sama. Cermin
+`fs-*` yang lama dibuang — dua daftar yang harus disamakan terus-menerus pasti
+menyimpang suatu hari.

@@ -6,7 +6,7 @@ import {
 } from './config.js';
 import { classOf, dealerColor, percentileBreaks, RAMP, COLOR_EMPTY } from './colors.js';
 import { $, bbox, sumBy, toast } from './dom.js';
-import { activeRows, filterValue } from './filters.js';
+import { activeRows, pageFilters, scopeValue } from './filters.js';
 import { circle, EMPTY_COLLECTION } from './geo.js';
 import { S } from './state.js';
 
@@ -219,7 +219,8 @@ export function redrawMap() {
   // 10 km mengubah seluruh persentase di layar, tapi lingkarannya diam di tempat.
   // Tidak ada yang error; yang terjadi cuma peta dan angka menceritakan dua hal
   // berbeda, dan lingkaran itu justru yang dipakai orang untuk mempercayai angkanya.
-  const outlet = S.selectedOutlet ? S.outletByCode[S.selectedOutlet] : null;
+  const selected = scopeValue('pos');
+  const outlet = selected === 'ALL' ? null : S.outletByCode[selected];
   S.map.getSource('radius').setData(
     outlet && outlet.lat != null && on('opt-radius')
       ? circle(outlet.lng, outlet.lat, S.radiusM) : EMPTY_COLLECTION);
@@ -254,8 +255,11 @@ function pointInRing(lng, lat, ring) {
 export function buildSalePoints() {
   if (S.salePoints) return S.salePoints;
 
-  const period = filterValue('filter-periode');
-  const rows = S.sales.filter((r) => period === 'ALL' || r.period === period);
+  // Titiknya dibangun untuk RENTANG periode yang aktif, bukan satu bulan. Perbandingan
+  // teks aman karena 'YYYY-MM' lebar-tetap — alasan lengkapnya di filters.js.
+  const { from, to } = pageFilters();
+  const rows = S.sales.filter((r) =>
+    (from === 'ALL' || r.period >= from) && (to === 'ALL' || r.period <= to));
 
   const byVillage = {};
   rows.forEach((r) => { (byVillage[r.village] ||= []).push(r); });
@@ -325,16 +329,15 @@ export function invalidateSalePoints() { S.salePoints = null; }
 /** Ekspresi filter lapisan titik penjualan, mengikuti ruang lingkup aktif. */
 function salePointFilter() {
   const clauses = ['all'];
-  const outlet = filterValue('filter-pos');
-  const dealer = filterValue('filter-dealer');
-  const city = filterValue('filter-kota');
-  const province = filterValue('filter-provinsi');
+  const f = pageFilters();
 
-  if (outlet !== 'ALL') clauses.push(['==', ['get', 'outlet'], outlet]);
-  else if (dealer !== 'ALL') clauses.push(['==', ['get', 'dealer'], dealer]);
+  // Kota, dealer, dan pos berbagi satu slot, jadi di sini tidak ada lagi urutan
+  // "pos mengalahkan dealer" yang harus dijaga — cuma satu yang bisa aktif.
+  if (f.scopeKind === 'pos') clauses.push(['==', ['get', 'outlet'], f.scopeCode]);
+  else if (f.scopeKind === 'dealer') clauses.push(['==', ['get', 'dealer'], f.scopeCode]);
+  else if (f.scopeKind === 'kota') clauses.push(['==', ['get', 'kota'], f.scopeCode]);
 
-  if (city !== 'ALL') clauses.push(['==', ['get', 'kota'], city]);
-  else if (province !== 'ALL') clauses.push(['==', ['get', 'prov'], province]);
+  if (f.province !== 'ALL') clauses.push(['==', ['get', 'prov'], f.province]);
 
   return clauses.length === 1 ? null : clauses;
 }
@@ -349,8 +352,22 @@ function salePointFilter() {
  * Hasilnya sama tapi tanpa banner browser yang muncul di tengah presentasi, dan panel
  * melayangnya tetap bisa diatur.
  */
+/**
+ * Bilah filter dipindah, bukan dicerminkan.
+ *
+ * Layar penuh itu position:fixed;inset:0, jadi dia menutupi bilah di atas halaman.
+ * appendChild MEMINDAH node, bukan menyalinnya — nilai tiap <select> ikut utuh, dan
+ * tidak ada set kedua yang harus disamakan terus-menerus.
+ */
+function moveFilterBar() {
+  const bar = $('filter-bar');
+  const host = S.fullscreen ? $('fs-filter-host') : $('filter-bar-slot');
+  if (bar && host && bar.parentElement !== host) host.appendChild(bar);
+}
+
 export function toggleFullscreen(force) {
   S.fullscreen = force === undefined ? !S.fullscreen : Boolean(force);
+  moveFilterBar();
   $('map-shell').classList.toggle('penuh', S.fullscreen);
   $('label-penuh').textContent = S.fullscreen ? 'Keluar' : 'Layar penuh';
   $('btn-penuh').querySelector('i').className =
@@ -379,8 +396,8 @@ export function fitToScope() {
     if (village && village.lat != null) points.push([village.lng, village.lat]);
   });
 
-  const outlet = filterValue('filter-pos');
-  const dealer = filterValue('filter-dealer');
+  const outlet = scopeValue('pos');
+  const dealer = scopeValue('dealer');
   S.outlets.forEach((o) => {
     if (o.lat == null) return;
     const included = outlet !== 'ALL' ? o.code === outlet

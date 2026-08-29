@@ -4,31 +4,93 @@
  * activeRows() adalah satu-satunya jalan membaca data yang sedang tampil. Kalau ada
  * bagian lain yang menyaring S.sales sendiri, angkanya akan berbeda dari KPI dan tidak
  * ada yang tahu mana yang benar.
+ *
+ * Modul ini SENGAJA tidak menyentuh DOM. Nilai filter tinggal di S.filters[halaman] dan
+ * <select> di bilah cuma cerminnya. Itu dua hal sekaligus: tiap halaman bisa punya
+ * filter sendiri tanpa trik simpan-muat, dan aturannya bisa diuji tanpa browser.
  */
 import { PROVINCE_NAMES } from './config.js';
-import { $ } from './dom.js';
 import { S } from './state.js';
 
-export const filterValue = (id) => ($(id) ? $(id).value : 'ALL');
+/** Nilai filter halaman yang sedang aktif, atau halaman yang disebut. */
+export const pageFilters = (page) => S.filters[page || S.filterPage] || S.filters.peta;
 
-export const FILTER_IDS = ['filter-periode', 'filter-provinsi', 'filter-kota',
-  'filter-dealer', 'filter-pos'];
+/**
+ * Kota, dealer, dan pos berbagi SATU slot.
+ *
+ * Aturannya: periode dan provinsi selalu bisa dipakai, plus TEPAT SATU dari kota,
+ * dealer, atau pos. Dengan tiga field terpisah ada tiga cara melanggarnya dan satu
+ * fungsi penjaga yang bisa dilewati jalur kedua — dan jalur keduanya banyak: dropdown,
+ * marker peta, blok treemap, baris panel performa, chip kartu dealer.
+ *
+ * Dengan satu slot, dua lingkup aktif bersamaan TIDAK BISA direpresentasikan. Tidak ada
+ * kode "reset filter sebelumnya" karena tidak ada yang perlu direset: resetnya
+ * konsekuensi bentuk datanya.
+ */
+export function scopeValue(kind, f) {
+  const filters = f || pageFilters();
+  return filters.scopeKind === kind ? filters.scopeCode : 'ALL';
+}
 
-export function activeRows() {
-  const period = filterValue('filter-periode');
-  const province = filterValue('filter-provinsi');
-  const city = filterValue('filter-kota');
-  const dealer = filterValue('filter-dealer');
-  const outlet = filterValue('filter-pos');
+/**
+ * @param {string} kind  'kota' | 'dealer' | 'pos'
+ * @param {string} code  kode, atau 'ALL' untuk mengosongkan
+ * @param {boolean} [force]  jangan toggle — dipakai "Lihat di peta" dari tabel, yang
+ *   artinya "tampilkan ini", bukan "nyalakan atau matikan ini"
+ */
+export function setScope(kind, code, force) {
+  const f = pageFilters();
+  const same = !force && f.scopeKind === kind && f.scopeCode === code;
+  if (same || !code || code === 'ALL') {
+    clearScope();
+    return;
+  }
+  f.scopeKind = kind;
+  f.scopeCode = code;
+}
+
+export function clearScope() {
+  const f = pageFilters();
+  f.scopeKind = null;
+  f.scopeCode = 'ALL';
+}
+
+export function setProvince(code) { pageFilters().province = code || 'ALL'; }
+
+/**
+ * Ujung rentang yang menyilang DISERET, bukan ditolak.
+ *
+ * Penggunanya tim channel, bukan developer, dan dropdown yang menolak pilihan tidak
+ * memberi tahu apa yang harus dilakukan. Menyeret ujung satunya selalu menghasilkan
+ * rentang yang sah, dan yang terjadi terlihat langsung di layar.
+ *
+ * @param {string} which  'from' | 'to'
+ */
+export function setPeriod(which, value) {
+  const f = pageFilters();
+  f[which] = value || 'ALL';
+  if (f.from !== 'ALL' && f.to !== 'ALL' && f.from > f.to) {
+    if (which === 'from') f.to = f.from;
+    else f.from = f.to;
+  }
+}
+
+export function activeRows(page) {
+  const f = pageFilters(page);
 
   return S.sales.filter((row) => {
-    if (period !== 'ALL' && row.period !== period) return false;
-    if (dealer !== 'ALL' && row.dealer !== dealer) return false;
-    if (outlet !== 'ALL' && row.outlet !== outlet) return false;
+    // Periode dibandingkan sebagai TEKS. Kolomnya lebar-tetap 'YYYY-MM' dengan bulan
+    // ber-nol depan, jadi urutan leksikografisnya identik dengan urutan kronologis.
+    // Ini hanya benar selama nol depannya ada — dijaga regex PERIOD di
+    // backend/server/routes.js dan oleh importir, jadi '2026-9' tidak bisa masuk.
+    if (f.from !== 'ALL' && row.period < f.from) return false;
+    if (f.to !== 'ALL' && row.period > f.to) return false;
+    if (f.scopeKind === 'dealer' && row.dealer !== f.scopeCode) return false;
+    if (f.scopeKind === 'pos' && row.outlet !== f.scopeCode) return false;
     const village = S.villageByCode[row.village];
     if (!village) return false;
-    if (city !== 'ALL' && village.cityCode !== city) return false;
-    if (province !== 'ALL' && village.provinceCode !== province) return false;
+    if (f.scopeKind === 'kota' && village.cityCode !== f.scopeCode) return false;
+    if (f.province !== 'ALL' && village.provinceCode !== f.province) return false;
     return true;
   });
 }
@@ -40,32 +102,29 @@ export function activeRows() {
  * kelurahan, dan dropdown semuanya lewat sini. Itu yang membuat "klik di peta langsung
  * berpindah" otomatis benar: tidak ada jalur kedua yang bisa lupa diperbarui, dan titik
  * penjualan, KPI, heatmap, serta panel performa selalu berpindah bersamaan.
+ *
+ * Karena kota, dealer, dan pos berbagi satu slot, mengklik pos waktu dealer sedang
+ * aktif akan MEMBUANG dealernya. Itu disengaja: aturannya sama untuk klik di peta dan
+ * untuk dropdown, jadi cuma ada satu perilaku yang perlu dijelaskan ke pengguna.
  */
 export function applyScope(kind, code) {
-  if (kind === 'kota') {
-    $('filter-kota').value = code;
-    $('filter-pos').value = 'ALL';
-    S.selectedOutlet = null;
-  } else if (kind === 'dealer') {
-    const same = filterValue('filter-dealer') === code;
-    $('filter-dealer').value = same ? 'ALL' : code;
-    $('filter-pos').value = 'ALL';
-    S.selectedOutlet = null;
-  } else if (kind === 'pos') {
-    const same = S.selectedOutlet === code;
-    S.selectedOutlet = same ? null : code;
-    $('filter-pos').value = same ? 'ALL' : code;
-    if (!same) {
-      const outlet = S.outletByCode[code];
-      if (outlet && outlet.lat != null) {
-        S.map.flyTo({ center: [outlet.lng, outlet.lat], zoom: 10.5, duration: 700 });
-      }
-    }
-  } else if (kind === 'kelurahan') {
+  if (kind === 'kelurahan') {
     // Menyetel kotanya, bukan kelurahannya: filter kelurahan tidak ada, dan
     // menyempitkan ke satu kelurahan akan mengosongkan hampir semua panel.
+    //
+    // Dipaksa, bukan di-toggle: mengklik poligon berarti "lihat kabupaten ini", dan
+    // mengklik kelurahan kedua di kabupaten yang sama tidak boleh mematikannya.
     const village = S.villageByCode[code];
-    if (village) $('filter-kota').value = village.cityCode;
+    if (village) setScope('kota', village.cityCode, true);
+  } else {
+    setScope(kind, code);
+  }
+
+  if (kind === 'pos' && scopeValue('pos') === code) {
+    const outlet = S.outletByCode[code];
+    if (outlet && outlet.lat != null && S.map) {
+      S.map.flyTo({ center: [outlet.lng, outlet.lat], zoom: 10.5, duration: 700 });
+    }
   }
   window.renderAll();
 }
@@ -176,22 +235,23 @@ export function dealerBreakdown(rows) {
  * Ada karena heatmapnya relatif: kelas warnanya dihitung ulang dari data yang lolos
  * filter. Tanpa keterangan ini, dua tangkapan layar dengan warna yang sama bisa
  * berarti hal yang sama sekali berbeda.
+ *
+ * Rentang periodenya sengaja TIDAK ikut disebut: rentangnya sekarang permanen terlihat
+ * di bilah filter, dan menyalinnya ke sini cuma bikin dua tempat yang bisa menyimpang.
  */
 export function scopeLabel() {
+  const f = pageFilters();
   const parts = [];
-  const outlet = filterValue('filter-pos');
-  const dealer = filterValue('filter-dealer');
-  const city = filterValue('filter-kota');
-  const province = filterValue('filter-provinsi');
 
-  if (outlet !== 'ALL') {
-    parts.push('Pos ' + ((S.outletByCode[outlet] || {}).name || outlet));
-  } else if (dealer !== 'ALL') {
-    parts.push('Dealer ' + (S.dealerNames[dealer] || dealer));
+  if (f.scopeKind === 'pos') {
+    parts.push('Pos ' + ((S.outletByCode[f.scopeCode] || {}).name || f.scopeCode));
+  } else if (f.scopeKind === 'dealer') {
+    parts.push('Dealer ' + (S.dealerNames[f.scopeCode] || f.scopeCode));
+  } else if (f.scopeKind === 'kota') {
+    parts.push(S.cityNames[f.scopeCode] || f.scopeCode);
   }
-  if (city !== 'ALL') parts.push(S.cityNames[city] || city);
-  else if (province !== 'ALL') {
-    parts.push(PROVINCE_NAMES[province] || 'Provinsi ' + province);
+  if (f.province !== 'ALL') {
+    parts.push(PROVINCE_NAMES[f.province] || 'Provinsi ' + f.province);
   }
   return parts.length ? parts.join(' di ') : 'seluruh penjualan';
 }

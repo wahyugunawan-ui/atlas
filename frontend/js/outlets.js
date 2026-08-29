@@ -7,7 +7,7 @@
  */
 import { dealerColor } from './colors.js';
 import { $, esc, formatNumber, sumBy } from './dom.js';
-import { activeRows, applyScope, filterValue, splitByCoverage } from './filters.js';
+import { activeRows, applyScope, clearScope, scopeValue, splitByCoverage } from './filters.js';
 import { S } from './state.js';
 
 export function drawMarkers() {
@@ -15,14 +15,14 @@ export function drawMarkers() {
   S.markers = [];
 
   const perOutlet = sumBy(activeRows(), 'outlet');
-  const dealerFilter = filterValue('filter-dealer');
-  const posFilter = filterValue('filter-pos');
+  const dealerFilter = scopeValue('dealer');
+  const posFilter = scopeValue('pos');
   const focusDealer = posFilter !== 'ALL'
     ? (S.outletByCode[posFilter] || {}).dealerCode : dealerFilter;
 
   S.outlets.forEach((outlet) => {
     if (outlet.lat == null) return;
-    const selected = S.selectedOutlet === outlet.code;
+    const selected = posFilter === outlet.code;
     // Tiga tingkat, bukan dua: pos terpilih penuh, saudara sedealer tetap berwarna
     // tapi lebih kecil, sisanya abu. Waktu menekan satu pos, pos lain milik dealer
     // yang sama tetap harus kelihatan.
@@ -77,8 +77,7 @@ export function moveTooltip(event) {
 export function selectOutlet(code) { applyScope('pos', code); }
 
 export function closeSelectionInfo() {
-  S.selectedOutlet = null;
-  $('filter-pos').value = 'ALL';
+  clearScope();
   window.renderAll();
 }
 

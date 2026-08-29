@@ -9,7 +9,9 @@
 import { fetchGeo, fetchSummary } from './api.js';
 import { buildColorRegistry } from './colors.js';
 import { PROVINCE_NAMES } from './config.js';
-import { $, bbox, esc, fillSelect, formatNumber, monthLabel, toast } from './dom.js';
+import { $, bbox, esc, formatNumber, monthLabel, toast } from './dom.js';
+import { chooseCombo, comboSearch, toggleCombo } from './combobox.js';
+import { fillFilterBar, onPeriodChange, resetFilters, syncFilterBar } from './filter-bar.js';
 import { activeRows, applyScope, scopeLabel } from './filters.js';
 import {
   addLayers, fitToScope, invalidateSalePoints, paintChoropleth, redrawMap, setBasemap,
@@ -18,7 +20,6 @@ import {
 import {
   closeSelectionInfo, drawMarkers, selectOutlet, showVillageTooltip,
 } from './outlets.js';
-import { filterSelectOptions } from './select-search.js';
 import {
   closeDealerCard, renderDealerCard, renderDealerLegend, renderKpi, renderLegend,
   renderPerformance, renderTreemap, selectEntity, setTreemapView,
@@ -45,8 +46,8 @@ import {
 
 const HANDLERS = {
   // filter dan peta
-  onFilterChange, resetFilters, redrawMap, setBasemap, setRadius,
-  mirrorFilter, applyScope, toggleFullscreen, fitToScope,
+  onPeriodChange, toggleCombo, comboSearch, chooseCombo, resetFilters,
+  redrawMap, setBasemap, setRadius, applyScope, toggleFullscreen, fitToScope,
   // ringkasan
   setTreemapView, selectEntity, closeDealerCard,
   // sunting pos
@@ -63,56 +64,33 @@ const HANDLERS = {
   importStep, importPeriodChanged, pickFile, fileChosen, dropFile, dragOver, dragLeave,
   runUpload, reviewImport, finishImport, reimportPeriod, refreshImportTab,
   askDeletePeriod, closeDeletePeriod, deletePeriodTyped, confirmDeletePeriod,
-  // pencarian di dalam dropdown; dengan 51 dealer dan 78 pos, menggulir daftar
-  // sepanjang itu lebih lambat daripada mengetik tiga huruf
-  filterSelectOptions,
   // dipanggil antar modul lewat window supaya tidak ada lingkaran import
   renderAll, reloadSummary,
 };
 Object.assign(window, HANDLERS);
 
 /* ==========================================================================
-   FILTER
-   ========================================================================== */
-
-let lastPeriod = null;
-
-export function onFilterChange() {
-  // Titik penjualan dibangun ulang HANYA kalau periodenya berganti. Filter lain tidak
-  // mengubah titiknya — cuma warnanya — dan membangun ulang 18 ribu titik tiap kali
-  // dropdown disentuh akan terasa berat tanpa alasan.
-  const period = $('filter-periode').value;
-  if (period !== lastPeriod) { invalidateSalePoints(); lastPeriod = period; }
-  renderAll();
-}
-
-/** Pasangan dropdown layar penuh dan filter utama yang dicerminkannya. */
-const FS_MIRROR = [
-  ['fs-periode', 'filter-periode'], ['fs-kota', 'filter-kota'],
-  ['fs-dealer', 'filter-dealer'], ['fs-pos', 'filter-pos'],
-];
-
-/** Dropdown saat layar penuh menyalin nilainya ke filter utama, lalu render ulang. */
-export function mirrorFilter(id, el) {
-  $(id).value = el.value;
-  if (id === 'filter-pos') S.selectedOutlet = el.value === 'ALL' ? null : el.value;
-  if (id === 'filter-periode') invalidateSalePoints();
-  renderAll();
-}
-
-export function resetFilters() {
-  ['filter-provinsi', 'filter-kota', 'filter-dealer', 'filter-pos']
-    .forEach((id) => { $(id).value = 'ALL'; });
-  S.selectedOutlet = null;
-  closeVillageDetail();
-  renderAll();
-}
-
-/* ==========================================================================
    RENDER
    ========================================================================== */
 
+/**
+ * Gambar ulang halaman Insight & Peta.
+ *
+ * Namanya "semua" karena dia menggambar SELURUH halaman Peta sekaligus, bukan karena
+ * dia menggambar seluruh aplikasi. Halaman lain punya penggambarnya sendiri dan
+ * memakai filter halamannya sendiri — memanggil yang ini dari sana akan mewarnai peta
+ * dengan filter milik halaman lain.
+ */
 export function renderAll() {
+  if (S.filterPage !== 'peta') return;
+
+  // Bilah filter ikut disamakan DI SINI, bukan cuma di penangan dropdown-nya.
+  // Klik marker, blok treemap, baris performa, dan chip kartu dealer semuanya
+  // mengubah lingkup lewat applyScope() tanpa menyentuh <select> sama sekali —
+  // tanpa baris ini, peta sudah berpindah sementara bilahnya masih menunjukkan
+  // filter yang lama, dan tidak ada yang tahu mana yang benar.
+  syncFilterBar();
+
   const rows = activeRows();
 
   let perVillage;
@@ -139,13 +117,6 @@ export function renderAll() {
   // menunggu harus terlihat tanpa ada yang membuka modalnya dulu.
   $('mkel-pending').textContent = S.pendingNames;
   $('mkel-pending').classList.toggle('hidden', !S.pendingNames);
-
-  // Dropdown layar penuh cuma cermin; nilainya selalu mengikuti filter utama.
-  FS_MIRROR.forEach(([mirror, main]) => {
-    if ($(mirror)) $(mirror).value = $(main).value;
-  });
-
-  S.selectedOutlet = $('filter-pos').value === 'ALL' ? null : $('filter-pos').value;
 
   if (S.layersReady) {
     drawMarkers();
@@ -198,46 +169,7 @@ function buildIndexes(data) {
 }
 
 function fillFilters() {
-  const periodPairs = S.periods.slice().reverse().map((p) => [p, monthLabel(p)]);
-  fillSelect($('filter-periode'), periodPairs, 'Semua Periode');
-  // Halaman Data Konsumen sengaja dibiarkan di "Semua Periode": dia untuk menelusuri
-  // apa yang sudah masuk, bukan untuk menganalisis satu bulan.
-  fillSelect($('mkon-filter-periode'), periodPairs, 'Semua Periode');
-  if (S.periods.length) {
-    $('filter-periode').value = S.periods[S.periods.length - 1];
-    lastPeriod = $('filter-periode').value;
-  }
-
-  const provinces = [...new Set(S.villages.map((v) => v.provinceCode))].sort();
-  const provincePairs = provinces.map((p) => [p, PROVINCE_NAMES[p] || 'Provinsi ' + p]);
-  fillSelect($('filter-provinsi'), provincePairs, 'Semua Provinsi');
-  fillSelect($('mkel-filter-provinsi'), provincePairs, 'Semua Provinsi');
-
-  const cityPairs = Object.keys(S.cityNames)
-    .sort((a, b) => S.cityNames[a].localeCompare(S.cityNames[b]))
-    .map((c) => [c, S.cityNames[c]]);
-  fillSelect($('filter-kota'), cityPairs, 'Semua Kota');
-  fillSelect($('mkel-filter-kota'), cityPairs, 'Semua Kota');
-  fillSelect($('mkon-filter-kota'), cityPairs, 'Semua Kota');
-
-  const dealerPairs = S.registry.order
-    .filter((code) => S.dealerNames[code])
-    .map((code) => [code, S.dealerNames[code]]);
-  fillSelect($('filter-dealer'), dealerPairs, 'Semua Dealer');
-  fillSelect($('mpos-filter-dealer'), dealerPairs, 'Semua Dealer');
-  fillSelect($('mkon-filter-dealer'), dealerPairs, 'Semua Dealer');
-
-  fillSelect($('filter-pos'),
-    S.outlets.slice().sort((a, b) => a.name.localeCompare(b.name))
-      .map((o) => [o.code, o.name]), 'Semua Pos Dealer');
-
-  // Dropdown layar penuh dibangun dari yang utama, supaya tidak ada dua daftar yang
-  // bisa menyimpang.
-  FS_MIRROR.forEach(([mirror, main]) => {
-    if (!$(mirror)) return;
-    $(mirror).innerHTML = $(main).innerHTML;
-    $(mirror).value = $(main).value;
-  });
+  fillFilterBar();
 
   $('pilihan-radius').innerHTML = S.radiiM.map((r) =>
     `<button id="radius-${r}" onclick="setRadius(${r})" ` +

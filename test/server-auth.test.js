@@ -172,6 +172,39 @@ async function test() {
     assert.ok(limited.text.includes('Tunggu'),
       'pesan pembatas harus memberi tahu apa yang harus dilakukan');
 
+    // --- rentang periode: satu rute menolak, satu rute mengabaikan ---
+    //
+    // Dua rute PII memakai NAMA PARAMETER YANG SAMA dengan aturan yang sengaja
+    // berbeda, dan itu undangan untuk salin-tempel. /customers/browse dipakai sambil
+    // mengetik, jadi penyaring cacat diabaikan; /customers mengeluarkan nama dan
+    // alamat satu kelurahan, jadi bentuk yang salah DITOLAK — mengabaikannya berarti
+    // permintaannya melebar diam-diam jadi seluruh riwayat kelurahan itu.
+    //
+    // Ditaruh SEBELUM blok pembatas di bawah: blok itu sengaja menghabiskan jatah
+    // 30/menit, dan permintaan apa pun sesudahnya cuma dapat 429 lalu ikut hijau.
+    const sesiPeriode = `${COOKIE_NAME}=${createSession(config.sessionSecret)}`;
+
+    const periodeCacat = await request(port, 'GET',
+      '/api/customers?village=34.04.01.2001&periodFrom=2026-13', { cookie: sesiPeriode });
+    assert.strictEqual(periodeCacat.status, 400,
+      '/api/customers menerima periode yang bentuknya salah lalu mengabaikannya — ' +
+      'hasilnya seluruh riwayat kelurahan itu, bukan bulan yang diminta');
+
+    const terbalik = await request(port, 'GET',
+      '/api/customers?village=34.04.01.2001&periodFrom=2026-09&periodTo=2026-07',
+      { cookie: sesiPeriode });
+    assert.strictEqual(terbalik.status, 400,
+      'rentang terbalik di /api/customers tidak ditolak');
+    assert.match(terbalik.text, /terbalik/i,
+      'pesannya harus menyebut apa yang salah, bukan cuma "permintaan tidak sah"');
+
+    // Sebaliknya di rute telusur: bentuk yang salah tidak boleh membatalkan permintaan.
+    const lunak = await request(port, 'GET',
+      '/api/customers/browse?periodFrom=bukan-periode', { cookie: sesiPeriode });
+    assert.notStrictEqual(lunak.status, 400,
+      '/api/customers/browse menolak penyaring yang cacat — halaman yang dipakai ' +
+      'sambil mengetik jadi terasa rusak tiap satu dropdown belum diisi');
+
     // --- pembatas laju di rute yang mengembalikan PII ---
     //
     // Halaman Data Konsumen mengirim 500 baris per permintaan. Tanpa pembatas, satu

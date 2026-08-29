@@ -97,6 +97,74 @@
   .baris-pos:hover { border-color: #cbd5e1; background: rgba(11,47,107,.02); }
   .baris-pos.aktif { border-color: var(--astra-navy); background: rgba(11,47,107,.05); }
 
+  /* --- BILAH FILTER -------------------------------------------------------
+     Bilahnya rak, bukan sambungan. Putih rata di bawah nav navy tidak terbaca
+     sebagai apa-apa; gradien setipis ini plus garis rambut sudah cukup memberinya
+     bidang sendiri tanpa menambah satu pun elemen. */
+  #filter-bar { background: linear-gradient(180deg, #ffffff, #f6f8fc);
+    border-bottom: 1px solid #dfe5ef;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 1px 3px rgba(11,47,107,.05); }
+  /* Di layar penuh bilahnya masuk ke panel kaca, jadi latarnya sendiri dilepas. */
+  #fs-filter-host #filter-bar { background: none; border: 0; box-shadow: none; }
+  .bar-pisah { width: 1px; height: 22px; background: #dfe5ef; }
+
+  .pilih { position: relative; }
+  .pilih-tombol { display: inline-flex; align-items: center; gap: 8px; height: 32px;
+    padding: 0 10px 0 12px; border-radius: 999px; background: #eef2f8; border: 0;
+    cursor: pointer; transition: background .15s ease; max-width: 270px; }
+  .pilih-tombol:hover { background: #e3e9f3; }
+  .pilih-tombol:focus-visible { outline: 2px solid var(--astra-navy); outline-offset: 2px; }
+  .pilih-kunci { font-size: 10px; font-weight: 800; letter-spacing: .07em;
+    text-transform: uppercase; color: #94a3b8; white-space: nowrap; }
+  .pilih-nilai { font-size: 13px; font-weight: 700; color: #334155; max-width: 170px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pilih-caret { font-size: 12px; color: #94a3b8; transition: transform .15s ease; }
+  .pilih.buka .pilih-caret { transform: rotate(180deg); }
+
+  /* MENYALA = filter ini benar-benar sedang menyempitkan tampilan. Karena kabupaten,
+     dealer, dan pos berbagi satu slot, mustahil ada dua yang menyala bersamaan —
+     aturannya jadi terlihat, bukan cuma berlaku. */
+  .pilih.nyala .pilih-tombol { background: var(--astra-navy); }
+  .pilih.nyala .pilih-tombol:hover { background: var(--astra-navy-light); }
+  .pilih.nyala .pilih-kunci { color: rgba(255,255,255,.55); }
+  .pilih.nyala .pilih-nilai, .pilih.nyala .pilih-caret { color: #fff; }
+
+  .pilih-panel { position: absolute; top: calc(100% + 6px); left: 0; z-index: 60;
+    width: 268px; padding: 8px; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(14px) saturate(160%); border: 1px solid rgba(255,255,255,.7);
+    border-radius: 14px; box-shadow: 0 16px 40px rgba(11,47,107,.18);
+    animation: pilih-masuk .12s ease-out; }
+  @keyframes pilih-masuk { from { opacity: 0; transform: translateY(-4px); } }
+  .pilih-cari { width: 100%; height: 32px; padding: 0 10px; margin-bottom: 6px;
+    border: 1px solid #e2e8f0; border-radius: 9px; background: #fff; font-size: 13px;
+    font-family: inherit; color: #334155; }
+  .pilih-cari:focus { outline: none; border-color: var(--astra-navy); }
+  .pilih-daftar { max-height: 268px; overflow-y: auto; }
+  .pilih-opsi { display: block; width: 100%; text-align: left; padding: 7px 10px;
+    border: 0; background: none; border-radius: 8px; font-family: inherit; font-size: 13px;
+    font-weight: 600; color: #334155; cursor: pointer; }
+  .pilih-opsi:hover { background: #eef2f8; }
+  .pilih-opsi.terpilih { background: rgba(11,47,107,.08); color: var(--astra-navy); }
+  .pilih-kosong { padding: 12px 10px; font-size: 12px; color: #94a3b8; }
+
+  /* Periode itu koordinat, bukan nama — jadi dia memakai muka angka, sama seperti
+     tiap angka lain di aplikasi ini. Bulan dan tahun dua dropdown terpisah, tapi satu
+     pil: yang dipilih orang satu hal, bukan dua. */
+  .kotak-bulan { display: inline-flex; align-items: center; gap: 2px; height: 32px;
+    padding: 0 6px 0 8px; border-radius: 999px; background: #eef2f8;
+    transition: background .15s ease; }
+  .kotak-bulan:hover { background: #e3e9f3; }
+  .kotak-bulan:focus-within { outline: 2px solid var(--astra-navy); outline-offset: 2px; }
+  .kotak-bulan select { border: 0; background: none; cursor: pointer;
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600;
+    color: #334155; padding: 0 2px; }
+  .kotak-bulan select:focus { outline: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pilih-panel { animation: none; }
+    .pilih-caret { transition: none; }
+  }
+
   /* Lebar tetap dan potong dengan elipsis. Tanpa ini nama dealer yang panjang
      memelarkan bilah filter sampai membungkus jadi beberapa baris. */
   .fs-select { background: transparent; border: 0; font-size: 12px; font-weight: 600;
@@ -139,30 +207,36 @@
   </div>
 </nav>
 
+<!-- Bilah filter. Di LUAR <main>, yang satu-satunya area menggulir di halaman ini —
+     jadi dia selalu terlihat tanpa position:sticky. Nilainya beda-beda per halaman;
+     yang ditampilkan selalu milik halaman yang sedang dibuka. -->
+<div id="filter-bar-slot" class="shrink-0">
+  <div id="filter-bar" class="px-4 md:px-6 py-2 flex flex-wrap items-center gap-x-2.5 gap-y-2">
+    <i class="ph-fill ph-funnel text-slate-300 shrink-0"></i>
+    <div class="kotak-bulan shrink-0" title="Bulan awal. Pilih tanda hubung untuk mulai dari data paling awal.">
+      <select id="dari-bulan" onchange="onPeriodChange('from', this)" aria-label="Bulan awal"></select>
+      <select id="dari-tahun" onchange="onPeriodChange('from', this)" aria-label="Tahun awal"></select>
+    </div>
+    <span id="label-sampai" class="text-[11px] font-bold text-slate-400 shrink-0">s/d</span>
+    <div class="kotak-bulan shrink-0" title="Bulan akhir. Pilih tanda hubung untuk sampai data paling akhir.">
+      <select id="sampai-bulan" onchange="onPeriodChange('to', this)" aria-label="Bulan akhir"></select>
+      <select id="sampai-tahun" onchange="onPeriodChange('to', this)" aria-label="Tahun akhir"></select>
+    </div>
+    <div class="bar-pisah shrink-0"></div>
+    <div class="pilih shrink-0" id="pilih-provinsi"></div>
+    <div class="pilih shrink-0" id="pilih-kota"></div>
+    <div class="pilih shrink-0" id="pilih-dealer"></div>
+    <div class="pilih shrink-0" id="pilih-pos"></div>
+    <button onclick="resetFilters()" title="Kembali ke seluruh penjualan" class="ml-auto shrink-0 text-slate-400 hover:text-slate-700 px-2"><i class="ph ph-arrow-counter-clockwise text-lg"></i></button>
+  </div>
+</div>
+
 <main class="flex-1 overflow-y-auto">
 <section id="tab-peta" class="p-4 md:p-6 space-y-5">
 
-  <div class="flex flex-col lg:flex-row lg:items-center gap-4">
-    <div class="shrink-0">
-      <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900">Insight Distribusi Geospasial</h1>
-      <p class="text-sm text-slate-500 mt-0.5">Sebaran penjualan per kelurahan, agregat bulanan</p>
-    </div>
-    <div class="flex-1 bg-white rounded-2xl shadow-sm border border-slate-100 px-4 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
-      <i class="ph-fill ph-funnel text-slate-400"></i>
-      <select id="filter-periode" onchange="onFilterChange()" class="bg-transparent border-0 text-sm font-semibold text-slate-700 cursor-pointer min-w-[110px]"></select>
-      <div class="w-px h-5 bg-slate-200"></div>
-      <select id="filter-provinsi" onchange="onFilterChange()" class="bg-transparent border-0 text-sm font-semibold text-slate-700 cursor-pointer min-w-[130px]"></select>
-      <div class="w-px h-5 bg-slate-200"></div>
-      <input id="cari-kota" oninput="filterSelectOptions('kota')" type="text" placeholder="cari kota..." class="cari-opsi bg-transparent border-0 text-xs text-slate-500 placeholder:text-slate-300 w-[80px] px-1">
-      <select id="filter-kota" onchange="onFilterChange()" class="bg-transparent border-0 text-sm font-semibold text-slate-700 cursor-pointer min-w-[150px]"></select>
-      <div class="w-px h-5 bg-slate-200"></div>
-      <input id="cari-dealer" oninput="filterSelectOptions('dealer')" type="text" placeholder="cari dealer..." class="cari-opsi bg-transparent border-0 text-xs text-slate-500 placeholder:text-slate-300 w-[86px] px-1">
-      <select id="filter-dealer" onchange="onFilterChange()" class="bg-transparent border-0 text-sm font-semibold text-slate-700 cursor-pointer min-w-[160px]"></select>
-      <div class="w-px h-5 bg-slate-200"></div>
-      <input id="cari-pos" oninput="filterSelectOptions('pos')" type="text" placeholder="cari pos..." class="cari-opsi bg-transparent border-0 text-xs text-slate-500 placeholder:text-slate-300 w-[74px] px-1">
-      <select id="filter-pos" onchange="onFilterChange()" class="bg-transparent border-0 text-sm font-semibold text-slate-700 cursor-pointer min-w-[160px]"></select>
-      <button onclick="resetFilters()" title="Reset semua filter" class="ml-auto text-slate-400 hover:text-slate-700 px-2"><i class="ph ph-arrow-counter-clockwise text-lg"></i></button>
-    </div>
+  <div>
+    <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900">Insight Distribusi Geospasial</h1>
+    <p class="text-sm text-slate-500 mt-0.5">Sebaran penjualan per kelurahan, agregat bulanan</p>
   </div>
 
   <!-- Ruang lingkup: apa yang sedang dihitung. Ini yang membuat heatmap relatif
@@ -237,21 +311,10 @@
       </button>
     </div>
 
-    <!-- Filter ringkas; hanya saat layar penuh, karena di mode biasa filternya sudah
-         ada di atas halaman. -->
-    <div class="hanya-penuh absolute top-6 left-1/2 -translate-x-1/2 z-20 map-panel px-4 py-2.5">
-      <div class="flex items-center gap-2 whitespace-nowrap">
-        <i class="ph-fill ph-funnel text-slate-400 shrink-0"></i>
-        <select id="fs-periode" onchange="mirrorFilter('filter-periode', this)" class="fs-select w-[110px]"></select>
-        <div class="w-px h-4 bg-slate-300 shrink-0"></div>
-        <select id="fs-kota" onchange="mirrorFilter('filter-kota', this)" class="fs-select w-[150px]"></select>
-        <div class="w-px h-4 bg-slate-300 shrink-0"></div>
-        <select id="fs-dealer" onchange="mirrorFilter('filter-dealer', this)" class="fs-select w-[170px]"></select>
-        <div class="w-px h-4 bg-slate-300 shrink-0"></div>
-        <select id="fs-pos" onchange="mirrorFilter('filter-pos', this)" class="fs-select w-[170px]"></select>
-        <button onclick="resetFilters()" title="Reset filter" class="text-slate-400 hover:text-slate-700 px-1 shrink-0"><i class="ph ph-arrow-counter-clockwise"></i></button>
-      </div>
-    </div>
+    <!-- Layar penuh menutupi bilah filter di atas, jadi bilah ASLINYA yang dipindah
+         ke sini (lihat toggleFullscreen di map.js). Bukan cermin kedua: dua daftar
+         yang harus disamakan terus-menerus pasti menyimpang suatu hari. -->
+    <div id="fs-filter-host" class="hanya-penuh absolute top-6 left-1/2 -translate-x-1/2 z-20 map-panel"></div>
 
     <div class="hanya-penuh absolute top-20 left-6 bottom-6 w-80 map-panel p-4 z-20 overflow-y-auto">
       <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Analisis Performa Pos</div>
@@ -452,7 +515,6 @@
     <div class="flex gap-2">
       <button onclick="openNewOutlet()" style="background:var(--astra-navy)" class="px-4 py-2 rounded-xl text-white text-sm font-semibold hover:opacity-90 whitespace-nowrap"><i class="ph ph-plus mr-1"></i>Tambah Pos</button>
       <input id="mpos-search" oninput="renderOutletTable()" type="text" placeholder="Cari nama atau kode pos..." class="px-3 py-2 rounded-xl border border-slate-200 text-sm w-64">
-      <select id="mpos-filter-dealer" onchange="renderOutletTable()" class="px-3 py-2 rounded-xl border border-slate-200 text-sm font-semibold bg-white"></select>
     </div>
   </div>
   <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
@@ -480,9 +542,6 @@
     </div>
     <div class="flex flex-wrap gap-2">
       <input id="mkon-search" oninput="searchCustomers()" type="text" placeholder="Cari nama atau alamat..." class="px-3 py-2 rounded-xl border border-slate-200 text-sm w-56">
-      <select id="mkon-filter-periode" onchange="renderCustomerTable()" class="px-3 py-2 rounded-xl border border-slate-200 text-sm font-semibold bg-white"></select>
-      <select id="mkon-filter-kota" onchange="renderCustomerTable()" class="px-3 py-2 rounded-xl border border-slate-200 text-sm font-semibold bg-white"></select>
-      <select id="mkon-filter-dealer" onchange="renderCustomerTable()" class="px-3 py-2 rounded-xl border border-slate-200 text-sm font-semibold bg-white"></select>
     </div>
   </div>
   <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
@@ -516,8 +575,6 @@
     <div class="flex gap-2">
       <button onclick="openMatchNames()" style="background:var(--astra-navy)" class="px-4 py-2 rounded-xl text-white text-sm font-semibold hover:opacity-90 whitespace-nowrap"><i class="ph ph-link mr-1"></i>Cocokkan Nama<span id="mkel-pending" class="hidden ml-1.5 px-1.5 py-0.5 rounded-md bg-white/25 text-[11px] mono"></span></button>
       <input id="mkel-search" oninput="renderVillageTable()" type="text" placeholder="Cari kelurahan atau kode..." class="px-3 py-2 rounded-xl border border-slate-200 text-sm w-56">
-      <select id="mkel-filter-provinsi" onchange="renderVillageTable()" class="px-3 py-2 rounded-xl border border-slate-200 text-sm font-semibold bg-white"></select>
-      <select id="mkel-filter-kota" onchange="renderVillageTable()" class="px-3 py-2 rounded-xl border border-slate-200 text-sm font-semibold bg-white"></select>
     </div>
   </div>
   <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">

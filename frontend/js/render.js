@@ -5,7 +5,7 @@ import {
   CLASS_LABELS, COLOR_EMPTY, RAMP, classRanges, dealerColor,
 } from './colors.js';
 import { $, esc, formatNumber, sumBy } from './dom.js';
-import { activeRows, applyScope, filterValue, splitByCoverage } from './filters.js';
+import { activeRows, applyScope, clearScope, pageFilters, scopeValue, splitByCoverage } from './filters.js';
 import { S } from './state.js';
 
 export function renderKpi(rows, perVillage) {
@@ -86,7 +86,7 @@ function performanceByOutlet(rows) {
 }
 
 function performanceRow(item) {
-  const active = S.selectedOutlet === item.code;
+  const active = scopeValue('pos') === item.code;
   return `<div onclick="applyScope('pos','${esc(item.code)}')" ` +
     `class="baris-pos rounded-xl px-3 py-2 ${active ? 'aktif' : ''}">` +
     `<div class="flex items-center gap-2">` +
@@ -159,9 +159,9 @@ export function renderPerformance(rows) {
    ========================================================================== */
 
 function activeDealerCode() {
-  const outlet = filterValue('filter-pos');
+  const outlet = scopeValue('pos');
   if (outlet !== 'ALL') return (S.outletByCode[outlet] || {}).dealerCode || null;
-  const dealer = filterValue('filter-dealer');
+  const dealer = scopeValue('dealer');
   return dealer !== 'ALL' ? dealer : null;
 }
 
@@ -171,16 +171,16 @@ function dealerCardHtml(compact) {
 
   // Seluruh pos milik dealer ini pada periode dan wilayah aktif — TIDAK ikut
   // dipersempit filter pos. Yang ditanyakan kartu ini memang rekap dealernya.
-  const period = filterValue('filter-periode');
-  const city = filterValue('filter-kota');
-  const province = filterValue('filter-provinsi');
+  const f = pageFilters();
+  const city = f.scopeKind === 'kota' ? f.scopeCode : 'ALL';
   const rows = S.sales.filter((r) => {
     if (r.dealer !== code) return false;
-    if (period !== 'ALL' && r.period !== period) return false;
+    if (f.from !== 'ALL' && r.period < f.from) return false;
+    if (f.to !== 'ALL' && r.period > f.to) return false;
     const village = S.villageByCode[r.village];
     if (!village) return false;
     if (city !== 'ALL' && village.cityCode !== city) return false;
-    if (province !== 'ALL' && village.provinceCode !== province) return false;
+    if (f.province !== 'ALL' && village.provinceCode !== f.province) return false;
     return true;
   });
 
@@ -248,9 +248,7 @@ export function renderDealerCard() {
 }
 
 export function closeDealerCard() {
-  $('filter-dealer').value = 'ALL';
-  $('filter-pos').value = 'ALL';
-  S.selectedOutlet = null;
+  clearScope();
   window.renderAll();
 }
 

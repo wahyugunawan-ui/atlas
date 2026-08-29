@@ -62,9 +62,11 @@ export const fetchUnmatched = (period) =>
  * itu disengaja: satu akun dipakai bersama, jadi tidak boleh ada satu permintaan yang
  * bisa menyedot seluruh basis data konsumen.
  */
-export function fetchCustomers(villageCode, period) {
+export function fetchCustomers(villageCode, range) {
   const query = new URLSearchParams({ village: villageCode });
-  if (period && period !== 'ALL') query.set('period', period);
+  const r = range || {};
+  if (r.from && r.from !== 'ALL') query.set('periodFrom', r.from);
+  if (r.to && r.to !== 'ALL') query.set('periodTo', r.to);
   return request(`${API}customers?${query}`);
 }
 
@@ -75,11 +77,12 @@ export function fetchCustomers(villageCode, period) {
  * memperlakukan parameter yang tidak ada sebagai "tanpa saringan", dan mengirim
  * 'ALL' sebagai teks akan dicari apa adanya.
  *
- * @param {Object} filters {period, city, village, outlet, outlets, query}
+ * @param {Object} filters {periodFrom, periodTo, province, city, village, outlet,
+ *   outlets, query, offset}
  */
 export function browseCustomers(filters) {
   const query = new URLSearchParams();
-  ['period', 'city', 'village', 'outlet'].forEach((key) => {
+  ['periodFrom', 'periodTo', 'province', 'city', 'village', 'outlet'].forEach((key) => {
     const value = filters[key];
     if (value && value !== 'ALL') query.set(key, value);
   });

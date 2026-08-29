@@ -189,6 +189,114 @@ function test() {
   assert.deepStrictEqual(missingIds, [],
     `modul merujuk id yang tidak ada di markup: ${missingIds.join(', ')}`);
 
+  /* --------------------------------------------------------------------
+     BILAH FILTER (KF-FILTER-1, -2, -10)
+     --------------------------------------------------------------------
+     Bilahnya selalu terlihat karena letaknya DI LUAR satu-satunya elemen yang
+     menggulir, bukan karena CSS. Itu berarti letaknya sendiri yang jadi jaminan —
+     dan letak tidak punya tes sampai ada yang menuliskannya.
+     -------------------------------------------------------------------- */
+  // Komentar dibuang dulu. Komentar di sebelah bilahnya menyebut <main> untuk
+  // menjelaskan kenapa bilahnya ada di luar — dan pencarian tag yang polos akan
+  // menemukan kalimat itu, bukan tagnya. Sudah kejadian: penjaga ini merah terhadap
+  // markup yang justru benar.
+  const htmlTanpaKomentar = html.replace(/<!--[\s\S]*?-->/g, '');
+  const mainStart = htmlTanpaKomentar.indexOf('<main');
+  const mainEnd = htmlTanpaKomentar.indexOf('</main>');
+  assert.ok(mainStart > 0 && mainEnd > mainStart, 'markup tidak punya <main>');
+  assert.ok(html.includes('id="filter-bar"'), 'bilah filter hilang dari markup');
+  assert.ok(!htmlTanpaKomentar.slice(mainStart, mainEnd).includes('id="filter-bar"'),
+    'bilah filter pindah ke DALAM <main>. <main> satu-satunya area yang menggulir, ' +
+    'jadi begitu bilahnya di dalam, dia ikut menggulir pergi — dan tidak ada CSS yang ' +
+    'menahannya, karena memang tidak pernah dipasang position:sticky');
+
+  // Halaman Import tidak punya filter, jadi bilahnya disembunyikan di sana. Kalau
+  // baris ini hilang, bilah yang tidak mengendalikan apa pun tetap tampil dan
+  // menyaring di situ terasa seperti aplikasinya rusak.
+  const switchBody = source['tables.js'].slice(
+    source['tables.js'].indexOf('export function switchTab'));
+  assert.match(switchBody.slice(0, switchBody.indexOf('\n}')),
+    /filter-bar'\)\.classList\.toggle\('hidden', name === 'import'\)/,
+    'switchTab tidak lagi menyembunyikan bilah filter di halaman Import');
+  assert.match(switchBody.slice(0, switchBody.indexOf('\n}')), /S\.filterPage = name/,
+    'switchTab tidak menyetel halaman filter yang aktif — tabelnya akan digambar ' +
+    'dengan filter halaman sebelumnya');
+
+  // Tiap ujung rentang punya DUA dropdown: bulan dan tahun (KF-FILTER-4). Versi
+  // sebelumnya memakai <input type="month">, dan di situ tahunnya cuma bisa diketik —
+  // tidak ada daftarnya. Tim memintanya bisa dipilih juga.
+  ['dari', 'sampai'].forEach((ujung) => {
+    ['bulan', 'tahun'].forEach((bagian) => {
+      assert.ok(html.includes(`id="${ujung}-${bagian}"`),
+        `dropdown ${bagian} untuk ujung "${ujung}" hilang dari bilah periode`);
+    });
+  });
+
+  // Daftar tahunnya daftar biasa, TIDAK diturunkan dari periode yang sudah diimpor.
+  // Kalau diturunkan, tahun yang dicari orang bisa diam-diam tidak ada di daftarnya —
+  // dan dropdown yang tidak memuat pilihannya terlihat seperti aplikasinya rusak.
+  const barSource = source['filter-bar.js'];
+  const blokTahun = barSource.slice(barSource.indexOf('const tahunTersedia'),
+    barSource.indexOf('const TANPA_BATAS'));
+  assert.ok(!/S\.periods/.test(blokTahun),
+    'daftar tahun diturunkan dari periode yang sudah diimpor — tim minta daftarnya ' +
+    'biasa saja, tidak mengikuti apa yang sudah diunggah');
+
+  // "Tanpa batas" harus datang dari orang MEMILIH tanda hubung, bukan dari salah satu
+  // dropdown yang kebetulan belum terisi.
+  //
+  // Bedanya pernah salah dan bikin kendalinya buntu: waktu sisi yang belum terisi
+  // dianggap "tanpa batas", memilih bulan dari keadaan kosong langsung dihapus lagi
+  // oleh syncFilterBar() — dari kosong, nilainya tidak pernah bisa dibangun.
+  assert.match(barSource, /if \(el && el\.value === ''\) return 'ALL';/,
+    '"tanpa batas" tidak lagi ditentukan dari dropdown mana yang disentuh — kalau ' +
+    'sisi yang belum terisi ikut berarti "tanpa batas", memilih bulan dari keadaan ' +
+    'kosong akan terhapus lagi dan periodenya mustahil diisi');
+  assert.match(barSource, /bulanEl\.value \|\|/,
+    'sisi yang belum terisi tidak lagi dilengkapi — pilihan orang dibuang');
+  assert.match(barSource, /tahunEl\.value \|\| tahunAcuan\(\)/,
+    'tahun yang belum terisi tidak lagi dilengkapi');
+
+  // Yang dilengkapi WAJIB ditulis balik ke dropdown-nya. Itu yang membedakan melengkapi
+  // dari menebak diam-diam: hasilnya terlihat, dan orangnya bisa langsung menggantinya.
+  const syncBody = barSource.slice(barSource.indexOf('export function syncFilterBar'));
+  assert.match(syncBody.slice(0, syncBody.indexOf('\n}')),
+    /setValue\(ujung \+ '-bulan'[\s\S]*setValue\(ujung \+ '-tahun'/,
+    'syncFilterBar tidak lagi menulis balik kedua dropdown periode — nilai yang ' +
+    'dilengkapi jadi tidak terlihat, dan itu berubah jadi tebakan diam-diam');
+
+  // Id yang DIRANGKAI tidak ikut terjaring pemeriksaan id di atas — yang itu cuma
+  // melihat $('literal'). Di sini state memakai from/to sementara markup memakai
+  // dari/sampai, dan salah menyambungnya menghasilkan $('from-bulan'): elemen yang
+  // tidak ada, tanpa error, dan periodenya diam-diam jadi "tanpa batas". Sudah kejadian
+  // sekali; yang menangkapnya waktu itu pemeriksaan dengan mata, bukan tes.
+  const kotakBlok = barSource.match(/const KOTAK = \{([^}]*)\}/);
+  assert.ok(kotakBlok, 'peta nama ujung rentang (KOTAK) hilang dari filter-bar.js');
+  [...kotakBlok[1].matchAll(/'([^']+)'/g)].map((m) => m[1]).forEach((ujung) => {
+    ['bulan', 'tahun'].forEach((bagian) => {
+      assert.ok(html.includes(`id="${ujung}-${bagian}"`),
+        `KOTAK menunjuk "${ujung}", tapi tidak ada elemen id="${ujung}-${bagian}" di ` +
+        'markup — periode ujung itu akan diam-diam jadi "tanpa batas"');
+    });
+  });
+
+  // Tiap dropdown lingkup punya rumahnya sendiri di bilah; isinya dibangun combobox.js.
+  ['provinsi', 'kota', 'dealer', 'pos'].forEach((nama) => {
+    assert.ok(html.includes(`id="pilih-${nama}"`), `dropdown ${nama} hilang dari bilah`);
+  });
+
+  // Kotak pencarian ada DI DALAM panel dropdown, bukan di sebelahnya. Versi sebelumnya
+  // menaruhnya sebagai <input> terpisah di bilah — dua kendali untuk satu pilihan, dan
+  // yang kedua tidak terlihat seperti bagian dari yang pertama.
+  const comboSource = source['combobox.js'];
+  const panelBlok = comboSource.slice(comboSource.indexOf('<div class="pilih-panel"'),
+    comboSource.indexOf('drawOptions(name, \'\');'));
+  assert.match(panelBlok, /class="pilih-cari"/,
+    'kotak pencarian tidak lagi dibangun di dalam panel dropdown');
+  assert.ok(!/id="cari-/.test(html),
+    'kotak pencarian kembali ditulis langsung di markup bilah — tempatnya di dalam ' +
+    'panel dropdown, dibangun combobox.js bersama daftarnya');
+
   // 5. tidak ada aset dari internet
   //
   // Bukan soal selera: jaringan kantor bisa memblokir CDN, dan halaman yang separuh
@@ -272,6 +380,39 @@ function test() {
     'panel kelurahan harus memeriksa S.hasCustomers sebelum meminta data konsumen');
   assert.ok(/if \(!S\.hasCustomers\)/.test(source['tables.js']),
     'halaman Data Konsumen harus memeriksa S.hasCustomers sebelum meminta data');
+
+  // Daftar opsi menempel di elemen hostnya, bukan di objek global berkunci id.
+  //
+  // Objek global itu pernah ada (`S.allOptions`), tidak pernah dibuat siapa pun, dan
+  // membuat pencarian di dalam dropdown melempar TypeError sejak hari pertama tanpa
+  // satu pun tes merah. Yang menjaganya sekarang bukan disiplin tapi tempat: daftarnya
+  // dibuat dan dibaca berkas yang sama, di elemen yang sama.
+  assert.match(comboSource, /el\._combo = \{ label, pairs, allLabel, onPick \}/,
+    'fillCombo harus menitipkan daftar opsi di elemen hostnya (el._combo)');
+  assert.ok(!/from '\.\/state\.js'/.test(comboSource),
+    'combobox.js mengambil daftar opsi dari state global lagi — versi sebelumnya ' +
+    'membaca S.allOptions yang tidak pernah dibuat, dan pencarian dropdown mati diam');
+
+  // Yang tersimpan tetap KODE, tidak pernah teks yang diketik. Kotak pencarian cuma
+  // menyaring apa yang tampil; memilih harus menekan salah satu barisnya. Kalau isi
+  // kotak cari sampai dipakai sebagai nilai filter, salah ketik akan diam-diam
+  // mengubah filter — dan tabel yang kosong tidak memberi tahu kenapa.
+  assert.ok(/onPick\(value\)/.test(comboSource),
+    'chooseCombo tidak lagi meneruskan kode baris yang ditekan');
+  assert.ok(!/onPick\([^)]*(?:cari|kunci|q)\b/.test(comboSource),
+    'isi kotak pencarian dipakai sebagai nilai filter — yang tersimpan harus KODE ' +
+    'dari baris yang ditekan, bukan teks yang diketik');
+
+  // Filter yang sedang menyempitkan tampilan HARUS terlihat berbeda dari yang tidak
+  // (KF-FILTER-12). Karena kabupaten, dealer, dan pos berbagi satu slot, penanda ini
+  // yang membuat "kok kabupaten saya hilang waktu saya pilih dealer" menjawab dirinya
+  // sendiri. Kalau penandanya hilang, aturannya tetap berlaku tapi jadi tidak terlihat
+  // — dan itu persis keluhan yang bikin bilah ini dirombak.
+  assert.match(comboSource, /classList\.toggle\('nyala', value !== 'ALL'\)/,
+    'pil filter tidak lagi ditandai waktu filternya benar-benar menyempitkan tampilan');
+  assert.match(html, /\.pilih\.nyala[^{]*\{/,
+    'markup tidak punya gaya untuk pil yang menyala — penandanya dipasang di kelas ' +
+    'yang tidak menggambar apa pun');
 
   const ignore = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8');
   assert.ok(/^data\/$/m.test(ignore),
