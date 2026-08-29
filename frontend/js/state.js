@@ -77,6 +77,9 @@ export const S = {
   treemapChart: null,
   treemapCodes: [],
 
+  // --- ring layanan: rings[outletCode][districtCode] = 1|2|3 ---
+  rings: {},
+
   // --- jangkauan ---
   coverage: {},            // coverage[outletCode][villageCode] = rasio, radius aktif
   coverageAll: {},         // seluruh radius, dari server

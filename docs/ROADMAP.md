@@ -59,12 +59,12 @@ bagian per satu bagian**. Bagian pertama (FILTER) sudah selesai — entrinya di 
 
 **Belum dikerjakan, urut sesuai daftar:**
 
-1. **RING — fondasi yang dipakai dua bagian sekaligus.** Tiap **pos** punya tiga ring,
-   dan tiap ring sekumpulan kecamatan. Keputusan tim: ring melekat pada **pos**, bukan
-   dealer, dan pemilihannya lewat **klik batas kecamatan di peta**, bukan lewat daftar
-   di tabel. Kolom di Master Pos Dealer cuma menampilkan jumlahnya.
-   Yang harus dibuat: tabel `outlet_rings`, rutenya, tiga kolom di tabel Master Pos,
-   lapisan batas kecamatan yang bisa diklik, dan mode "edit ring" di peta.
+1. **RING — memilihnya di peta.** Fondasinya sudah jadi (lihat Selesai): tabel
+   `outlet_rings`, rute `GET /api/districts` dan `PUT /api/outlets/:code/rings`, dan
+   tiga kolom jumlah di Master Pos Dealer. Yang belum: **batas kecamatan yang bisa
+   diklik di peta** dan mode "edit ring". Batasnya belum ada sebagai berkas geo —
+   harus diturunkan dari poligon kelurahan (`ST_Union` per `district_code`), lalu
+   diekspor seperti berkas geo yang lain.
 2. **Peta: agregasi ring menggantikan agregasi radius.** Persentase "dalam/luar
    jangkauan" jadi "ring 1 / ring 2 / ring 3 / di luar ketiganya". **Ini yang paling
    besar** — dia mengubah arti angka jangkauan di seluruh aplikasi, dan
@@ -152,6 +152,37 @@ cuma perluasan ke Sulawesi ke timur.
 ---
 
 ## Selesai
+
+### Fondasi ring: tabel, rute, dan tiga kolom (2026-08-29)
+
+Langkah pertama dari tiga. Yang sudah ada: tempat menyimpan ring, cara mengisinya lewat
+API, dan tiga kolom di Master Pos Dealer. Yang **belum**: memilihnya lewat peta, dan
+agregasi ring menggantikan agregasi radius.
+
+**Ring melekat pada POS, bukan dealer** — keputusan tim. Ring itu jarak dari satu titik
+fisik, dan dua pos milik dealer yang sama di kota berbeda tidak punya kecamatan
+tetangga yang sama.
+
+**Dikunci ke `district_code`, tidak pernah ke nama.** Diukur di database: 654 kecamatan
+di cakupan, tapi cuma **624 nama berbeda** — 30 nama dipakai lebih dari satu kabupaten.
+Menyimpan nama berarti ring satu pos diam-diam ikut menarik kecamatan di kabupaten lain,
+dan angkanya tetap terlihat wajar.
+
+**Satu kecamatan cuma boleh di SATU ring per pos**, dijaga primary key
+`(outlet_code, district_code)`. Ring yang tumpang tindih membuat satu penjualan
+terhitung dua kali, dan totalnya tetap masuk akal dilihat sekilas.
+
+**Menyimpan ring MENGGANTI seluruhnya, bukan menambal.** Halaman selalu mengirim
+gambaran lengkap ring satu pos. Menambal berarti kecamatan yang dibuang orang di layar
+tetap tinggal di database.
+
+Kolomnya menampilkan **jumlah**, bukan nama-namanya, dan yang kosong ditulis tanda
+hubung bukan angka nol — "belum diisi" dan "benar-benar nol" dua hal berbeda.
+
+**Tes**: 19/19 hijau. Empat mutasi tertangkap: simpan yang menambal alih-alih mengganti,
+kecamatan asing yang dilewati diam-diam, primary key yang dilonggarkan sampai satu
+kecamatan bisa masuk dua ring, dan nomor ring di luar 1–3. Ring juga ikut dikosongkan
+waktu master pos direset — lewat `ON DELETE CASCADE`, dan itu ikut diperiksa.
 
 ### Master Pos Dealer: reset, kata-kata, dan subtitel yang selalu nol (2026-08-29)
 

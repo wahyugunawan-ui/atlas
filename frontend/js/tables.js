@@ -307,6 +307,25 @@ export function closeVillageDetail() {
    MASTER POS DEALER
    ========================================================================== */
 
+/**
+ * Satu sel ring: berapa kecamatan yang masuk ring itu untuk pos ini.
+ *
+ * Yang ditampilkan JUMLAH, bukan nama-namanya. Satu ring bisa memuat belasan kecamatan,
+ * dan daftar sepanjang itu membuat tiap baris tabel tingginya berbeda-beda tanpa
+ * menjawab pertanyaan yang dibawa orang ke halaman ini: "pos mana yang ringnya belum
+ * diisi". Memilihnya sendiri dilakukan di peta, sambil melihat batas kecamatannya.
+ *
+ * Yang kosong ditulis tanda hubung, bukan angka nol. "Belum diisi" dan "benar-benar
+ * nol" dua hal berbeda, dan angka nol di kolom baru akan terbaca seperti temuan.
+ */
+function ringCell(outletCode, ring) {
+  const punya = S.rings[outletCode] || {};
+  const jumlah = Object.values(punya).filter((r) => r === ring).length;
+  const warna = jumlah ? 'text-slate-700 font-bold' : 'text-slate-300';
+  return `<td class="px-3 py-2 text-center mono text-xs ${warna}">` +
+    (jumlah ? esc(String(jumlah)) : '&mdash;') + '</td>';
+}
+
 export function renderOutletTable() {
   const query = ($('mpos-search').value || '').toLowerCase();
   const f = pageFilters('pos');
@@ -338,6 +357,7 @@ export function renderOutletTable() {
     `<div class="mono text-[10px] text-slate-400">` +
     (o.lat == null ? 'belum di-pin'
       : `${esc(o.lat.toFixed(5))}, ${esc(o.lng.toFixed(5))}`) + `</div></td>` +
+    ringCell(o.code, 1) + ringCell(o.code, 2) + ringCell(o.code, 3) +
     `<td class="px-3 py-2 text-right font-bold mono ${perOutlet[o.code] ? 'text-slate-900' : 'text-slate-300'}">` +
     `${esc(formatNumber(perOutlet[o.code] || 0))}</td>` +
     `<td class="px-3 py-2 text-center whitespace-nowrap">` +
@@ -346,7 +366,7 @@ export function renderOutletTable() {
       : `<button onclick="showOnMap('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-white" style="background:var(--astra-navy)"><i class="ph-fill ph-map-trifold"></i> Lihat di peta</button> `) +
     `<button onclick="openOutletEditor('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-pencil-simple"></i> Edit</button>` +
     `</td></tr>`).join('')
-    : '<tr><td colspan="6" class="text-center py-8 text-slate-400 text-sm">Tidak ada pos yang cocok.</td></tr>';
+    : '<tr><td colspan="9" class="text-center py-8 text-slate-400 text-sm">Tidak ada pos yang cocok.</td></tr>';
 }
 
 /** Tombol "Lihat Peta": pindah tab, pilih pos, heatmap ikut dihitung ulang. */

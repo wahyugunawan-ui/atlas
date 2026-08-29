@@ -280,6 +280,27 @@ function test() {
     });
   });
 
+  // Tiga kolom ring di Master Pos Dealer (KF-POS-17). Yang ditampilkan JUMLAH, bukan
+  // nama kecamatannya — satu ring bisa memuat belasan, dan daftar sepanjang itu membuat
+  // tiap baris tabel tingginya berbeda-beda.
+  ['Ring 1', 'Ring 2', 'Ring 3'].forEach((judul) => {
+    assert.ok(html.includes(`>${judul}</th>`), `kolom "${judul}" hilang dari tabel pos`);
+  });
+  const ringBody = source['tables.js'].slice(source['tables.js'].indexOf('function ringCell'));
+  assert.match(ringBody.slice(0, ringBody.indexOf('\n}')), /\.filter\(\(r\) => r === ring\)\.length/,
+    'sel ring tidak lagi menghitung jumlah kecamatan per ring');
+
+  // Jumlah kolom <th> harus sama dengan colspan baris kosongnya. Kalau tidak, tabel
+  // yang kosong akan melebar atau menyempit sendiri — kecil, tapi terlihat rusak, dan
+  // gampang terlewat waktu menambah kolom.
+  const kepalaPos = (html.slice(html.indexOf('id="table-pos-body"') - 2000,
+    html.indexOf('id="table-pos-body"')).match(/<th\b/g) || []).length;
+  assert.ok(kepalaPos > 0, 'kepala tabel pos tidak ketemu');
+  const colspanPos = source['tables.js'].match(/colspan="(\d+)"[^>]*>Tidak ada pos yang cocok/);
+  assert.ok(colspanPos, 'baris "tidak ada pos" hilang');
+  assert.strictEqual(Number(colspanPos[1]), kepalaPos,
+    `colspan baris kosong (${colspanPos[1]}) tidak sama dengan jumlah kolom (${kepalaPos})`);
+
   // Tiap dropdown lingkup punya rumahnya sendiri di bilah; isinya dibangun combobox.js.
   ['provinsi', 'kota', 'dealer', 'pos'].forEach((nama) => {
     assert.ok(html.includes(`id="pilih-${nama}"`), `dropdown ${nama} hilang dari bilah`);

@@ -54,7 +54,8 @@ async function summary() {
   // poligon memang tidak bisa digambar di peta. Perbedaan yang disengaja dan satu-satunya.
   const villages = await store.all(db, `
     SELECT village_code AS code, village_name AS name,
-           district_name AS district, city_code AS "cityCode", city_name AS "cityName",
+           district_name AS district, district_code AS "districtCode",
+           city_code AS "cityCode", city_name AS "cityName",
            province_code AS "provinceCode", lat, lng,
            (geom_m IS NOT NULL) AS "hasGeom"
     FROM villages
@@ -93,6 +94,7 @@ async function summary() {
     periods: periodRows.map((r) => r.period),
     lastImport,
     coverage: await coverage.all(),
+    rings: await allRings(),
     radiiM: coverage.RADII_M,
     radiusM: coverage.DEFAULT_RADIUS_M,
     // Halaman perlu tahu bedanya "jangkauan 0%" dan "jangkauan belum pernah dihitung".
@@ -494,6 +496,86 @@ async function unmatchedWithSuggestions(period) {
  * Jalan pulihnya: impor ulang berkas Excel dari arsip. Arsipnya sengaja tidak ikut
  * dihapus, sama seperti pada penghapusan periode.
  */
+/**
+ * Seluruh ring, dibentuk rings[outletCode][districtCode] = 1|2|3.
+ *
+ * Dikirim sekaligus di /api/summary, sama seperti jangkauan: bentuknya kecil (78 pos
+ * dikali belasan kecamatan), dan halaman butuh semuanya untuk menghitung ring tiap
+ * baris penjualan tanpa bolak-balik ke server.
+ */
+async function allRings() {
+  const rows = await store.all(store.db(), `
+    SELECT outlet_code AS "outletCode", district_code AS "districtCode", ring
+    FROM outlet_rings`);
+  const out = {};
+  rows.forEach((r) => {
+    (out[r.outletCode] || (out[r.outletCode] = {}))[r.districtCode] = Number(r.ring);
+  });
+  return out;
+}
+
+/** Daftar kecamatan untuk pemilih ring: kode, nama, dan kabupatennya. */
+async function districts() {
+  return store.all(store.db(), `
+    SELECT district_code AS code, MIN(district_name) AS name,
+           city_code AS "cityCode", MIN(city_name) AS "cityName"
+    FROM villages
+    GROUP BY district_code, city_code
+    ORDER BY MIN(city_name), MIN(district_name)`);
+}
+
+/**
+ * Ganti seluruh ring satu pos sekaligus.
+ *
+ * Hapus lalu tulis ulang di dalam satu transaksi — pola yang sama dengan impor, dan
+ * alasannya sama: menambal sebagian membuat sisa dari susunan lama tertinggal tanpa
+ * ada yang tahu. Yang dikirim halaman adalah gambaran LENGKAP ring pos itu.
+ *
+ * Kode kecamatan yang tidak dikenal DITOLAK, bukan dilewati diam-diam. Ring yang
+ * diam-diam kehilangan satu kecamatan tetap terlihat masuk akal di layar.
+ *
+ * @param {string} outletCode
+ * @param {Object} assignments  {districtCode: 1|2|3}
+ */
+async function saveOutletRings(outletCode, assignments) {
+  const db = store.db();
+  const outlet = await store.one(db,
+    'SELECT outlet_code FROM outlets WHERE outlet_code = ?', [outletCode]);
+  if (!outlet) throw new Error(`Pos ${outletCode} tidak ada.`);
+
+  const entries = Object.entries(assignments || {});
+  for (const [, ring] of entries) {
+    if (![1, 2, 3].includes(Number(ring))) {
+      throw new Error('Ring harus 1, 2, atau 3.');
+    }
+  }
+
+  if (entries.length) {
+    const codes = entries.map(([code]) => code);
+    const dikenal = new Set((await store.all(db, `
+      SELECT DISTINCT district_code AS code FROM villages
+      WHERE district_code = ANY(?)`, [codes])).map((r) => r.code));
+    const asing = codes.filter((c) => !dikenal.has(c));
+    if (asing.length) {
+      throw new Error(`Kecamatan tidak dikenal: ${asing.slice(0, 5).join(', ')}` +
+        (asing.length > 5 ? ` dan ${asing.length - 5} lagi.` : '.'));
+    }
+  }
+
+  await store.transaction(db, async (conn) => {
+    await conn.query('DELETE FROM outlet_rings WHERE outlet_code = ?', [outletCode]);
+    if (entries.length) {
+      const bulk = store.bulkValues(
+        entries.map(([code, ring]) => [outletCode, code, Number(ring)]));
+      await conn.query(
+        'INSERT INTO outlet_rings (outlet_code, district_code, ring) VALUES ' + bulk.text,
+        bulk.params);
+    }
+  });
+
+  return { outlet: outletCode, districts: entries.length };
+}
+
 async function resetOutlets(ip) {
   const db = store.db();
 
@@ -706,7 +788,7 @@ async function updateOutlet(code, patch, config) {
 module.exports = {
   summary, unmatched, imports, periodSummary,
   customersInVillage, browseCustomers, hasCustomers, logCustomerAccess, updateOutlet,
-  resetOutlets,
+  resetOutlets, allRings, districts, saveOutletRings,
   resolveDealer, createOutlet, deletePeriod,
   aliases, saveAlias, deleteAlias, latestUnmatchedPeriod, unmatchedWithSuggestions,
   BROWSE_LIMIT,

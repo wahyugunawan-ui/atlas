@@ -43,6 +43,7 @@ const PERIOD = /^\d{4}-(0[1-9]|1[0-2])$/;
 const VILLAGE = /^\d{2}\.\d{2}\.\d{2}\.\d{4}$/;
 const CITY = /^\d{2}\.\d{2}$/;
 const PROVINCE = /^\d{2}$/;
+const DISTRICT = /^\d{2}\.\d{2}\.\d{2}$/;
 const OUTLET = /^[A-Za-z0-9._-]{1,32}$/;
 
 /**
@@ -155,6 +156,45 @@ function build(config) {
     }
     try {
       res.json(await repo.resetOutlets(req.ip));
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  /** Daftar kecamatan, untuk pemilih ring. Tanpa PII, tanpa penyaring. */
+  api.get('/districts', async (req, res) => {
+    res.json({ districts: await repo.districts() });
+  });
+
+  /**
+   * Ganti seluruh ring satu pos.
+   *
+   * Badannya gambaran LENGKAP, bukan tambalan: {rings: {"33.13.09": 1, ...}}.
+   * Mengirim sebagian berarti sisanya terhapus, dan itu memang yang diinginkan —
+   * halaman selalu mengirim keadaan akhir yang dilihat orang di layar.
+   */
+  api.put('/outlets/:code/rings', async (req, res) => {
+    const code = String(req.params.code || '');
+    if (!OUTLET.test(code)) {
+      return res.status(400).json({ error: 'Kode pos tidak sah.' });
+    }
+    const rings = (req.body || {}).rings;
+    if (!rings || typeof rings !== 'object' || Array.isArray(rings)) {
+      return res.status(400).json({
+        error: 'Kirim {rings: {"kode kecamatan": 1|2|3}}.',
+      });
+    }
+    // Bentuk kodenya diperiksa di sini; keberadaannya diperiksa repositori terhadap
+    // daftar kelurahan. Dua-duanya menolak, tidak ada yang dilewati diam-diam.
+    const salah = Object.keys(rings).filter((c) => !DISTRICT.test(c));
+    if (salah.length) {
+      return res.status(400).json({
+        error: `Kode kecamatan harus bertitik seperti 33.13.09. Yang salah: ` +
+          salah.slice(0, 5).join(', '),
+      });
+    }
+    try {
+      res.json(await repo.saveOutletRings(code, rings));
     } catch (error) {
       res.status(400).json({ error: error.message });
     }

@@ -675,6 +675,66 @@ async function test() {
       'daftar belum cocok tidak ikut pulih');
 
     /* --------------------------------------------------------------------
+       RING LAYANAN PER POS
+       --------------------------------------------------------------------
+       Ring menggantikan "dalam radius X km". Yang dijaga di sini bukan "simpannya
+       jalan", tapi empat hal yang gagalnya diam: satu kecamatan masuk dua ring
+       sekaligus (satu penjualan terhitung dua kali, totalnya tetap terlihat wajar),
+       kecamatan asing yang dilewati diam-diam, susunan lama yang tertinggal sesudah
+       ditimpa, dan ring yang tetap menempel pada pos yang sudah dihapus.
+       -------------------------------------------------------------------- */
+
+    const posRing = (await store.all(db, 'SELECT outlet_code FROM outlets LIMIT 1'))[0]
+      .outlet_code;
+    const kecUji = (await store.all(db,
+      'SELECT DISTINCT district_code AS kode FROM villages ORDER BY district_code LIMIT 3'))
+      .map((r) => r.kode);
+    assert.strictEqual(kecUji.length, 3, 'prasyarat tes: butuh tiga kecamatan');
+
+    await repo.saveOutletRings(posRing,
+      { [kecUji[0]]: 1, [kecUji[1]]: 2, [kecUji[2]]: 3 });
+    let ring = (await repo.allRings())[posRing];
+    assert.deepStrictEqual(ring,
+      { [kecUji[0]]: 1, [kecUji[1]]: 2, [kecUji[2]]: 3 },
+      'ring tidak tersimpan apa adanya');
+
+    // Menyimpan lagi MENGGANTI seluruhnya, bukan menambal. Kalau menambal, kecamatan
+    // yang dibuang orang di layar tetap tinggal di database dan ikut dihitung.
+    await repo.saveOutletRings(posRing, { [kecUji[0]]: 3 });
+    ring = (await repo.allRings())[posRing];
+    assert.deepStrictEqual(ring, { [kecUji[0]]: 3 },
+      'menyimpan ring menambal, bukan mengganti — susunan lama tertinggal');
+
+    // Satu kecamatan tidak bisa ada di dua ring sekaligus. Objek JS sudah mencegahnya
+    // di sisi halaman, tapi yang menjaganya di database adalah primary key — dan itu
+    // yang harus tetap benar kalau suatu hari ada pemanggil lain.
+    await assert.rejects(
+      () => store.run(db,
+        'INSERT INTO outlet_rings (outlet_code, district_code, ring) VALUES (?, ?, ?)',
+        [posRing, kecUji[0], 1]),
+      /duplicate key|unique/i,
+      'satu kecamatan bisa masuk dua ring sekaligus — penjualannya terhitung dua kali');
+
+    // Kecamatan asing DITOLAK, bukan dilewati. Ring yang diam-diam kehilangan satu
+    // kecamatan tetap terlihat masuk akal di layar.
+    await assert.rejects(
+      () => repo.saveOutletRings(posRing, { '99.99.99': 1 }),
+      /tidak dikenal/i, 'kecamatan asing tidak ditolak');
+    await assert.rejects(
+      () => repo.saveOutletRings(posRing, { [kecUji[0]]: 4 }),
+      /Ring harus/i, 'nomor ring di luar 1-3 tidak ditolak');
+    await assert.rejects(
+      () => repo.saveOutletRings('POS-TIDAK-ADA', { [kecUji[0]]: 1 }),
+      /tidak ada/i, 'ring bisa disimpan untuk pos yang tidak ada');
+
+    // Penolakan TIDAK boleh merusak yang sudah tersimpan.
+    assert.deepStrictEqual((await repo.allRings())[posRing], { [kecUji[0]]: 3 },
+      'ring yang sudah benar ikut hilang waktu simpan berikutnya ditolak');
+
+    // Ring tidak boleh menempel pada pos yang sudah tidak ada. Dijaga foreign key
+    // ON DELETE CASCADE, dan reset di bawah ini yang membuktikannya.
+
+    /* --------------------------------------------------------------------
        RESET MASTER POS
        --------------------------------------------------------------------
        Jalur paling destruktif di aplikasi ini. Yang dijaga bukan "hapusnya jalan",
@@ -717,7 +777,7 @@ async function test() {
 
     // Empat tabel harus kosong bersamaan. Menyisakan salah satunya bukan "reset yang
     // lebih hati-hati" — itu baris yatim yang tidak muncul di mana pun.
-    for (const tabel of ['outlets', 'sales', 'unmatched', 'coverage']) {
+    for (const tabel of ['outlets', 'sales', 'unmatched', 'coverage', 'outlet_rings']) {
       assert.strictEqual(
         Number((await store.one(db, `SELECT COUNT(*) AS n FROM ${tabel}`)).n), 0,
         `tabel ${tabel} tidak ikut dikosongkan waktu master pos direset`);

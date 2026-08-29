@@ -145,6 +145,7 @@ function buildIndexes(data) {
   S.hasCustomers = data.hasCustomers;
   S.pendingNames = data.pendingNames || 0;
 
+  S.rings = data.rings || {};
   S.coverageAll = data.coverage || {};
   S.radiiM = data.radiiM || [data.radiusM || 5000];
   S.radiusM = data.radiusM || S.radiiM[0];

@@ -269,6 +269,10 @@ satelit di bawahnya — dengan ubin yang dijawab 200 OK dan tanpa satu pun error
 | KF-POS-11 | Reset wajib konfirmasi diketik persis; huruf kecil ditolak | `test/server-auth.test.js` |
 | KF-POS-12 | Reset tercatat di riwayat impor, dan arsip Excel tidak ikut dihapus | `test/import.test.js` |
 | KF-POS-13 | Subtitel halaman menyebut jumlah pos dan dealer yang benar-benar tampil | belum dijaga |
+| KF-POS-14 | Tiap pos punya tiga ring layanan berisi kecamatan, dikunci ke kode BPS bukan nama | `test/import.test.js` |
+| KF-POS-15 | Satu kecamatan hanya boleh ada di SATU ring per pos | `test/import.test.js` |
+| KF-POS-16 | Menyimpan ring mengganti seluruhnya, bukan menambal; kecamatan asing ditolak | `test/import.test.js` |
+| KF-POS-17 | Tiga kolom menampilkan JUMLAH kecamatan tiap ring | `test/page.test.js` |
 
 ### KF-KELURAHAN — Master Kelurahan
 
