@@ -70,6 +70,23 @@ export function fetchCustomers(villageCode, range) {
   return request(`${API}customers?${query}`);
 }
 
+/** Daftar kecamatan, untuk pemilih ring. */
+export function fetchDistricts() {
+  return request(`${API}districts`);
+}
+
+/**
+ * Simpan ring satu pos. Badannya gambaran LENGKAP, bukan tambalan — yang tidak ikut
+ * dikirim berarti dilepas, dan itu memang yang dilihat orang di layar.
+ */
+export function saveRings(outletCode, rings) {
+  return request(`${API}outlets/${encodeURIComponent(outletCode)}/rings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rings }),
+  });
+}
+
 /** Kosongkan master pos dan dealer. Konfirmasinya diperiksa lagi di server. */
 export function resetOutlets() {
   return request(`${API}outlets?confirm=RESET`, { method: 'DELETE' });

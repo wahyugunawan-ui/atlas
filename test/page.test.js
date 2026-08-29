@@ -301,6 +301,38 @@ function test() {
   assert.strictEqual(Number(colspanPos[1]), kepalaPos,
     `colspan baris kosong (${colspanPos[1]}) tidak sama dengan jumlah kolom (${kepalaPos})`);
 
+  /* --------------------------------------------------------------------
+     EDIT RING (KF-POS-18, KF-POS-19)
+     -------------------------------------------------------------------- */
+  const ringSource = source['rings.js'];
+  const mapSource = source['map.js'];
+
+  // Batas kecamatan dimuat SAAT MODE EDIT, bukan saat halaman dibuka. Berkasnya 3 MB
+  // dan sebagian besar sesi tidak pernah menyunting ring; memuatnya di awal berarti
+  // semua orang membayar untuk yang dipakai sedikit. Gagalnya diam: halaman tetap
+  // jalan, cuma lebih lambat 3 MB tiap kali dibuka, dan tidak ada yang error.
+  assert.ok(!/kecamatan\.geojson/.test(source['app.js']),
+    'batas kecamatan ikut dimuat saat halaman dibuka — tempatnya di mode edit ring');
+  assert.match(ringSource, /addDistrictLayers\(\)/,
+    'mode edit ring tidak lagi memuat batas kecamatannya sendiri');
+  assert.match(mapSource, /fetchGeo\('kecamatan\.geojson'\)/,
+    'batas kecamatan tidak lagi diambil dari berkas geo');
+
+  // Satu kecamatan tidak boleh berada di dua ring. Di database dijaga primary key; di
+  // halaman dijaga bentuk datanya — satu kunci, satu nilai. Kalau draft-nya berubah
+  // jadi daftar per ring, dua ring bisa memilikinya dan penjualannya terhitung dua kali.
+  const toggleBody = ringSource.slice(ringSource.indexOf('export function toggleDistrict'));
+  assert.match(toggleBody.slice(0, toggleBody.indexOf('\n}')),
+    /draft\[code\] = ringAktif/,
+    'kecamatan tidak lagi disimpan sebagai satu nilai per kode — dua ring bisa ' +
+    'memiliki kecamatan yang sama, dan penjualannya terhitung dua kali');
+
+  // Tombolnya cuma muncul waktu lingkupnya SATU POS. Ring melekat pada pos; tombol
+  // yang muncul untuk dealer akan menyimpan sesuatu yang bukan ring dealer.
+  assert.match(source['app.js'],
+    /btn-edit-ring'\)\.classList\.toggle\('hidden', scopeValue\('pos'\) === 'ALL'\)/,
+    'tombol edit ring tidak lagi dibatasi ke lingkup satu pos');
+
   // Tiap dropdown lingkup punya rumahnya sendiri di bilah; isinya dibangun combobox.js.
   ['provinsi', 'kota', 'dealer', 'pos'].forEach((nama) => {
     assert.ok(html.includes(`id="pilih-${nama}"`), `dropdown ${nama} hilang dari bilah`);

@@ -6,6 +6,7 @@ import {
 } from './config.js';
 import { classOf, dealerColor, percentileBreaks, RAMP, COLOR_EMPTY } from './colors.js';
 import { $, bbox, sumBy, toast } from './dom.js';
+import { fetchGeo } from './api.js';
 import { activeRows, pageFilters, scopeValue } from './filters.js';
 import { circle, EMPTY_COLLECTION } from './geo.js';
 import { S } from './state.js';
@@ -166,6 +167,91 @@ export function addLayers() {
       'circle-stroke-color': '#ffffff',
     },
   });
+}
+
+/* ==========================================================================
+   BATAS KECAMATAN — hanya untuk memilih ring
+   ========================================================================== */
+
+let kecamatanSiap = false;
+
+export const districtsLoaded = () => kecamatanSiap;
+
+/**
+ * Muat dan pasang lapisan batas kecamatan.
+ *
+ * Dipanggil saat mode edit ring dinyalakan, BUKAN saat halaman dibuka. Berkasnya 3 MB
+ * untuk 654 kecamatan, dan sebagian besar sesi tidak pernah menyunting ring sama
+ * sekali — memuatnya di awal berarti semua orang membayar untuk yang dipakai sedikit.
+ */
+export async function addDistrictLayers() {
+  if (kecamatanSiap) return;
+  const geo = await fetchGeo('kecamatan.geojson');
+  S.map.addSource('kec', { type: 'geojson', data: geo, promoteId: 'kode' });
+
+  // Isi transparan dulu; setRingPaint() yang mewarnainya menurut ring. Lapisan isi
+  // tetap ada walau semuanya bening supaya kliknya punya sasaran — garis saja terlalu
+  // tipis untuk diklik orang yang sedang buru-buru.
+  S.map.addLayer({
+    id: 'kec-isi', type: 'fill', source: 'kec',
+    paint: { 'fill-color': '#0b2f6b', 'fill-opacity': 0 },
+  });
+  S.map.addLayer({
+    id: 'kec-garis', type: 'line', source: 'kec',
+    paint: { 'line-color': '#334155', 'line-width': 1, 'line-opacity': 0.55 },
+  });
+  S.map.addLayer({
+    id: 'kec-nama', type: 'symbol', source: 'kec', minzoom: 8.5,
+    layout: {
+      'text-field': ['get', 'nama'], 'text-font': ['Noto Sans Regular'],
+      'text-size': 11, 'text-allow-overlap': false,
+    },
+    paint: { 'text-color': '#0f172a', 'text-halo-color': '#ffffff', 'text-halo-width': 1.6 },
+  });
+
+  S.map.on('click', 'kec-isi', (e) => {
+    if (!window.ringEditing || !window.ringEditing()) return;
+    const f = e.features && e.features[0];
+    if (f) window.toggleDistrict(f.properties.kode);
+  });
+  S.map.on('mouseenter', 'kec-isi', () => {
+    if (window.ringEditing && window.ringEditing()) S.map.getCanvas().style.cursor = 'pointer';
+  });
+  S.map.on('mouseleave', 'kec-isi', () => { S.map.getCanvas().style.cursor = ''; });
+
+  kecamatanSiap = true;
+}
+
+/**
+ * Warnai kecamatan menurut ring, atau matikan lapisannya sama sekali.
+ *
+ * @param {Object|null} draft  {districtCode: 1|2|3}, atau null untuk keluar mode edit
+ */
+export function setRingPaint(draft) {
+  if (!kecamatanSiap) return;
+  const tampil = draft ? 'visible' : 'none';
+  ['kec-isi', 'kec-garis', 'kec-nama'].forEach((id) => {
+    if (S.map.getLayer(id)) S.map.setLayoutProperty(id, 'visibility', tampil);
+  });
+  if (!draft) return;
+
+  // Ekspresi match dibangun dari daftar kode, bukan feature-state satu per satu:
+  // 654 panggilan setFeatureState tiap klik terasa tersendat, dan yang berubah cuma
+  // satu kecamatan.
+  const warna = ['match', ['get', 'kode']];
+  const opasitas = ['match', ['get', 'kode']];
+  const RING_WARNA = { 1: '#0b2f6b', 2: '#3b6fc4', 3: '#93b4e6' };
+  Object.entries(draft).forEach(([kode, ring]) => {
+    warna.push(kode, RING_WARNA[ring] || '#94a3b8');
+    opasitas.push(kode, 0.55);
+  });
+  warna.push('#94a3b8');
+  opasitas.push(0.06);
+
+  S.map.setPaintProperty('kec-isi', 'fill-color',
+    Object.keys(draft).length ? warna : '#94a3b8');
+  S.map.setPaintProperty('kec-isi', 'fill-opacity',
+    Object.keys(draft).length ? opasitas : 0.06);
 }
 
 /** Warnai kelurahan menurut kelas persentil sebaran yang sedang tampil. */

@@ -160,6 +160,15 @@
     color: #334155; padding: 0 2px; }
   .kotak-bulan select:focus { outline: none; }
 
+  /* Bilah alat edit ring. Melayang di atas peta karena yang disunting ada DI peta —
+     menaruhnya di samping berarti mata bolak-balik tiap satu kecamatan diklik. */
+  #ring-bar { position: absolute; left: 50%; transform: translateX(-50%); bottom: 18px;
+    z-index: 30; display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
+  .ring-btn { transition: background .15s ease, color .15s ease; }
+  .ring-btn:hover { background: #eef2f8; }
+  .ring-btn.aktif { color: #fff; border-color: transparent; }
+  .ring-btn .n { font-family: 'JetBrains Mono', monospace; opacity: .75; }
+
   @media (prefers-reduced-motion: reduce) {
     .pilih-panel { animation: none; }
     .pilih-caret { transition: none; }
@@ -246,6 +255,7 @@
     <span class="text-slate-500">Heatmap dihitung terhadap:</span>
     <span id="scope-label" class="font-bold text-slate-800">seluruh penjualan</span>
     <button id="scope-clear" onclick="resetFilters()" class="hidden ml-1 text-xs font-bold px-2 py-1 rounded-lg text-white" style="background:var(--astra-navy)">kembali ke semua</button>
+    <button id="btn-edit-ring" onclick="startRingEdit()" class="hidden ml-auto text-xs font-bold px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-target mr-1"></i>Edit ring pos ini</button>
   </div>
 
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -315,6 +325,22 @@
          ke sini (lihat toggleFullscreen di map.js). Bukan cermin kedua: dua daftar
          yang harus disamakan terus-menerus pasti menyimpang suatu hari. -->
     <div id="fs-filter-host" class="hanya-penuh absolute top-6 left-1/2 -translate-x-1/2 z-20 map-panel"></div>
+
+    <!-- Edit ring. Di dalam #map-shell supaya ikut terbawa waktu peta dibuat layar
+         penuh — menyunting ring justru paling enak di layar penuh. -->
+    <div id="ring-bar" class="hidden map-panel">
+      <div class="flex flex-col mr-1">
+        <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Edit ring</span>
+        <span id="ring-nama" class="text-xs font-bold text-slate-800 max-w-[180px] truncate"></span>
+      </div>
+      <button id="ring-btn-1" onclick="setRingBrush(1)" class="ring-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 text-slate-600">Ring 1 <span id="ring-jml-1" class="n">0</span></button>
+      <button id="ring-btn-2" onclick="setRingBrush(2)" class="ring-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 text-slate-600">Ring 2 <span id="ring-jml-2" class="n">0</span></button>
+      <button id="ring-btn-3" onclick="setRingBrush(3)" class="ring-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 text-slate-600">Ring 3 <span id="ring-jml-3" class="n">0</span></button>
+      <span class="text-[11px] text-slate-400 max-w-[160px] leading-tight">Klik kecamatan untuk memberi ring; klik lagi untuk melepas.</span>
+      <span id="ring-pesan" class="text-[11px] text-red-600"></span>
+      <button id="ring-simpan" onclick="saveRingEdit()" class="px-3 py-1.5 rounded-lg text-xs font-bold text-white" style="background:var(--astra-navy)">Simpan</button>
+      <button onclick="cancelRingEdit()" class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 text-slate-600">Batal</button>
+    </div>
 
     <div class="hanya-penuh absolute top-20 left-6 bottom-6 w-80 map-panel p-4 z-20 overflow-y-auto">
       <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Analisis Performa Pos</div>

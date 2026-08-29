@@ -11,8 +11,11 @@ import { buildColorRegistry } from './colors.js';
 import { PROVINCE_NAMES } from './config.js';
 import { $, bbox, esc, formatNumber, monthLabel, toast } from './dom.js';
 import { chooseCombo, comboSearch, toggleCombo } from './combobox.js';
+import {
+  cancelRingEdit, ringEditing, saveRingEdit, setRingBrush, startRingEdit, toggleDistrict,
+} from './rings.js';
 import { fillFilterBar, onPeriodChange, resetFilters, syncFilterBar } from './filter-bar.js';
-import { activeRows, applyScope, scopeLabel } from './filters.js';
+import { activeRows, applyScope, scopeLabel, scopeValue } from './filters.js';
 import {
   addLayers, fitToScope, invalidateSalePoints, paintChoropleth, redrawMap, setBasemap,
   setRadius, setupMap, toggleFullscreen,
@@ -48,6 +51,7 @@ import {
 const HANDLERS = {
   // filter dan peta
   onPeriodChange, toggleCombo, comboSearch, chooseCombo, resetFilters,
+  startRingEdit, cancelRingEdit, setRingBrush, saveRingEdit, toggleDistrict, ringEditing,
   redrawMap, setBasemap, setRadius, applyScope, toggleFullscreen, fitToScope,
   // ringkasan
   setTreemapView, selectEntity, closeDealerCard,
@@ -114,6 +118,10 @@ export function renderAll() {
   const scope = scopeLabel();
   $('scope-label').textContent = scope;
   $('scope-clear').classList.toggle('hidden', scope === 'seluruh penjualan');
+
+  // Ring melekat pada POS, jadi tombolnya cuma masuk akal waktu satu pos yang dipilih.
+  // Muncul untuk dealer akan menyesatkan: yang tersimpan bukan ring dealer.
+  $('btn-edit-ring').classList.toggle('hidden', scopeValue('pos') === 'ALL');
 
   // Jumlah nama yang menunggu dicocokkan, di tombolnya sendiri. Pekerjaan yang
   // menunggu harus terlihat tanpa ada yang membuka modalnya dulu.

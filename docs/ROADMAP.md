@@ -59,12 +59,8 @@ bagian per satu bagian**. Bagian pertama (FILTER) sudah selesai — entrinya di 
 
 **Belum dikerjakan, urut sesuai daftar:**
 
-1. **RING — memilihnya di peta.** Fondasinya sudah jadi (lihat Selesai): tabel
-   `outlet_rings`, rute `GET /api/districts` dan `PUT /api/outlets/:code/rings`, dan
-   tiga kolom jumlah di Master Pos Dealer. Yang belum: **batas kecamatan yang bisa
-   diklik di peta** dan mode "edit ring". Batasnya belum ada sebagai berkas geo —
-   harus diturunkan dari poligon kelurahan (`ST_Union` per `district_code`), lalu
-   diekspor seperti berkas geo yang lain.
+1. ~~RING — fondasi dan editor di peta.~~ **Selesai** (lihat dua entri teratas di
+   Selesai). Yang tersisa dari ring ada di nomor 2.
 2. **Peta: agregasi ring menggantikan agregasi radius.** Persentase "dalam/luar
    jangkauan" jadi "ring 1 / ring 2 / ring 3 / di luar ketiganya". **Ini yang paling
    besar** — dia mengubah arti angka jangkauan di seluruh aplikasi, dan
@@ -152,6 +148,46 @@ cuma perluasan ke Sulawesi ke timur.
 ---
 
 ## Selesai
+
+### Edit ring di peta: batas kecamatan, kuas ring (2026-08-29)
+
+Langkah kedua dari tiga. Yang belum: agregasi ring menggantikan agregasi radius.
+
+**Batas kecamatan diturunkan dari poligon kelurahan**, bukan disimpan sendiri —
+`ST_Union` per `district_code` di `npm run export-geo`. Tidak ada tabel kecamatan dan
+tidak perlu ada: kecamatan itu kumpulan kelurahan, dan menyimpan batasnya terpisah
+berarti dua sumber yang bisa menyimpang.
+
+Disederhanakan **sesudah** union, bukan sebelum. Menyederhanakan tiap kelurahan dulu
+membuat tepi yang bersebelahan tidak lagi berimpit, dan union-nya meninggalkan celah
+tipis di antara kecamatan.
+
+**SELURUH 654 kecamatan diekspor**, bukan cuma yang punya penjualan. Ring justru dipakai
+menandai wilayah yang BELUM digarap — menyaringnya ke yang sudah ada penjualan membuat
+kecamatan yang paling ingin ditandai orang justru tidak bisa diklik.
+
+**Berkasnya dimuat hanya saat mode edit ring dinyalakan.** 3,03 MB untuk 654 kecamatan
+(222 titik rata-rata — isinya murni koordinat, tidak ada yang bisa dihemat lagi tanpa
+merusak bentuknya). Sebagian besar sesi tidak pernah menyunting ring, jadi memuatnya di
+awal berarti semua orang membayar untuk yang dipakai sedikit. Presisi diturunkan dari 6
+desimal ke 5: 0,1 m tidak berarti apa-apa untuk bentuk yang sudah disederhanakan 250 m.
+
+**Cara memakainya seperti kuas.** Pilih ring 1, 2, atau 3 di bilah alat, lalu klik
+kecamatan di peta. Mengklik kecamatan yang sudah memakai ring yang sama akan
+melepasnya — memberi dan membatalkan jadi satu gerakan yang sama, dan tidak ada mode
+"hapus" terpisah yang harus diingat. Mengklik dengan kuas yang berbeda memindahkannya,
+jadi satu kecamatan tidak pernah bisa ada di dua ring.
+
+Perubahannya ditahan di browser sampai Simpan ditekan. Tanpa itu, tiap klik jadi satu
+permintaan ke server dan Batal berarti membalikkan puluhan klik satu per satu.
+
+Tombol "Edit ring pos ini" hanya muncul waktu lingkupnya **satu pos** — ring melekat
+pada pos, dan tombol yang muncul untuk dealer akan menyesatkan.
+
+**Diperiksa di browser sungguhan**: tombol muncul hanya setelah satu pos dipilih, batas
+kecamatan dimuat dalam 0,3 detik, kuas memberi dan melepas dengan benar, memindahkan
+ring memindahkan (2/1/1 jadi 1/1/1, bukan 2/1/2), Simpan menutup bilahnya, dan kolom di
+Master Pos Dealer langsung ikut berubah tanpa memuat ulang halaman.
 
 ### Fondasi ring: tabel, rute, dan tiga kolom (2026-08-29)
 
