@@ -18,6 +18,7 @@ import { fillFilterBar, onPeriodChange, resetFilters, syncFilterBar } from './fi
 import { activeRows, applyScope, scopeLabel, scopeValue } from './filters.js';
 import {
   addLayers, fitToScope, invalidateSalePoints, paintChoropleth, redrawMap, setBasemap,
+  toggleDistrictNames,
   setRadius, setupMap, toggleFullscreen,
 } from './map.js';
 import {
@@ -54,6 +55,7 @@ const HANDLERS = {
   onPeriodChange, toggleCombo, comboSearch, chooseCombo, resetFilters,
   startRingEdit, cancelRingEdit, setRingBrush, saveRingEdit, toggleDistrict, ringEditing,
   redrawMap, setBasemap, setRadius, applyScope, toggleFullscreen, fitToScope,
+  toggleDistrictNames,
   // ringkasan
   setTreemapView, selectEntity, closeDealerCard,
   // sunting pos
@@ -157,6 +159,8 @@ function buildIndexes(data) {
   S.pendingNames = data.pendingNames || 0;
 
   S.rings = data.rings || {};
+  S.districtNames = {};
+  (data.districts || []).forEach((d) => { S.districtNames[d.code] = d.name; });
   S.coverageAll = data.coverage || {};
   S.radiiM = data.radiiM || [data.radiusM || 5000];
   S.radiusM = data.radiusM || S.radiiM[0];

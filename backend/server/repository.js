@@ -95,6 +95,11 @@ async function summary() {
     lastImport,
     coverage: await coverage.all(),
     rings: await allRings(),
+    // Daftar kecamatan ikut dikirim supaya halaman bisa menyebut NAMANYA, bukan cuma
+    // kodenya. Tidak bisa diturunkan dari daftar kelurahan: kelurahan yang dikirim
+    // sudah disaring ke yang punya penjualan, sementara ring justru sering menandai
+    // kecamatan yang belum ada penjualannya sama sekali. 654 baris, ~40 KB.
+    districts: await districts(),
     radiiM: coverage.RADII_M,
     radiusM: coverage.DEFAULT_RADIUS_M,
     // Halaman perlu tahu bedanya "jangkauan 0%" dan "jangkauan belum pernah dihitung".

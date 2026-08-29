@@ -307,23 +307,40 @@ export function closeVillageDetail() {
    MASTER POS DEALER
    ========================================================================== */
 
+/** Berapa nama kecamatan yang ditulis penuh sebelum sisanya diringkas. */
+const RING_NAMA_TAMPIL = 3;
+
 /**
- * Satu sel ring: berapa kecamatan yang masuk ring itu untuk pos ini.
+ * Satu sel ring: kecamatan mana saja yang masuk ring itu untuk pos ini.
  *
- * Yang ditampilkan JUMLAH, bukan nama-namanya. Satu ring bisa memuat belasan kecamatan,
- * dan daftar sepanjang itu membuat tiap baris tabel tingginya berbeda-beda tanpa
- * menjawab pertanyaan yang dibawa orang ke halaman ini: "pos mana yang ringnya belum
- * diisi". Memilihnya sendiri dilakukan di peta, sambil melihat batas kecamatannya.
+ * Namanya ditulis, bukan cuma jumlahnya — diminta tim, dan memang itu yang dicari
+ * orang waktu memeriksa hasil pengisian ring. Tapi satu ring bisa memuat belasan
+ * kecamatan, jadi yang ditulis penuh cuma tiga pertama; sisanya diringkas jadi
+ * "+N lagi" dan nama lengkapnya ada di tooltip. Tanpa batas itu, satu baris tabel bisa
+ * setinggi sepuluh baris lain dan tabelnya berhenti bisa dipindai.
  *
  * Yang kosong ditulis tanda hubung, bukan angka nol. "Belum diisi" dan "benar-benar
  * nol" dua hal berbeda, dan angka nol di kolom baru akan terbaca seperti temuan.
  */
 function ringCell(outletCode, ring) {
   const punya = S.rings[outletCode] || {};
-  const jumlah = Object.values(punya).filter((r) => r === ring).length;
-  const warna = jumlah ? 'text-slate-700 font-bold' : 'text-slate-300';
-  return `<td class="px-3 py-2 text-center mono text-xs ${warna}">` +
-    (jumlah ? esc(String(jumlah)) : '&mdash;') + '</td>';
+  const kode = Object.keys(punya).filter((c) => punya[c] === ring);
+  if (!kode.length) {
+    return '<td class="px-3 py-2 text-center mono text-xs text-slate-300">&mdash;</td>';
+  }
+
+  // Kode yang tidak dikenal tetap ditampilkan sebagai kode, bukan dilewati: kecamatan
+  // yang hilang dari daftar tapi masih tersimpan di ring adalah hal yang harus
+  // terlihat, bukan disembunyikan.
+  const nama = kode.map((c) => S.districtNames[c] || c).sort((a, b) => a.localeCompare(b));
+  const tampil = nama.slice(0, RING_NAMA_TAMPIL);
+  const sisa = nama.length - tampil.length;
+
+  return `<td class="px-3 py-2 text-xs text-slate-600 align-top" title="${esc(nama.join(', '))}">` +
+    `<span class="mono font-bold text-slate-800">${esc(String(nama.length))}</span> ` +
+    `<span class="text-slate-500">${esc(tampil.join(', '))}` +
+    (sisa ? ` <span class="text-slate-400">+${esc(String(sisa))} lagi</span>` : '') +
+    '</span></td>';
 }
 
 export function renderOutletTable() {

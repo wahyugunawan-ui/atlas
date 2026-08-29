@@ -287,8 +287,19 @@ function test() {
     assert.ok(html.includes(`>${judul}</th>`), `kolom "${judul}" hilang dari tabel pos`);
   });
   const ringBody = source['tables.js'].slice(source['tables.js'].indexOf('function ringCell'));
-  assert.match(ringBody.slice(0, ringBody.indexOf('\n}')), /\.filter\(\(r\) => r === ring\)\.length/,
-    'sel ring tidak lagi menghitung jumlah kecamatan per ring');
+  const ringPotong = ringBody.slice(0, ringBody.indexOf('\n}'));
+  assert.match(ringPotong, /punya\[c\] === ring/,
+    'sel ring tidak lagi memilih kecamatan menurut ringnya');
+
+  // Namanya ditulis, bukan cuma jumlahnya — diminta tim. Tapi daftarnya DIBATASI:
+  // satu ring bisa memuat belasan kecamatan, dan tanpa batas itu satu baris tabel bisa
+  // setinggi sepuluh baris lain sampai tabelnya berhenti bisa dipindai.
+  assert.match(ringPotong, /S\.districtNames\[c\] \|\| c/,
+    'sel ring tidak lagi menyebut nama kecamatannya');
+  assert.match(ringPotong, /slice\(0, RING_NAMA_TAMPIL\)/,
+    'daftar nama kecamatan tidak lagi dibatasi — barisnya bisa jadi sangat tinggi');
+  assert.match(ringPotong, /title="\$\{esc\(nama\.join\(', '\)\)\}"/,
+    'nama lengkapnya tidak lagi tersedia di tooltip, padahal daftarnya dipotong');
 
   // Jumlah kolom <th> harus sama dengan colspan baris kosongnya. Kalau tidak, tabel
   // yang kosong akan melebar atau menyempit sendiri — kecil, tapi terlihat rusak, dan
@@ -317,6 +328,26 @@ function test() {
     'mode edit ring tidak lagi memuat batas kecamatannya sendiri');
   assert.match(mapSource, /fetchGeo\('kecamatan\.geojson'\)/,
     'batas kecamatan tidak lagi diambil dari berkas geo');
+
+  // Nama kecamatan bisa dinyalakan sendiri lewat Opsi Peta (KF-PETA-17), tidak cuma
+  // ikut mode edit ring — orang perlu tahu nama kecamatan waktu MEMBACA peta juga.
+  assert.ok(html.includes('id="opt-kecamatan"'), 'sakelar Nama Kecamatan hilang dari Opsi Peta');
+
+  // Satu tempat yang memutuskan lapisan kecamatan tampil atau tidak, dari DUA sebab
+  // sekaligus. Kalau mode edit menyetel visibility sendiri, keluar dari mode edit akan
+  // mematikan lapisan yang sengaja dinyalakan orang lewat sakelar — dan sakelarnya
+  // terlihat menyala sementara petanya kosong.
+  assert.match(mapSource, /on\('opt-kecamatan'\) \|\| sedangEdit/,
+    'lapisan kecamatan tidak lagi menimbang sakelar dan mode edit di satu tempat');
+  const paintBody = mapSource.slice(mapSource.indexOf('export function setRingPaint'));
+  const paintPotong = paintBody.slice(0, paintBody.indexOf('\n}'));
+  assert.match(paintPotong, /redrawMap\(\)/,
+    'setRingPaint tidak lagi menyerahkan urusan tampil-tidaknya ke redrawMap');
+  // Sengaja mencari kata 'visibility' apa adanya, bukan nama lapisannya: mutasi yang
+  // memakai variabel untuk id lolos dari penjaga yang mencocokkan 'kec-'. Sudah dicoba.
+  assert.ok(!/visibility/.test(paintPotong),
+    'setRingPaint menyetel sendiri visibility lapisan kecamatan — keluar dari mode ' +
+    'edit akan mematikan lapisan yang dinyalakan lewat sakelar Opsi Peta');
 
   // Satu kecamatan tidak boleh berada di dua ring. Di database dijaga primary key; di
   // halaman dijaga bentuk datanya — satu kunci, satu nilai. Kalau draft-nya berubah

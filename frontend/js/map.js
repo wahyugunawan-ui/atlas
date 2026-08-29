@@ -223,16 +223,37 @@ export async function addDistrictLayers() {
 }
 
 /**
+ * Nyalakan atau matikan nama kecamatan sebagai lapisan biasa.
+ *
+ * Terpisah dari mode edit ring: orang perlu tahu nama kecamatan waktu MEMBACA peta,
+ * bukan cuma waktu menyuntingnya. Berkas batasnya tetap dimuat saat diminta, jadi
+ * yang tidak pernah menyalakannya tidak membayar 3 MB.
+ */
+export async function toggleDistrictNames() {
+  const nyala = $('opt-kecamatan') && $('opt-kecamatan').checked;
+  if (nyala && !kecamatanSiap) {
+    try {
+      await addDistrictLayers();
+    } catch (error) {
+      $('opt-kecamatan').checked = false;
+      toast('Batas kecamatan tidak bisa dimuat: ' + error.message, 'error');
+      return;
+    }
+  }
+  redrawMap();
+}
+
+/**
  * Warnai kecamatan menurut ring, atau matikan lapisannya sama sekali.
  *
  * @param {Object|null} draft  {districtCode: 1|2|3}, atau null untuk keluar mode edit
  */
 export function setRingPaint(draft) {
   if (!kecamatanSiap) return;
-  const tampil = draft ? 'visible' : 'none';
-  ['kec-isi', 'kec-garis', 'kec-nama'].forEach((id) => {
-    if (S.map.getLayer(id)) S.map.setLayoutProperty(id, 'visibility', tampil);
-  });
+  // Keluar dari mode edit TIDAK otomatis mematikan lapisannya: kalau orang menyalakan
+  // "Nama Kecamatan" sendiri di opsi peta, mematikannya di sini akan terasa seperti
+  // sakelarnya rusak. redrawMap() yang memutuskan, dari sakelar dan mode edit sekaligus.
+  redrawMap();
   if (!draft) return;
 
   // Ekspresi match dibangun dari daftar kode, bukan feature-state satu per satu:
@@ -276,6 +297,25 @@ export function redrawMap() {
   S.map.setLayoutProperty('kel-garis', 'visibility', on('opt-batas') ? 'visible' : 'none');
   S.map.setLayoutProperty('kel-nama', 'visibility', on('opt-nama') ? 'visible' : 'none');
   S.map.setLayoutProperty('kota-garis', 'visibility', on('opt-kota') ? 'visible' : 'none');
+
+  // Kecamatan tampil kalau sakelarnya dinyalakan ATAU sedang menyunting ring. Dua
+  // sebab, satu tempat yang memutuskan — kalau masing-masing menyetel visibility
+  // sendiri, keluar dari mode edit akan mematikan lapisan yang sengaja dinyalakan
+  // orang lewat opsi peta.
+  if (kecamatanSiap) {
+    const sedangEdit = window.ringEditing && window.ringEditing();
+    const tampilKec = on('opt-kecamatan') || sedangEdit;
+    ['kec-isi', 'kec-garis', 'kec-nama'].forEach((id) => {
+      if (S.map.getLayer(id)) {
+        S.map.setLayoutProperty(id, 'visibility', tampilKec ? 'visible' : 'none');
+      }
+    });
+    // Di luar mode edit, isinya tidak diwarnai sama sekali — yang diminta cuma nama
+    // dan batasnya, dan isian abu di seluruh peta menutupi heatmap di bawahnya.
+    if (!sedangEdit && S.map.getLayer('kec-isi')) {
+      S.map.setPaintProperty('kec-isi', 'fill-opacity', 0);
+    }
+  }
 
   const showPoints = on('opt-jual');
   if (showPoints) S.map.getSource('jual').setData(buildSalePoints());

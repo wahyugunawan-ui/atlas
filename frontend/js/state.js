@@ -79,6 +79,7 @@ export const S = {
 
   // --- ring layanan: rings[outletCode][districtCode] = 1|2|3 ---
   rings: {},
+  districtNames: {},       // kode kecamatan -> nama, untuk menyebutnya di layar
 
   // --- jangkauan ---
   coverage: {},            // coverage[outletCode][villageCode] = rasio, radius aktif

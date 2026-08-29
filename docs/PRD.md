@@ -240,6 +240,7 @@ menjawab pertanyaan yang sama dengan angka yang berbeda.
 | KF-PETA-14 | Sebaran itu dihitung di browser — nol permintaan ke server sampai satu kelurahan diklik | `test/coverage-split.test.js` |
 | KF-PETA-15 | Kursor di atas kelurahan menampilkan unit dan % jangkauannya, plus angka kabupatennya — tanpa klik | `test/page.test.js` |
 | KF-PETA-16 | Lingkaran radius di peta mengikuti radius yang dipilih (3/5/7/10 km), bukan nilai tetap | `test/page.test.js` |
+| KF-PETA-17 | Nama dan batas kecamatan bisa dinyalakan sendiri lewat Opsi Peta, terpisah dari mode edit ring | `test/page.test.js` |
 
 **KF-PETA-11 satu-satunya fitur yang butuh internet**, dan itu disengaja: citra
 satelitnya dari Esri, diminta di meeting. Peta lokal (PMTiles) tetap jalan penuh tanpa
@@ -275,6 +276,7 @@ satelit di bawahnya — dengan ubin yang dijawab 200 OK dan tanpa satu pun error
 | KF-POS-17 | Tiga kolom menampilkan JUMLAH kecamatan tiap ring | `test/page.test.js` |
 | KF-POS-18 | Ring dipilih dengan mengklik kecamatan di peta, bukan dari daftar | `test/page.test.js` |
 | KF-POS-19 | Batas kecamatan dimuat hanya saat mode edit ring, bukan saat halaman dibuka | `test/page.test.js` |
+| KF-POS-20 | Kolom ring menyebut NAMA kecamatannya, dibatasi dan diringkas supaya tabel tetap bisa dipindai | `test/page.test.js` |
 
 ### KF-KELURAHAN — Master Kelurahan
 

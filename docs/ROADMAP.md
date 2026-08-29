@@ -196,6 +196,23 @@ peta, dan tombol di luar layar sama saja dengan tidak ada.
 Ketiganya hanya muncul waktu lingkupnya **satu pos** — ring melekat pada pos, dan
 tombol yang muncul untuk dealer akan menyesatkan.
 
+**Sakelar "Nama Kecamatan" di Opsi Peta.** Terpisah dari mode edit ring — orang perlu
+tahu nama kecamatan waktu MEMBACA peta, bukan cuma waktu menyuntingnya. Berkas batasnya
+tetap dimuat saat diminta, jadi yang tidak pernah menyalakannya tidak membayar 3 MB.
+Satu tempat yang memutuskan tampil atau tidak (`redrawMap`), dari sakelar dan mode edit
+sekaligus: kalau masing-masing menyetel sendiri, keluar dari mode edit akan mematikan
+lapisan yang sengaja dinyalakan orang lewat opsi peta.
+
+Namanya baru muncul di atas zoom 8,5 — sama seperti nama kelurahan yang muncul di atas
+zoom 10,5. Enam ratus lima puluh empat label sekaligus di seluruh Jateng cuma jadi
+kabut abu-abu.
+
+**Tetap TIGA ring, bukan jumlah bebas.** Ditanyakan tim, lalu diputuskan tidak: daftar
+revisi aslinya menyebut tepat tiga ("ring 1, ring 2, ring 3, serta di luar ketiga
+ring"), dan menambah ring 4/5 berarti melepas `CHECK (ring BETWEEN 1 AND 3)` plus
+membangun UI kelola ring untuk sesuatu yang belum tentu dipakai. Gampang ditambah nanti
+kalau ternyata perlu.
+
 **Diperiksa di browser sungguhan**: tombol muncul hanya setelah satu pos dipilih, batas
 kecamatan dimuat dalam 0,3 detik, kuas memberi dan melepas dengan benar, memindahkan
 ring memindahkan (2/1/1 jadi 1/1/1, bukan 2/1/2), Simpan menutup bilahnya, dan kolom di
@@ -224,8 +241,19 @@ terhitung dua kali, dan totalnya tetap masuk akal dilihat sekilas.
 gambaran lengkap ring satu pos. Menambal berarti kecamatan yang dibuang orang di layar
 tetap tinggal di database.
 
-Kolomnya menampilkan **jumlah**, bukan nama-namanya, dan yang kosong ditulis tanda
-hubung bukan angka nol — "belum diisi" dan "benar-benar nol" dua hal berbeda.
+Kolomnya menampilkan **jumlah dan nama kecamatannya** — tiga nama pertama ditulis
+penuh, sisanya diringkas "+N lagi", nama lengkapnya di tooltip. Versi pertama cuma
+menampilkan jumlah; tim memintanya disebutkan namanya. Batas tiga nama itu bukan
+selera: satu ring bisa memuat belasan kecamatan, dan tanpa batas satu baris tabel bisa
+setinggi sepuluh baris lain sampai tabelnya berhenti bisa dipindai.
+
+Daftar kecamatan (654 baris, ~40 KB) ikut dikirim di `/api/summary`. Tidak bisa
+diturunkan dari daftar kelurahan yang sudah ada di sana: kelurahan disaring ke yang
+punya penjualan, sementara ring justru sering menandai kecamatan yang belum ada
+penjualannya sama sekali.
+
+Yang kosong ditulis tanda hubung bukan angka nol — "belum diisi" dan "benar-benar nol"
+dua hal berbeda.
 
 **Tes**: 19/19 hijau. Empat mutasi tertangkap: simpan yang menambal alih-alih mengganti,
 kecamatan asing yang dilewati diam-diam, primary key yang dilonggarkan sampai satu
