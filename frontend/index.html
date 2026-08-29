@@ -514,6 +514,7 @@
     </div>
     <div class="flex gap-2">
       <button onclick="openNewOutlet()" style="background:var(--astra-navy)" class="px-4 py-2 rounded-xl text-white text-sm font-semibold hover:opacity-90 whitespace-nowrap"><i class="ph ph-plus mr-1"></i>Tambah Pos</button>
+      <button onclick="askResetOutlets()" title="Kosongkan master pos dan dealer" class="px-4 py-2 rounded-xl border border-red-200 text-red-700 text-sm font-semibold hover:bg-red-50 whitespace-nowrap"><i class="ph ph-arrow-counter-clockwise mr-1"></i>Reset</button>
       <input id="mpos-search" oninput="renderOutletTable()" type="text" placeholder="Cari nama atau kode pos..." class="px-3 py-2 rounded-xl border border-slate-200 text-sm w-64">
     </div>
   </div>
@@ -610,7 +611,7 @@
 
     <label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Dealer induk</label>
     <select id="np-dealer" onchange="newOutletDealerChanged()" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white mb-1"></select>
-    <input id="np-dealer-baru" type="text" placeholder="Nama dealer baru" class="hidden w-full px-3 py-2 rounded-xl border border-slate-200 text-sm mb-3">
+    <input id="np-dealer-baru" type="text" placeholder="Nama dealer induk baru" class="hidden w-full px-3 py-2 rounded-xl border border-slate-200 text-sm mb-3">
 
     <label class="block text-[11px] uppercase font-bold text-slate-400 mb-1 mt-3">Alamat</label>
     <textarea id="np-alamat" rows="2" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm mb-3"></textarea>
@@ -655,6 +656,30 @@
   </div>
 </div>
 
+<div id="modal-reset-pos" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[300] flex items-center justify-center p-4" onclick="if(event.target===this) closeResetOutlets()">
+  <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 relative rise-in">
+    <button onclick="closeResetOutlets()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><i class="ph ph-x text-xl"></i></button>
+    <div class="text-lg font-extrabold text-slate-800 pr-8">Reset master pos dan dealer?</div>
+    <p id="rp-rincian" class="text-xs text-slate-500 mt-1 mb-4"></p>
+
+    <div class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-900 leading-snug mb-3">
+      <b>Penjualan ikut terhapus, semua bulan.</b> Angka penjualan menunjuk ke pos, jadi pos tidak bisa dikosongkan sementara penjualannya tinggal. Data konsumen juga dikosongkan &mdash; membiarkannya berarti nama dan alamat tertinggal untuk penjualan yang sudah tidak ada di layar mana pun.
+    </div>
+    <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600 leading-snug mb-4">
+      <b>Berkas Excel di arsip tidak ikut dihapus.</b> Impor ulang berkas yang sama mengembalikan semuanya, bulan per bulan.
+    </div>
+
+    <label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Ketik <span class="mono text-slate-700">RESET</span> untuk mengonfirmasi</label>
+    <input id="rp-ketik" oninput="resetOutletsTyped()" type="text" autocomplete="off" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm mono mb-3">
+
+    <div id="rp-pesan" class="text-xs mb-3"></div>
+    <div class="flex gap-2">
+      <button id="rp-reset" onclick="confirmResetOutlets()" disabled class="flex-1 px-4 py-2.5 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-700 disabled:bg-slate-200 disabled:text-slate-400">Reset permanen</button>
+      <button onclick="closeResetOutlets()" class="px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600">Batal</button>
+    </div>
+  </div>
+</div>
+
 <div id="modal-cocok" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[300] flex items-center justify-center p-4" onclick="if(event.target===this) closeMatchNames()">
   <div class="bg-white rounded-2xl shadow-2xl max-w-3xl w-full p-6 relative rise-in">
     <button onclick="closeMatchNames()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><i class="ph ph-x text-xl"></i></button>
@@ -685,7 +710,7 @@
 
     <label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Dealer induk</label>
     <select id="sp-dealer" onchange="dealerChoiceChanged()" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm bg-white mb-1"></select>
-    <input id="sp-dealer-baru" type="text" placeholder="Nama dealer baru" class="hidden w-full px-3 py-2 rounded-xl border border-slate-200 text-sm mb-1">
+    <input id="sp-dealer-baru" type="text" placeholder="Nama dealer induk baru" class="hidden w-full px-3 py-2 rounded-xl border border-slate-200 text-sm mb-1">
     <p class="text-[11px] text-slate-400 mb-3">Pengelompokan awal ditebak dari nama pos. Perbaikan di sini menang dan tidak ditimpa impor bulanan.</p>
 
     <div class="grid grid-cols-2 gap-3">

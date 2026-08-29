@@ -674,6 +674,92 @@ async function test() {
     assert.strictEqual((await repo.unmatched('2026-08')).length, 1,
       'daftar belum cocok tidak ikut pulih');
 
+    /* --------------------------------------------------------------------
+       RESET MASTER POS
+       --------------------------------------------------------------------
+       Jalur paling destruktif di aplikasi ini. Yang dijaga bukan "hapusnya jalan",
+       tapi empat hal yang gagalnya diam: pos tertinggal padahal penjualannya sudah
+       hilang (atau sebaliknya), PII yang tetap tinggal untuk penjualan yang sudah
+       tidak ada di layar mana pun, penghapusan tanpa jejak padahal satu akun dipakai
+       bersama, dan reset di database yang sudah kosong yang melaporkan "berhasil"
+       untuk sesuatu yang tidak terjadi.
+       -------------------------------------------------------------------- */
+
+    // Baris jangkauan diisi tangan dulu. Impor tidak pernah membuatnya sendiri —
+    // jangkauan dihitung terpisah lewat seed-coverage — jadi tanpa ini tabelnya kosong
+    // dan assertion "coverage ikut dikosongkan" di bawah tidak pernah bisa merah.
+    // Sudah dicoba: menghapus DELETE FROM coverage dari repositori tetap hijau.
+    const posUji = (await store.all(db, 'SELECT outlet_code FROM outlets LIMIT 2'))
+      .map((r) => r.outlet_code);
+    const kelUji = (await store.all(db, 'SELECT village_code FROM villages LIMIT 2'))
+      .map((r) => r.village_code);
+    assert.ok(posUji.length && kelUji.length, 'prasyarat tes: butuh pos dan kelurahan');
+    for (const kode of posUji) {
+      for (const kel of kelUji) {
+        await store.run(db,
+          'INSERT INTO coverage (radius_m, outlet_code, village_code, ratio) VALUES (?, ?, ?, ?)',
+          [5000, kode, kel, 0.5]);
+      }
+    }
+    assert.ok(Number((await store.one(db, 'SELECT COUNT(*) AS n FROM coverage')).n) > 0,
+      'prasyarat tes: baris jangkauan gagal dibuat');
+
+    const posSebelum = (await store.one(db, 'SELECT COUNT(*) AS n FROM outlets')).n;
+    assert.ok(posSebelum > 0, 'prasyarat tes: harus ada pos sebelum direset');
+    assert.ok((await store.one(store.customers(),
+      'SELECT COUNT(*) AS n FROM customers')).n > 0,
+    'prasyarat tes: harus ada data konsumen sebelum direset');
+
+    const direset = await repo.resetOutlets('10.0.0.11');
+    assert.strictEqual(direset.outlets, Number(posSebelum),
+      'jumlah pos yang direset tidak dilaporkan apa adanya');
+    assert.ok(direset.units > 0, 'unit penjualan yang ikut hilang tidak dilaporkan');
+
+    // Empat tabel harus kosong bersamaan. Menyisakan salah satunya bukan "reset yang
+    // lebih hati-hati" — itu baris yatim yang tidak muncul di mana pun.
+    for (const tabel of ['outlets', 'sales', 'unmatched', 'coverage']) {
+      assert.strictEqual(
+        Number((await store.one(db, `SELECT COUNT(*) AS n FROM ${tabel}`)).n), 0,
+        `tabel ${tabel} tidak ikut dikosongkan waktu master pos direset`);
+    }
+    assert.strictEqual(Number((await store.one(store.customers(),
+      'SELECT COUNT(*) AS n FROM customers')).n), 0,
+    'data konsumen tertinggal padahal penjualannya sudah tidak ada di mana pun');
+
+    // Jejaknya tercatat, di tempat yang sama dengan penghapusan periode.
+    const jejakReset = (await repo.imports(10)).find((h) => h.result === 'reset');
+    assert.ok(jejakReset, 'reset master pos tidak tercatat di riwayat impor');
+    assert.match(jejakReset.message, /arsip tidak ikut dihapus/i,
+      'catatannya harus menyebut bahwa berkas Excel-nya masih ada — itu jalan pulihnya');
+
+    // Reset di database yang sudah kosong DITOLAK, bukan diam-diam "berhasil" — pesan
+    // sukses untuk sesuatu yang tidak terjadi membuat orang mengira datanya hilang.
+    await assert.rejects(() => repo.resetOutlets(), /sudah kosong/i);
+
+    // Jalan pulihnya bekerja: impor ulang membuat lagi pos yang disebut berkas itu,
+    // lalu menggantungkan penjualannya di sana.
+    //
+    // Yang dikembalikan CUMA yang ada di berkas yang diimpor — bukan seluruh 4 pos,
+    // karena dua di antaranya datang dari bulan lain dan dari pos yang dibuat manual.
+    // Memulihkan sepenuhnya berarti mengimpor ulang tiap bulan yang pernah masuk, dan
+    // itu memang yang tertulis di layar konfirmasinya: "bulan per bulan".
+    const pulihReset = await runImport({
+      file, period: '2026-08', fileName: 'agustus.csv', withCustomers: true, config });
+    assert.strictEqual(pulihReset.rowsUsed, 3, 'impor ulang setelah reset tidak memulihkan');
+    assert.strictEqual(Number((await store.one(db,
+      "SELECT COALESCE(SUM(quantity),0) AS n FROM sales WHERE period='2026-08'")).n), 3,
+    'penjualan tidak pulih sesudah reset');
+
+    // Tiap penjualan yang pulih HARUS punya posnya. Kalau impor ulang cuma menulis
+    // sales tanpa membuat lagi outlet-nya, foreign key-nya akan menolak — tapi kalau
+    // suatu hari FK itu dilepas, barisnya jadi yatim dan tidak muncul di mana pun.
+    assert.strictEqual(Number((await store.one(db, `
+      SELECT COUNT(*) AS n FROM sales s
+      WHERE NOT EXISTS (SELECT 1 FROM outlets o WHERE o.outlet_code = s.outlet_code)`)).n),
+    0, 'ada penjualan yang pulih tanpa posnya ikut dibuat lagi');
+    assert.ok(Number((await store.one(db, 'SELECT COUNT(*) AS n FROM outlets')).n) > 0,
+      'impor ulang tidak membuat satu pos pun');
+
     // PII bisa dicabut: DROP DATABASE, sisanya tetap jalan penuh.
     await dropCustomerDatabase(config);
     assert.strictEqual(repo.hasCustomers(), false);

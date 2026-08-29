@@ -59,24 +59,20 @@ bagian per satu bagian**. Bagian pertama (FILTER) sudah selesai — entrinya di 
 
 **Belum dikerjakan, urut sesuai daftar:**
 
-1. **Master Pos Dealer** — reset data pos dan dealer; isian "dealer induk" jadi dropdown
-   dengan opsi terakhir "tambahkan dealer induk"; kata "Sunting" jadi "Edit" dan "Peta"
-   jadi "Lihat di peta"; **tiga kolom baru: kecamatan ring 1, ring 2, ring 3**.
+1. **RING — fondasi yang dipakai dua bagian sekaligus.** Tiap **pos** punya tiga ring,
+   dan tiap ring sekumpulan kecamatan. Keputusan tim: ring melekat pada **pos**, bukan
+   dealer, dan pemilihannya lewat **klik batas kecamatan di peta**, bukan lewat daftar
+   di tabel. Kolom di Master Pos Dealer cuma menampilkan jumlahnya.
+   Yang harus dibuat: tabel `outlet_rings`, rutenya, tiga kolom di tabel Master Pos,
+   lapisan batas kecamatan yang bisa diklik, dan mode "edit ring" di peta.
 2. **Peta: agregasi ring menggantikan agregasi radius.** Persentase "dalam/luar
-   jangkauan" jadi "ring 1 / ring 2 / ring 3 / di luar ketiganya". Kelompok ring tiap
-   dealer ditentukan di halaman Master Pos Dealer. Perlu batas kecamatan yang bisa
-   diklik, dan tombol "edit ring" waktu satu dealer atau pos dipilih di peta.
-   **Ini yang paling besar** — dia mengubah arti angka jangkauan di seluruh aplikasi,
-   dan `backend/core/coverage.js` + `coverage-store.js` ikut terdampak.
+   jangkauan" jadi "ring 1 / ring 2 / ring 3 / di luar ketiganya". **Ini yang paling
+   besar** — dia mengubah arti angka jangkauan di seluruh aplikasi, dan
+   `backend/core/coverage.js` + `coverage-store.js` ikut terdampak. Bergantung pada 1.
 3. **Blok Analisis Performa Pos** — tombol urut berdasarkan persentase terkecil.
 4. Minor: peta digeser ke bawah 4 blok ringkasan; tabel responsif tanpa ruang kosong;
    Analisis Performa Pos berjalan otomatis (live, auto-loop); batas ring kuning tebal;
    tombol pop-up layar penuh.
-
-**Ditemukan sambil mengerjakan filter, BELUM diperbaiki:** subtitel halaman Master Pos
-Dealer selalu berbunyi "0 pos dari 0 dealer" — elemen `#pos-count` dan
-`#pos-dealer-count` ada di markup tapi tidak pernah diisi satu baris kode pun. Bukan
-akibat perombakan filter; sudah salah sejak sebelumnya. Masuk ke bagian 1 di atas.
 
 ---
 
@@ -156,6 +152,52 @@ cuma perluasan ke Sulawesi ke timur.
 ---
 
 ## Selesai
+
+### Master Pos Dealer: reset, kata-kata, dan subtitel yang selalu nol (2026-08-29)
+
+Bagian kedua revisi pra-present HO, kecuali kolom ring yang menunggu fondasi ring.
+
+**Reset master pos dan dealer.** Tombol di kepala halaman, konfirmasi harus diketik
+`RESET` persis — pola yang sama dengan hapus periode, karena yang hilang di sini justru
+lebih banyak. Angkanya disebut SEBELUM ditekan ("79 pos · 52 dealer · 19.216 unit akan
+hilang"), bukan sesudah.
+
+Yang ikut terhapus dan kenapa tidak bisa tidak:
+
+- **Penjualan, semua bulan.** `sales.outlet_code` menunjuk `outlets` lewat foreign key.
+  Pos tidak bisa hilang sementara penjualannya tinggal — itu bukan "reset yang lebih
+  aman", itu database yang menolak.
+- **Data konsumen.** Membiarkannya berarti nama dan alamat tertinggal untuk penjualan
+  yang sudah tidak ada di layar mana pun. Aturan yang sama sudah berlaku di
+  `deletePeriod()`.
+- Jejaknya masuk riwayat impor (`result = 'reset'`), dan arsip Excel tidak ikut dihapus
+  — itu jalan pulihnya, bulan per bulan.
+
+**Kata-kata:** "Sunting" → "Edit", "Peta" → "Lihat di peta", opsi terakhir dropdown
+dealer induk → "+ tambahkan dealer induk".
+
+**Dropdown dealer induk ternyata sudah ada** sejak Fase 5 — lengkap dengan opsi
+"dealer baru". Yang diminta tim cuma kata-katanya.
+
+**Bug lama diperbaiki:** subtitel halaman selalu berbunyi "0 pos dari 0 dealer".
+`#pos-count` dan `#pos-dealer-count` ada di markup tapi tidak pernah diisi satu baris
+kode pun. Sekarang angkanya mengikuti daftar yang benar-benar tampil, jadi menyaring
+dealer tidak membuat subtitelnya membantah tabel di bawahnya.
+
+**Satu tes hampa ditemukan dan diperbaiki.** Assertion "coverage ikut dikosongkan waktu
+reset" tidak pernah bisa merah: impor tidak pernah membuat baris jangkauan (itu tugas
+`seed-coverage`), jadi tabelnya kosong dan assertion-nya lewat begitu saja. Sekarang
+barisnya diisi tangan dulu. Sesudah diperbaiki, membuang `DELETE FROM outlets` langsung
+merah; membuang `DELETE FROM coverage` tetap hijau dan itu memang benar — `ON DELETE
+CASCADE` yang mengerjakannya. Mutan ekuivalen, dicatat di kodenya.
+
+**Tes**: 19/19 hijau. Mutasi tertangkap: PII tertinggal, reset di database kosong yang
+mengaku berhasil, jejak tidak dicatat, `outlets` tidak dikosongkan, konfirmasi dilepas,
+dan konfirmasi yang tidak lagi peka huruf besar-kecil.
+
+Yang terakhir sempat lolos karena alasan yang salah: dengan `.toUpperCase()`,
+permintaannya melewati penjaga lalu gagal di repositori — dan itu juga 400. Statusnya
+sama, artinya beda jauh. Tesnya sekarang memeriksa pesannya, bukan cuma statusnya.
 
 ### Perombakan filter: bilah tetap, rentang periode, satu slot lingkup (2026-08-29)
 

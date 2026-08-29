@@ -135,6 +135,31 @@ function build(config) {
     }
   });
 
+  /**
+   * Kosongkan master pos dan dealer.
+   *
+   * Konfirmasinya harus diketik persis, sama seperti hapus periode: yang hilang di
+   * sini jauh lebih banyak daripada satu bulan, jadi tidak boleh ada satu klik pun
+   * yang bisa melakukannya tanpa sengaja.
+   */
+  api.delete('/outlets', async (req, res) => {
+    if (String(req.query.confirm || '') !== 'RESET') {
+      return res.status(400).json({
+        error: 'Konfirmasi tidak cocok. Ketik RESET persis untuk mengosongkan master pos.',
+      });
+    }
+    if (isRunning()) {
+      return res.status(409).json({
+        error: 'Sedang ada impor berjalan. Tunggu sampai selesai, baru reset.',
+      });
+    }
+    try {
+      res.json(await repo.resetOutlets(req.ip));
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
   api.get('/imports', async (req, res) => {
     res.json({ imports: await repo.imports(20), running: isRunning() });
   });

@@ -70,6 +70,11 @@ export function fetchCustomers(villageCode, range) {
   return request(`${API}customers?${query}`);
 }
 
+/** Kosongkan master pos dan dealer. Konfirmasinya diperiksa lagi di server. */
+export function resetOutlets() {
+  return request(`${API}outlets?confirm=RESET`, { method: 'DELETE' });
+}
+
 /**
  * Telusuri konsumen untuk halaman Data Konsumen.
  *

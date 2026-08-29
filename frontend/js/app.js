@@ -31,6 +31,7 @@ import {
   closeNewOutlet, closeMatchNames, confirmMatch, customerPage, dealerChoiceChanged,
   newOutletDealerChanged, openMatchNames, undoMatch,
   openNewOutlet, saveNewOutlet,
+  askResetOutlets, closeResetOutlets, resetOutletsTyped, confirmResetOutlets,
   openOutletEditor, openVillageDetail, pickFromMap,
   promptPin,
   renderCustomerTable,
@@ -59,6 +60,7 @@ const HANDLERS = {
   openDealerDetail, toggleDealerCity, jumpFromDealer,
   renderCustomerTable, searchCustomers, customerPage,
   openNewOutlet, closeNewOutlet, newOutletDealerChanged, saveNewOutlet,
+  askResetOutlets, closeResetOutlets, resetOutletsTyped, confirmResetOutlets,
   openMatchNames, closeMatchNames, confirmMatch, undoMatch,
   // impor
   importStep, importPeriodChanged, pickFile, fileChosen, dropFile, dragOver, dragLeave,

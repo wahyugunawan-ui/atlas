@@ -478,6 +478,73 @@ async function unmatchedWithSuggestions(period) {
  * tidak terlihat siapa pun dan tidak ada yang tahu masih ada. Kebalikannya jauh lebih
  * ringan: penjualan tanpa PII, dan itu keadaan normal untuk impor tanpa `--konsumen`.
  */
+/**
+ * Kosongkan seluruh master pos dan dealer, dan semua yang menggantung padanya.
+ *
+ * Penjualan IKUT TERHAPUS, dan itu bukan pilihan: `sales.outlet_code` menunjuk
+ * `outlets` lewat foreign key, jadi pos tidak bisa hilang sementara penjualannya
+ * tinggal. Menyisakan salah satunya bukan "reset yang lebih aman" — itu database yang
+ * menolak, atau baris yatim yang tidak muncul di mana pun.
+ *
+ * Data konsumen ikut dikosongkan. Membiarkannya berarti nama dan alamat tertinggal
+ * untuk penjualan yang sudah tidak ada di layar mana pun — PII yang tidak terlihat
+ * siapa pun dan tidak ada yang tahu masih ada. Aturan yang sama sudah berlaku di
+ * deletePeriod().
+ *
+ * Jalan pulihnya: impor ulang berkas Excel dari arsip. Arsipnya sengaja tidak ikut
+ * dihapus, sama seperti pada penghapusan periode.
+ */
+async function resetOutlets(ip) {
+  const db = store.db();
+
+  const sebelum = await store.one(db, `
+    SELECT (SELECT COUNT(*) FROM outlets) AS outlets,
+           (SELECT COUNT(DISTINCT dealer_code) FROM outlets) AS dealers,
+           (SELECT COUNT(*) FROM sales) AS sales,
+           (SELECT COALESCE(SUM(quantity), 0) FROM sales) AS units`);
+  if (!Number(sebelum.outlets)) {
+    throw new Error('Master pos sudah kosong, tidak ada yang perlu direset.');
+  }
+
+  let customers = 0;
+  const customerDb = store.customers();
+  if (customerDb) {
+    customers = (await store.run(customerDb, 'DELETE FROM customers')).rowCount || 0;
+  }
+
+  await store.transaction(db, async (conn) => {
+    // Urutannya mengikuti arah foreign key: yang menunjuk dihapus lebih dulu.
+    // coverage sebenarnya ON DELETE CASCADE, tapi ditulis eksplisit supaya urutan ini
+    // tetap benar kalau suatu hari cascade-nya dilepas. Uji mutasi mencatat barisnya
+    // sebagai mutan EKUIVALEN selama cascade-nya masih ada: membuangnya tidak membuat
+    // satu tes pun merah, dan itu memang benar — bukan celah tes. Yang TIDAK ekuivalen
+    // adalah membuang DELETE FROM outlets; itu langsung merah.
+    await conn.query('DELETE FROM sales');
+    await conn.query('DELETE FROM unmatched');
+    await conn.query('DELETE FROM coverage');
+    await conn.query('DELETE FROM outlets');
+  });
+
+  const now = new Date().toISOString();
+  await store.run(db, `
+    INSERT INTO imports (started_at, finished_at, ip, file_name, period,
+                         rows_read, rows_used, new_outlets, result, message)
+    VALUES (?, ?, ?, NULL, NULL, NULL, ?, NULL, 'reset', ?)`,
+  [now, now, ip || null, Number(sebelum.units),
+    `Master pos direset: ${sebelum.outlets} pos, ${sebelum.dealers} dealer, ` +
+    `${sebelum.sales} baris penjualan (${sebelum.units} unit)` +
+    (customers ? `, ${customers} data konsumen` : '') +
+    '. Berkas Excel di arsip tidak ikut dihapus.']);
+
+  return {
+    outlets: Number(sebelum.outlets),
+    dealers: Number(sebelum.dealers),
+    sales: Number(sebelum.sales),
+    units: Number(sebelum.units),
+    customers,
+  };
+}
+
 async function deletePeriod(period, ip) {
   const db = store.db();
 
@@ -639,6 +706,7 @@ async function updateOutlet(code, patch, config) {
 module.exports = {
   summary, unmatched, imports, periodSummary,
   customersInVillage, browseCustomers, hasCustomers, logCustomerAccess, updateOutlet,
+  resetOutlets,
   resolveDealer, createOutlet, deletePeriod,
   aliases, saveAlias, deleteAlias, latestUnmatchedPeriod, unmatchedWithSuggestions,
   BROWSE_LIMIT,

@@ -142,7 +142,7 @@ CREATE TABLE IF NOT EXISTS imports (
   rows_read   INTEGER,
   rows_used   INTEGER,
   new_outlets INTEGER,
-  result      VARCHAR(16) NOT NULL,                 -- 'ok' | 'gagal' | 'berjalan'
+  result      VARCHAR(16) NOT NULL,                 -- 'ok'|'gagal'|'berjalan'|'hapus'|'reset'
   message     TEXT
 );
 

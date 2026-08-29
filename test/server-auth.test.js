@@ -172,6 +172,34 @@ async function test() {
     assert.ok(limited.text.includes('Tunggu'),
       'pesan pembatas harus memberi tahu apa yang harus dilakukan');
 
+    // --- reset master pos wajib konfirmasi ---
+    //
+    // Jalur paling destruktif di aplikasi ini: seluruh pos, seluruh penjualan, dan
+    // seluruh data konsumen sekaligus. Konfirmasinya diperiksa SEBELUM repositori
+    // disentuh, jadi tes ini tidak butuh database — dan justru itu yang membuatnya
+    // berarti: kalau penjagaan pindah ke dalam repo, satu permintaan yang salah ketik
+    // sudah terlanjur masuk ke sana.
+    const resetSesi = `${COOKIE_NAME}=${createSession(config.sessionSecret)}`;
+
+    const resetTanpa = await request(port, 'DELETE', '/api/outlets', { cookie: resetSesi });
+    assert.strictEqual(resetTanpa.status, 400,
+      'DELETE /api/outlets tanpa konfirmasi tidak ditolak — satu permintaan nyasar ' +
+      'bisa mengosongkan seluruh master pos beserta penjualannya');
+    assert.match(resetTanpa.text, /RESET/,
+      'pesannya harus menyebut apa yang harus diketik, bukan cuma "tidak sah"');
+
+    // Huruf kecil ditolak. Yang diperiksa BUKAN cuma statusnya: kalau perbandingannya
+    // dilonggarkan (misalnya .toUpperCase()), permintaannya lolos penjaga lalu gagal di
+    // repositori — dan itu juga 400. Statusnya sama, artinya beda jauh. Yang
+    // membedakan cuma pesannya, jadi pesannya yang diperiksa.
+    const resetSalah = await request(port, 'DELETE', '/api/outlets?confirm=reset',
+      { cookie: resetSesi });
+    assert.strictEqual(resetSalah.status, 400,
+      'konfirmasi huruf kecil diterima — perbandingannya harus persis');
+    assert.match(resetSalah.text, /Ketik RESET persis/,
+      'konfirmasi huruf kecil lolos penjaga dan baru gagal di repositori — ' +
+      'perbandingannya tidak lagi persis');
+
     // --- rentang periode: satu rute menolak, satu rute mengabaikan ---
     //
     // Dua rute PII memakai NAMA PARAMETER YANG SAMA dengan aturan yang sengaja

@@ -265,6 +265,10 @@ satelit di bawahnya — dengan ubin yang dijawab 200 OK dan tanpa satu pun error
 | KF-POS-7 | Tambah pos baru; kode yang sudah dipakai ditolak dengan menyebut pemakainya | `test/import.test.js` |
 | KF-POS-8 | Pos baru berkoordinat langsung punya jangkauan, tanpa menunggu `seed-coverage` | `test/import.test.js` |
 | KF-POS-9 | Pin cepat lewat tempel koordinat dari Google Maps | belum dijaga |
+| KF-POS-10 | Reset master pos: pos, dealer, penjualan, dan data konsumen dikosongkan sekaligus | `test/import.test.js` |
+| KF-POS-11 | Reset wajib konfirmasi diketik persis; huruf kecil ditolak | `test/server-auth.test.js` |
+| KF-POS-12 | Reset tercatat di riwayat impor, dan arsip Excel tidak ikut dihapus | `test/import.test.js` |
+| KF-POS-13 | Subtitel halaman menyebut jumlah pos dan dealer yang benar-benar tampil | belum dijaga |
 
 ### KF-KELURAHAN — Master Kelurahan
 

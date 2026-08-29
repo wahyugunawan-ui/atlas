@@ -2,8 +2,8 @@
  * Panel rincian kelurahan, tabel master, dan perpindahan tab.
  */
 import {
-  browseCustomers, createOutlet, deleteAlias, fetchAliases, fetchCustomers, saveAlias,
-  saveOutlet,
+  browseCustomers, createOutlet, deleteAlias, fetchAliases, fetchCustomers,
+  resetOutlets, saveAlias, saveOutlet,
 } from './api.js';
 import { dealerColor } from './colors.js';
 import {
@@ -321,6 +321,12 @@ export function renderOutletTable() {
     (!query || o.name.toLowerCase().includes(query) || o.code.includes(query)))
     .sort((a, b) => (perOutlet[b.code] || 0) - (perOutlet[a.code] || 0));
 
+  // Angkanya mengikuti daftar yang BENAR-BENAR tampil, bukan seluruh isi database:
+  // kalau tidak, menyaring dealer membuat subtitelnya membantah tabel di bawahnya.
+  $('pos-count').textContent = formatNumber(list.length);
+  $('pos-dealer-count').textContent = formatNumber(
+    new Set(list.map((o) => o.dealerCode)).size);
+
   $('table-pos-body').innerHTML = list.length ? list.map((o) =>
     `<tr>` +
     `<td class="px-3 py-2 mono text-xs text-slate-500">${esc(o.code)}</td>` +
@@ -337,8 +343,8 @@ export function renderOutletTable() {
     `<td class="px-3 py-2 text-center whitespace-nowrap">` +
     (o.lat == null
       ? `<button onclick="promptPin('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-map-pin"></i> Pin</button> `
-      : `<button onclick="showOnMap('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-white" style="background:var(--astra-navy)"><i class="ph-fill ph-map-trifold"></i> Peta</button> `) +
-    `<button onclick="openOutletEditor('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-pencil-simple"></i> Sunting</button>` +
+      : `<button onclick="showOnMap('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-white" style="background:var(--astra-navy)"><i class="ph-fill ph-map-trifold"></i> Lihat di peta</button> `) +
+    `<button onclick="openOutletEditor('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-pencil-simple"></i> Edit</button>` +
     `</td></tr>`).join('')
     : '<tr><td colspan="6" class="text-center py-8 text-slate-400 text-sm">Tidak ada pos yang cocok.</td></tr>';
 }
@@ -391,7 +397,7 @@ export function openOutletEditor(code) {
     .sort((a, b2) => a.localeCompare(b2));
   $('sp-dealer').innerHTML = namaDealer
     .map((nama) => `<option value="${esc(nama)}">${esc(nama)}</option>`).join('') +
-    `<option value="${DEALER_BARU}">+ dealer baru...</option>`;
+    `<option value="${DEALER_BARU}">+ tambahkan dealer induk</option>`;
   $('sp-dealer').value = outlet.dealerName || namaDealer[0] || DEALER_BARU;
   $('sp-dealer-baru').value = '';
   $('sp-dealer-baru').classList.add('hidden');
@@ -536,6 +542,54 @@ export async function promptPin(code) {
 }
 
 /* ==========================================================================
+   RESET MASTER POS
+   ========================================================================== */
+
+/**
+ * Akibatnya disebut dengan ANGKA sebelum ditekan, bukan sesudah.
+ *
+ * "Reset master pos" tidak memberi tahu apa pun; "79 pos, 52 dealer, dan 18.915 unit
+ * akan hilang" memberi tahu. Pola yang sama dipakai hapus periode, dan alasannya sama:
+ * satu akun dipakai bersama, jadi yang menekan belum tentu yang mengimpor.
+ */
+export function askResetOutlets() {
+  const dealers = new Set(S.outlets.map((o) => o.dealerCode)).size;
+  const unit = S.sales.reduce((sum, r) => sum + r.units, 0);
+  $('rp-rincian').textContent =
+    `${formatNumber(S.outlets.length)} pos · ${formatNumber(dealers)} dealer · ` +
+    `${formatNumber(unit)} unit penjualan akan hilang dari seluruh dashboard.`;
+  $('rp-ketik').value = '';
+  $('rp-pesan').textContent = '';
+  $('rp-reset').disabled = true;
+  $('modal-reset-pos').classList.remove('hidden');
+  $('rp-ketik').focus();
+}
+
+export function closeResetOutlets() {
+  $('modal-reset-pos').classList.add('hidden');
+}
+
+export function resetOutletsTyped() {
+  $('rp-reset').disabled = $('rp-ketik').value.trim() !== 'RESET';
+}
+
+export async function confirmResetOutlets() {
+  $('rp-reset').disabled = true;
+  $('rp-pesan').textContent = 'Mengosongkan...';
+  try {
+    const hasil = await resetOutlets();
+    closeResetOutlets();
+    toast(`Master pos direset: ${formatNumber(hasil.outlets)} pos, ` +
+      `${formatNumber(hasil.units)} unit dihapus.`, 'ok');
+    await window.reloadSummary();
+  } catch (error) {
+    $('rp-pesan').textContent = error.message;
+    $('rp-pesan').className = 'text-xs mb-3 text-red-600';
+    $('rp-reset').disabled = false;
+  }
+}
+
+/* ==========================================================================
    MASTER KELURAHAN
    ========================================================================== */
 
@@ -631,7 +685,7 @@ function isiDealer(selectId, inputId) {
     .sort((a, b) => a.localeCompare(b));
   $(selectId).innerHTML = nama
     .map((x) => `<option value="${esc(x)}">${esc(x)}</option>`).join('') +
-    `<option value="${DEALER_BARU}">+ dealer baru...</option>`;
+    `<option value="${DEALER_BARU}">+ tambahkan dealer induk</option>`;
   $(selectId).value = nama[0] || DEALER_BARU;
   $(inputId).value = '';
   $(inputId).classList.toggle('hidden', $(selectId).value !== DEALER_BARU);
