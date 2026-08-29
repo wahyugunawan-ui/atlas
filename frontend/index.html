@@ -296,9 +296,9 @@
               class="map-panel px-3 py-2 text-xs font-bold text-slate-700 flex items-center gap-1.5">
         <i class="ph-fill ph-arrows-out"></i><span id="label-penuh">Layar penuh</span>
       </button>
-      <button onclick="fitToScope()" id="btn-fit" title="Pas-kan peta ke data yang sedang tampil"
+      <button onclick="fitToScope()" id="btn-fit" title="Perbesar peta pas ke data yang sedang tampil"
               class="map-panel px-3 py-2 text-xs font-bold text-slate-700 flex items-center gap-1.5">
-        <i class="ph-fill ph-crop"></i><span>Pas-kan</span>
+        <i class="ph-fill ph-crop"></i><span>Fit</span>
       </button>
       <!-- Di ATAS peta, bukan cuma di bilah ruang lingkup jauh di atas halaman.
            Orang yang baru mengklik marker sedang melihat peta; tombol yang ada di
@@ -383,7 +383,7 @@
       koordinat, jadi titik ini menunjukkan sebaran, bukan lokasi rumah.
     </div>
 
-    <div id="kelurahanDetailPanel" class="hidden translate-x-full absolute top-6 left-6 bottom-6 w-80 map-panel p-5 z-20 overflow-y-auto">
+    <div id="kelurahanDetailPanel" class="hidden translate-x-full absolute top-20 left-6 bottom-6 w-80 map-panel p-5 z-20 overflow-y-auto">
       <button onclick="closeVillageDetail()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-700"><i class="ph ph-x text-lg"></i></button>
       <div id="kelurahanDetailBack" class="mb-1"></div>
       <div id="kelurahanDetailTitle" class="text-lg font-extrabold text-slate-900 pr-8"></div>

@@ -148,6 +148,35 @@ cuma perluasan ke Sulawesi ke timur.
 
 ## Selesai
 
+### Tiga perbaikan tampilan dari mencoba langsung (2026-08-30)
+
+Tiga hal yang cuma ketahuan waktu aplikasinya dipakai di layar sungguhan, bukan dari
+membaca kode.
+
+**Panel rincian kelurahan menutupi tombol peta.** Panelnya dan tombol "Layar penuh"
+plus "Fit" sama-sama `absolute top-6 left-6` di dalam `#map-shell` — begitu satu
+kelurahan diklik, kedua tombol itu tertutup dan tidak bisa ditekan sama sekali.
+Panelnya turun ke `top-20`, mengikuti pola yang sudah dipakai panel performa layar
+penuh. Dijaga tes yang membandingkan posisi keduanya, bukan mengecek satu angka.
+
+**"Pas-kan" jadi "Fit".** Diminta tim: istilah yang lazim dipakai di peta web. Label
+tombolnya bahasa Inggris, penjelasan di tooltip-nya tetap Indonesia.
+
+**Dropdown filter keluar layar di jendela pendek.** Panelnya selalu membuka ke bawah
+setinggi tetap 268 px. Begitu ruang di bawah tombolnya sempit — jendela pendek, atau
+bilah filter melipat jadi dua baris sehingga tombolnya turun — daftarnya jatuh keluar
+layar dan yang terlihat cuma kotak pencariannya. **Tidak ada error, tidak ada gejala
+lain; dropdown-nya sekadar terlihat kosong.**
+
+Diukur ulang di browser: pada jendela setinggi 300 px, panel lamanya 324 px — habis
+keluar layar. Sekarang tingginya dipotong ke ruang yang benar-benar ada (jadi 116 px di
+kasus itu, tetap bisa digulir), panelnya membuka ke ATAS kalau ruang di atas lebih
+lega, dan diratakan ke kanan kalau tombolnya ada di ujung kanan bilah.
+
+**Tes**: 19/19 hijau. Tiga mutasi tertangkap: tinggi daftar yang kembali tetap, panel
+yang berhenti menimbang tinggi jendela, dan panel kelurahan yang kembali menempati
+sudut yang sama dengan tombol peta.
+
 ### Panel performa dan tata letak: urut, live, layar penuh, tabel tanpa ruang kosong (2026-08-30)
 
 Empat item minor plus satu mayor dari daftar revisi, semuanya soal tampilan.

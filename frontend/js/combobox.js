@@ -120,6 +120,45 @@ export function closeCombo() {
   terbuka = null;
 }
 
+/** Sisa ruang minimal yang masih layak menampung daftar. */
+const RUANG_MINIMAL = 140;
+
+/**
+ * Taruh panel di tempat yang benar-benar muat.
+ *
+ * Versi sebelumnya selalu membuka ke bawah dengan tinggi tetap 268 px. Begitu ruang di
+ * bawah tombolnya sempit — jendela pendek, atau bilah filter melipat jadi dua baris
+ * sehingga tombolnya turun — daftarnya keluar layar dan yang terlihat cuma kotak
+ * pencariannya. Tidak ada error, tidak ada gejala; dropdown-nya cuma terlihat kosong.
+ *
+ * Sekarang: kalau ruang di bawah kurang dan di atas lebih lega, panelnya membuka ke
+ * ATAS. Tingginya juga dipotong ke ruang yang benar-benar ada, jadi daftarnya selalu
+ * bisa digulir di dalam layar.
+ */
+function tempatkanPanel(name) {
+  const panel = $('panel-' + name);
+  const daftar = $('daftar-' + name);
+  const tombol = host(name).querySelector('.pilih-tombol');
+  if (!panel || !daftar || !tombol) return;
+
+  const r = tombol.getBoundingClientRect();
+  const bawah = window.innerHeight - r.bottom - 16;
+  const atas = r.top - 16;
+  const keAtas = bawah < RUANG_MINIMAL && atas > bawah;
+  const ruang = keAtas ? atas : bawah;
+
+  panel.style.top = keAtas ? 'auto' : 'calc(100% + 6px)';
+  panel.style.bottom = keAtas ? 'calc(100% + 6px)' : 'auto';
+  // Dikurangi tinggi kotak pencarian dan padding panelnya.
+  daftar.style.maxHeight = Math.max(96, ruang - 62) + 'px';
+
+  // Tombol di ujung kanan bilah: panelnya diratakan ke kanan supaya tidak keluar layar.
+  const lebar = panel.offsetWidth || 268;
+  const lewatKanan = r.left + lebar > window.innerWidth - 8;
+  panel.style.left = lewatKanan ? 'auto' : '0';
+  panel.style.right = lewatKanan ? '0' : 'auto';
+}
+
 export function toggleCombo(name) {
   const sudahBuka = terbuka === name;
   closeCombo();
@@ -131,6 +170,7 @@ export function toggleCombo(name) {
   $('panel-' + name).hidden = false;
   el.classList.add('buka');
   el.querySelector('.pilih-tombol').setAttribute('aria-expanded', 'true');
+  tempatkanPanel(name);
 
   // Kotak cari dikosongkan tiap kali dibuka. Kata kunci yang tertinggal dari kemarin
   // membuat daftarnya terlihat pendek tanpa alasan yang terlihat.

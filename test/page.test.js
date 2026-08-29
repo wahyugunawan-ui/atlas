@@ -439,6 +439,16 @@ function test() {
     assert.ok(html.includes(`id="pilih-${nama}"`), `dropdown ${nama} hilang dari bilah`);
   });
 
+  // Panel rincian kelurahan tidak boleh menempati sudut yang sama dengan tombol peta.
+  // Keduanya `absolute` di dalam #map-shell; waktu top-nya sama, panelnya menutupi
+  // tombol Layar penuh dan Fit sampai tidak bisa ditekan sama sekali.
+  const tombolPeta = html.match(/<div class="absolute (top-\d+) left-6 z-20/);
+  const panelKel = html.match(/id="kelurahanDetailPanel"[^>]*absolute (top-\d+) left-6/);
+  assert.ok(tombolPeta && panelKel, 'tombol peta atau panel kelurahan hilang dari markup');
+  assert.notStrictEqual(panelKel[1], tombolPeta[1],
+    `panel rincian kelurahan mulai di ${panelKel[1]}, sama dengan tombol peta — ` +
+    'panelnya menutupi tombol Layar penuh dan Fit');
+
   // Kotak pencarian ada DI DALAM panel dropdown, bukan di sebelahnya. Versi sebelumnya
   // menaruhnya sebagai <input> terpisah di bilah — dua kendali untuk satu pilihan, dan
   // yang kedua tidak terlihat seperti bagian dari yang pertama.
@@ -447,6 +457,22 @@ function test() {
     comboSource.indexOf('drawOptions(name, \'\');'));
   assert.match(panelBlok, /class="pilih-cari"/,
     'kotak pencarian tidak lagi dibangun di dalam panel dropdown');
+
+  // Panel dropdown menghitung ruang yang benar-benar ada, tidak memakai tinggi tetap.
+  //
+  // Versi sebelumnya selalu membuka ke bawah setinggi 268 px. Begitu ruang di bawah
+  // tombolnya sempit — jendela pendek, atau bilah filter melipat dua baris sehingga
+  // tombolnya turun — daftarnya keluar layar dan yang terlihat cuma kotak
+  // pencariannya. Tidak ada error dan tidak ada gejala; dropdown-nya cuma terlihat
+  // kosong. Diukur ulang di browser: pada jendela 300 px, panel lamanya 324 px.
+  assert.match(comboSource, /window\.innerHeight/,
+    'panel dropdown tidak lagi menimbang tinggi jendela — di layar pendek daftarnya ' +
+    'keluar layar dan dropdown-nya terlihat kosong tanpa satu pun error');
+  assert.match(comboSource, /daftar\.style\.maxHeight/,
+    'tinggi daftar tidak lagi dipotong ke ruang yang tersedia');
+  assert.match(comboSource, /window\.innerWidth/,
+    'panel dropdown tidak lagi menimbang lebar jendela — tombol di ujung kanan bilah ' +
+    'akan membuka panel yang separuh keluar layar');
   assert.ok(!/id="cari-/.test(html),
     'kotak pencarian kembali ditulis langsung di markup bilah — tempatnya di dalam ' +
     'panel dropdown, dibangun combobox.js bersama daftarnya');
