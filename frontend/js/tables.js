@@ -364,9 +364,27 @@ export function renderOutletTable() {
     (o.lat == null
       ? `<button onclick="promptPin('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-map-pin"></i> Pin</button> `
       : `<button onclick="showOnMap('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-white" style="background:var(--astra-navy)"><i class="ph-fill ph-map-trifold"></i> Lihat di peta</button> `) +
+    `<button onclick="editRingFromTable('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-target"></i> Ring</button> ` +
     `<button onclick="openOutletEditor('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-pencil-simple"></i> Edit</button>` +
     `</td></tr>`).join('')
     : '<tr><td colspan="9" class="text-center py-8 text-slate-400 text-sm">Tidak ada pos yang cocok.</td></tr>';
+}
+
+/**
+ * Tombol "Ring" di tabel: pindah ke halaman peta, pilih posnya, lalu buka mode edit.
+ *
+ * Ringnya dipilih dengan mengklik kecamatan di peta, jadi tombol di tabel tidak bisa
+ * membuka apa pun sendiri — dia mengantar orang ke tempat pemilihannya. Jeda 120 ms
+ * yang sama dengan showOnMap(): peta baru bisa dipakai sesudah tabnya benar-benar
+ * terlihat dan MapLibre sempat menghitung ulang ukurannya.
+ */
+export function editRingFromTable(code) {
+  switchTab('peta');
+  setTimeout(() => {
+    clearScope();
+    selectOutlet(code);
+    window.startRingEdit(code);
+  }, 120);
 }
 
 /** Tombol "Lihat Peta": pindah tab, pilih pos, heatmap ikut dihitung ulang. */

@@ -37,6 +37,7 @@ import {
   askResetOutlets, closeResetOutlets, resetOutletsTyped, confirmResetOutlets,
   openOutletEditor, openVillageDetail, pickFromMap,
   promptPin,
+  editRingFromTable,
   renderCustomerTable,
   renderOutletTable, renderVillageTable, saveOutletEditor, searchCustomers, showOnMap,
   switchTab,
@@ -62,7 +63,7 @@ const HANDLERS = {
   // tabel
   switchTab, renderOutletTable, renderVillageTable, showOnMap, jumpToVillage, promptPin,
   openDealerDetail, toggleDealerCity, jumpFromDealer,
-  renderCustomerTable, searchCustomers, customerPage,
+  renderCustomerTable, searchCustomers, customerPage, editRingFromTable,
   openNewOutlet, closeNewOutlet, newOutletDealerChanged, saveNewOutlet,
   askResetOutlets, closeResetOutlets, resetOutletsTyped, confirmResetOutlets,
   openMatchNames, closeMatchNames, confirmMatch, undoMatch,
@@ -121,7 +122,9 @@ export function renderAll() {
 
   // Ring melekat pada POS, jadi tombolnya cuma masuk akal waktu satu pos yang dipilih.
   // Muncul untuk dealer akan menyesatkan: yang tersimpan bukan ring dealer.
-  $('btn-edit-ring').classList.toggle('hidden', scopeValue('pos') === 'ALL');
+  const adaPos = scopeValue('pos') !== 'ALL';
+  $('btn-edit-ring').classList.toggle('hidden', !adaPos);
+  $('btn-ring-peta').classList.toggle('hidden', !adaPos);
 
   // Jumlah nama yang menunggu dicocokkan, di tombolnya sendiri. Pekerjaan yang
   // menunggu harus terlihat tanpa ada yang membuka modalnya dulu.

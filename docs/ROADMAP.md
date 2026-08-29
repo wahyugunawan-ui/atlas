@@ -181,8 +181,20 @@ jadi satu kecamatan tidak pernah bisa ada di dua ring.
 Perubahannya ditahan di browser sampai Simpan ditekan. Tanpa itu, tiap klik jadi satu
 permintaan ke server dan Batal berarti membalikkan puluhan klik satu per satu.
 
-Tombol "Edit ring pos ini" hanya muncul waktu lingkupnya **satu pos** — ring melekat
-pada pos, dan tombol yang muncul untuk dealer akan menyesatkan.
+**Tombolnya ada di TIGA tempat**, dan itu bukan berlebihan — versi pertama cuma
+menaruhnya di bilah ruang lingkup, dan tim langsung bertanya "tombol tambah ring-nya
+mana". Bilah itu ada di atas halaman; orang yang baru mengklik marker sedang melihat
+peta, dan tombol di luar layar sama saja dengan tidak ada.
+
+- **Di atas peta**, sebaris dengan "Layar penuh" dan "Pas-kan" — untuk yang datang dari
+  mengklik marker.
+- **Kolom Aksi di Master Pos Dealer**, di baris yang sama dengan tiga kolom ringnya —
+  untuk yang datang dari melihat pos mana yang ringnya masih kosong. Tombol ini
+  mengantar ke peta, bukan membuka pemilih sendiri: ringnya memang dipilih di peta.
+- **Bilah ruang lingkup**, tempat aslinya.
+
+Ketiganya hanya muncul waktu lingkupnya **satu pos** — ring melekat pada pos, dan
+tombol yang muncul untuk dealer akan menyesatkan.
 
 **Diperiksa di browser sungguhan**: tombol muncul hanya setelah satu pos dipilih, batas
 kecamatan dimuat dalam 0,3 detik, kuas memberi dan melepas dengan benar, memindahkan

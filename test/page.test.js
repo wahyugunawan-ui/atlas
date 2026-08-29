@@ -329,9 +329,26 @@ function test() {
 
   // Tombolnya cuma muncul waktu lingkupnya SATU POS. Ring melekat pada pos; tombol
   // yang muncul untuk dealer akan menyimpan sesuatu yang bukan ring dealer.
-  assert.match(source['app.js'],
-    /btn-edit-ring'\)\.classList\.toggle\('hidden', scopeValue\('pos'\) === 'ALL'\)/,
+  assert.match(source['app.js'], /const adaPos = scopeValue\('pos'\) !== 'ALL';/,
     'tombol edit ring tidak lagi dibatasi ke lingkup satu pos');
+
+  // Ada DUA tombol dan dua-duanya harus ikut aturan itu. Yang di bilah ruang lingkup
+  // saja tidak cukup: orang yang baru mengklik marker sedang melihat peta, dan bilah
+  // ruang lingkup ada jauh di atas halaman — di luar layar sama dengan tidak ada.
+  ['btn-edit-ring', 'btn-ring-peta'].forEach((id) => {
+    assert.ok(html.includes(`id="${id}"`), `tombol ${id} hilang dari markup`);
+    assert.ok(new RegExp(`\\$\\('${id}'\\)\\.classList\\.toggle\\('hidden', !adaPos\\)`)
+      .test(source['app.js']), `tombol ${id} tidak ikut aturan "hanya waktu pos dipilih"`);
+  });
+
+  // Tombol Ring di tabel Master Pos mengantar ke peta, tidak membuka pemilih sendiri —
+  // ringnya memang dipilih dengan mengklik kecamatan di peta.
+  assert.ok(/editRingFromTable\('\$\{esc\(o\.code\)\}'\)/.test(source['tables.js']),
+    'tombol Ring hilang dari kolom Aksi tabel Master Pos');
+  const dariTabel = source['tables.js'].slice(
+    source['tables.js'].indexOf('export function editRingFromTable'));
+  assert.match(dariTabel.slice(0, dariTabel.indexOf('\n}')), /switchTab\('peta'\)/,
+    'tombol Ring di tabel tidak lagi mengantar ke peta');
 
   // Tiap dropdown lingkup punya rumahnya sendiri di bilah; isinya dibangun combobox.js.
   ['provinsi', 'kota', 'dealer', 'pos'].forEach((nama) => {

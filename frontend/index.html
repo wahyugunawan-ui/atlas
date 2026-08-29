@@ -319,6 +319,13 @@
               class="map-panel px-3 py-2 text-xs font-bold text-slate-700 flex items-center gap-1.5">
         <i class="ph-fill ph-crop"></i><span>Pas-kan</span>
       </button>
+      <!-- Di ATAS peta, bukan cuma di bilah ruang lingkup jauh di atas halaman.
+           Orang yang baru mengklik marker sedang melihat peta; tombol yang ada di
+           luar layar sama saja dengan tidak ada. -->
+      <button onclick="startRingEdit()" id="btn-ring-peta" title="Tentukan kecamatan ring 1, 2, dan 3 untuk pos ini"
+              class="map-panel hidden px-3 py-2 text-xs font-bold flex items-center gap-1.5" style="color:var(--astra-navy)">
+        <i class="ph-fill ph-target"></i><span>Edit ring</span>
+      </button>
     </div>
 
     <!-- Layar penuh menutupi bilah filter di atas, jadi bilah ASLINYA yang dipindah
