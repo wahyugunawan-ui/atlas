@@ -352,11 +352,26 @@ function test() {
   // Satu kecamatan tidak boleh berada di dua ring. Di database dijaga primary key; di
   // halaman dijaga bentuk datanya — satu kunci, satu nilai. Kalau draft-nya berubah
   // jadi daftar per ring, dua ring bisa memilikinya dan penjualannya terhitung dua kali.
-  const toggleBody = ringSource.slice(ringSource.indexOf('export function toggleDistrict'));
-  assert.match(toggleBody.slice(0, toggleBody.indexOf('\n}')),
-    /draft\[code\] = ringAktif/,
+  const assignBody = ringSource.slice(ringSource.indexOf('export function assignRing'));
+  assert.match(assignBody.slice(0, assignBody.indexOf('\n}')),
+    /draft\[dipilih\] = nomor/,
     'kecamatan tidak lagi disimpan sebagai satu nilai per kode — dua ring bisa ' +
     'memiliki kecamatan yang sama, dan penjualannya terhitung dua kali');
+
+  // Urutannya SATU KECAMATAN DULU, baru ringnya — diminta tim. Versi pertama
+  // kebalikannya (pilih ring sebagai kuas, lalu sapu banyak kecamatan). Klik di peta
+  // karena itu harus membuka pemilih, bukan langsung menetapkan ring.
+  assert.match(mapSource, /window\.openRingChooser\(f\.properties\.kode, e\.originalEvent\)/,
+    'klik kecamatan tidak lagi membuka pemilih ring — kalau dia langsung menetapkan ' +
+    'ring, urutannya kembali jadi "pilih ring dulu" yang sudah ditolak tim');
+  assert.ok(html.includes('id="ring-pilih"'), 'pemilih ring hilang dari markup');
+  [1, 2, 3].forEach((ring) => {
+    assert.ok(html.includes(`onclick="assignRing(${ring})"`),
+      `tombol Ring ${ring} hilang dari pemilih kecamatan`);
+  });
+  assert.ok(html.includes('onclick="assignRing(0)"'),
+    'tombol melepas kecamatan dari ring hilang — sekali salah pilih, tidak ada jalan ' +
+    'membatalkannya selain menyimpan yang salah');
 
   // Tombolnya cuma muncul waktu lingkupnya SATU POS. Ring melekat pada pos; tombol
   // yang muncul untuk dealer akan menyimpan sesuatu yang bukan ring dealer.

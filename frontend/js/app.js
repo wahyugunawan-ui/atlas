@@ -12,7 +12,8 @@ import { PROVINCE_NAMES } from './config.js';
 import { $, bbox, esc, formatNumber, monthLabel, toast } from './dom.js';
 import { chooseCombo, comboSearch, toggleCombo } from './combobox.js';
 import {
-  cancelRingEdit, ringEditing, saveRingEdit, setRingBrush, startRingEdit, toggleDistrict,
+  assignRing, cancelRingEdit, closeRingChooser, openRingChooser, ringEditing,
+  saveRingEdit, startRingEdit,
 } from './rings.js';
 import { fillFilterBar, onPeriodChange, resetFilters, syncFilterBar } from './filter-bar.js';
 import { activeRows, applyScope, scopeLabel, scopeValue } from './filters.js';
@@ -53,7 +54,8 @@ import {
 const HANDLERS = {
   // filter dan peta
   onPeriodChange, toggleCombo, comboSearch, chooseCombo, resetFilters,
-  startRingEdit, cancelRingEdit, setRingBrush, saveRingEdit, toggleDistrict, ringEditing,
+  startRingEdit, cancelRingEdit, saveRingEdit, ringEditing,
+  openRingChooser, closeRingChooser, assignRing,
   redrawMap, setBasemap, setRadius, applyScope, toggleFullscreen, fitToScope,
   toggleDistrictNames,
   // ringkasan

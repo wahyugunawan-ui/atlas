@@ -274,7 +274,7 @@ satelit di bawahnya — dengan ubin yang dijawab 200 OK dan tanpa satu pun error
 | KF-POS-15 | Satu kecamatan hanya boleh ada di SATU ring per pos | `test/import.test.js` |
 | KF-POS-16 | Menyimpan ring mengganti seluruhnya, bukan menambal; kecamatan asing ditolak | `test/import.test.js` |
 | KF-POS-17 | Tiga kolom menampilkan JUMLAH kecamatan tiap ring | `test/page.test.js` |
-| KF-POS-18 | Ring dipilih dengan mengklik kecamatan di peta, bukan dari daftar | `test/page.test.js` |
+| KF-POS-18 | Ring dipilih dengan mengklik SATU kecamatan di peta, lalu menentukan ringnya | `test/page.test.js` |
 | KF-POS-19 | Batas kecamatan dimuat hanya saat mode edit ring, bukan saat halaman dibuka | `test/page.test.js` |
 | KF-POS-20 | Kolom ring menyebut NAMA kecamatannya, dibatasi dan diringkas supaya tabel tetap bisa dipindai | `test/page.test.js` |
 

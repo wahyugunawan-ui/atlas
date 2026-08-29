@@ -164,10 +164,17 @@
      menaruhnya di samping berarti mata bolak-balik tiap satu kecamatan diklik. */
   #ring-bar { position: absolute; left: 50%; transform: translateX(-50%); bottom: 18px;
     z-index: 30; display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
-  .ring-btn { transition: background .15s ease, color .15s ease; }
-  .ring-btn:hover { background: #eef2f8; }
-  .ring-btn.aktif { color: #fff; border-color: transparent; }
-  .ring-btn .n { font-family: 'JetBrains Mono', monospace; opacity: .75; }
+  .ring-kotak { display: flex; flex-direction: column; gap: 1px; min-width: 92px; }
+  .ring-kotak .n { font-family: 'JetBrains Mono', monospace; font-weight: 800; font-size: 13px; }
+  .ring-kotak .isi { font-size: 10px; color: #94a3b8; max-width: 130px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Pemilih ring satu kecamatan. Melayang di titik klik, bukan di pinggir layar:
+     yang dipilih orang ada di bawah kursornya. */
+  #ring-pilih { position: fixed; z-index: 320; padding: 10px 12px; min-width: 208px; }
+  .rp-ring { transition: background .15s ease, color .15s ease; }
+  .rp-ring:hover { background: #eef2f8; }
+  .rp-ring.aktif { color: #fff; border-color: transparent; }
 
   @media (prefers-reduced-motion: reduce) {
     .pilih-panel { animation: none; }
@@ -340,10 +347,10 @@
         <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Edit ring</span>
         <span id="ring-nama" class="text-xs font-bold text-slate-800 max-w-[180px] truncate"></span>
       </div>
-      <button id="ring-btn-1" onclick="setRingBrush(1)" class="ring-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 text-slate-600">Ring 1 <span id="ring-jml-1" class="n">0</span></button>
-      <button id="ring-btn-2" onclick="setRingBrush(2)" class="ring-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 text-slate-600">Ring 2 <span id="ring-jml-2" class="n">0</span></button>
-      <button id="ring-btn-3" onclick="setRingBrush(3)" class="ring-btn flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 text-slate-600">Ring 3 <span id="ring-jml-3" class="n">0</span></button>
-      <span class="text-[11px] text-slate-400 max-w-[160px] leading-tight">Klik kecamatan untuk memberi ring; klik lagi untuk melepas.</span>
+      <div class="ring-kotak"><span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Ring 1 <span id="ring-jml-1" class="n text-slate-800">0</span></span><span id="ring-isi-1" class="isi">—</span></div>
+      <div class="ring-kotak"><span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Ring 2 <span id="ring-jml-2" class="n text-slate-800">0</span></span><span id="ring-isi-2" class="isi">—</span></div>
+      <div class="ring-kotak"><span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Ring 3 <span id="ring-jml-3" class="n text-slate-800">0</span></span><span id="ring-isi-3" class="isi">—</span></div>
+      <span class="text-[11px] text-slate-400 max-w-[150px] leading-tight">Klik satu kecamatan di peta, lalu pilih ringnya.</span>
       <span id="ring-pesan" class="text-[11px] text-red-600"></span>
       <button id="ring-simpan" onclick="saveRingEdit()" class="px-3 py-1.5 rounded-lg text-xs font-bold text-white" style="background:var(--astra-navy)">Simpan</button>
       <button onclick="cancelRingEdit()" class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 text-slate-600">Batal</button>
@@ -690,6 +697,25 @@
       <button id="hp-hapus" onclick="confirmDeletePeriod()" disabled class="flex-1 px-4 py-2.5 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-700 disabled:bg-slate-200 disabled:text-slate-400">Hapus permanen</button>
       <button onclick="closeDeletePeriod()" class="px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600">Batal</button>
     </div>
+  </div>
+</div>
+
+<!-- Pemilih ring satu kecamatan. Muncul di titik klik waktu mode edit ring aktif. -->
+<div id="ring-pilih" class="hidden map-panel">
+  <div class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Kecamatan</div>
+  <div id="rp-kec-nama" class="text-sm font-extrabold text-slate-800 leading-tight"></div>
+  <div class="flex items-center gap-2 mb-2">
+    <span id="rp-kec-kode" class="mono text-[10px] text-slate-400"></span>
+    <span id="rp-kec-status" class="text-[10px] text-slate-500"></span>
+  </div>
+  <div class="flex items-center gap-1.5">
+    <button id="rp-ring-1" onclick="assignRing(1)" class="rp-ring px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 text-slate-600">Ring 1</button>
+    <button id="rp-ring-2" onclick="assignRing(2)" class="rp-ring px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 text-slate-600">Ring 2</button>
+    <button id="rp-ring-3" onclick="assignRing(3)" class="rp-ring px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 text-slate-600">Ring 3</button>
+  </div>
+  <div class="flex items-center gap-2 mt-2">
+    <button id="rp-lepas" onclick="assignRing(0)" class="hidden text-[11px] font-bold text-red-600 hover:underline">Lepas dari ring</button>
+    <button onclick="closeRingChooser()" class="ml-auto text-[11px] font-semibold text-slate-500 hover:underline">Batal</button>
   </div>
 </div>
 

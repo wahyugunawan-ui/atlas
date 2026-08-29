@@ -172,11 +172,20 @@ merusak bentuknya). Sebagian besar sesi tidak pernah menyunting ring, jadi memua
 awal berarti semua orang membayar untuk yang dipakai sedikit. Presisi diturunkan dari 6
 desimal ke 5: 0,1 m tidak berarti apa-apa untuk bentuk yang sudah disederhanakan 250 m.
 
-**Cara memakainya seperti kuas.** Pilih ring 1, 2, atau 3 di bilah alat, lalu klik
-kecamatan di peta. Mengklik kecamatan yang sudah memakai ring yang sama akan
-melepasnya — memberi dan membatalkan jadi satu gerakan yang sama, dan tidak ada mode
-"hapus" terpisah yang harus diingat. Mengklik dengan kuas yang berbeda memindahkannya,
-jadi satu kecamatan tidak pernah bisa ada di dua ring.
+**Satu kecamatan dulu, baru ringnya.** Klik satu kecamatan di peta, muncul pemilih kecil
+di titik klik berisi nama, kode, statusnya sekarang, dan tombol Ring 1/2/3 plus "Lepas
+dari ring".
+
+Versi pertama kebalikannya: pilih ring sebagai **kuas**, lalu sapu banyak kecamatan
+sekaligus. Itu lebih cepat untuk mengisi borongan, dan tim menolaknya. Alasannya masuk
+akal — yang dipikirkan orang waktu melihat peta adalah "kecamatan ini masuk ring
+berapa", bukan "ring 2 isinya kecamatan mana saja". Urutan kendalinya sekarang mengikuti
+urutan pikirannya, dan harganya diterima sadar: mengisi 20 kecamatan jadi 40 klik, bukan
+21.
+
+Memilih ring lain untuk kecamatan yang sudah punya ring akan MEMINDAHKANNYA, bukan
+menambah — satu kecamatan tidak pernah bisa ada di dua ring, aturan yang sama dijaga
+primary key di database.
 
 Perubahannya ditahan di browser sampai Simpan ditekan. Tanpa itu, tiap klik jadi satu
 permintaan ke server dan Batal berarti membalikkan puluhan klik satu per satu.
@@ -215,7 +224,8 @@ kalau ternyata perlu.
 
 **Diperiksa di browser sungguhan**: tombol muncul hanya setelah satu pos dipilih, batas
 kecamatan dimuat dalam 0,3 detik, kuas memberi dan melepas dengan benar, memindahkan
-ring memindahkan (2/1/1 jadi 1/1/1, bukan 2/1/2), Simpan menutup bilahnya, dan kolom di
+ring memindahkan (0/1/0 jadi 0/0/1, bukan 0/1/1), tombol "Lepas dari ring" cuma muncul
+kalau kecamatannya memang sedang punya ring, Simpan menutup bilahnya, dan kolom di
 Master Pos Dealer langsung ikut berubah tanpa memuat ulang halaman.
 
 ### Fondasi ring: tabel, rute, dan tiga kolom (2026-08-29)

@@ -212,7 +212,9 @@ export async function addDistrictLayers() {
   S.map.on('click', 'kec-isi', (e) => {
     if (!window.ringEditing || !window.ringEditing()) return;
     const f = e.features && e.features[0];
-    if (f) window.toggleDistrict(f.properties.kode);
+    // Pemilih ringnya dibuka di titik klik. Urutannya sengaja "kecamatan dulu, baru
+    // ringnya" — itu urutan yang dipikirkan orang waktu melihat peta.
+    if (f) window.openRingChooser(f.properties.kode, e.originalEvent);
   });
   S.map.on('mouseenter', 'kec-isi', () => {
     if (window.ringEditing && window.ringEditing()) S.map.getCanvas().style.cursor = 'pointer';
