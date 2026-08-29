@@ -119,19 +119,23 @@
      max-content memberi lebar satu baris penuh; max-width menjaganya tetap melipat
      dengan sendirinya kalau layarnya memang sempit. */
   #fs-filter-host { width: max-content; max-width: calc(100vw - 3rem); }
-  .bar-pisah { width: 1px; height: 22px; background: #dfe5ef; }
+  .bar-pisah { width: 1px; height: 18px; background: #dfe5ef; }
 
   .pilih { position: relative; }
-  .pilih-tombol { display: inline-flex; align-items: center; gap: 8px; height: 32px;
-    padding: 0 10px 0 12px; border-radius: 999px; background: #eef2f8; border: 0;
-    cursor: pointer; transition: background .15s ease; max-width: 270px; }
+  /* Dipadatkan supaya seluruh bilah muat satu baris di layar ~980 px. Diukur:
+     sebelumnya 990 px, dan itu meleset tipis dari lebar layar tim — bilahnya melipat
+     jadi dua baris. Yang dipangkas cuma jarak dan tinggi; label sumbu dan nilainya
+     tetap utuh, karena itu yang membuat pilnya terbaca sekali lihat. */
+  .pilih-tombol { display: inline-flex; align-items: center; gap: 6px; height: 28px;
+    padding: 0 8px 0 10px; border-radius: 999px; background: #eef2f8; border: 0;
+    cursor: pointer; transition: background .15s ease; max-width: 240px; }
   .pilih-tombol:hover { background: #e3e9f3; }
   .pilih-tombol:focus-visible { outline: 2px solid var(--astra-navy); outline-offset: 2px; }
-  .pilih-kunci { font-size: 10px; font-weight: 800; letter-spacing: .07em;
+  .pilih-kunci { font-size: 9.5px; font-weight: 800; letter-spacing: .05em;
     text-transform: uppercase; color: #94a3b8; white-space: nowrap; }
-  .pilih-nilai { font-size: 13px; font-weight: 700; color: #334155; max-width: 170px;
+  .pilih-nilai { font-size: 12px; font-weight: 700; color: #334155; max-width: 140px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pilih-caret { font-size: 12px; color: #94a3b8; transition: transform .15s ease; }
+  .pilih-caret { font-size: 11px; color: #94a3b8; transition: transform .15s ease; }
   .pilih.buka .pilih-caret { transform: rotate(180deg); }
 
   /* MENYALA = filter ini benar-benar sedang menyempitkan tampilan. Karena kabupaten,
@@ -169,14 +173,14 @@
   /* Periode itu koordinat, bukan nama — jadi dia memakai muka angka, sama seperti
      tiap angka lain di aplikasi ini. Bulan dan tahun dua dropdown terpisah, tapi satu
      pil: yang dipilih orang satu hal, bukan dua. */
-  .kotak-bulan { display: inline-flex; align-items: center; gap: 2px; height: 32px;
-    padding: 0 6px 0 8px; border-radius: 999px; background: #eef2f8;
+  .kotak-bulan { display: inline-flex; align-items: center; gap: 0; height: 28px;
+    padding: 0 4px 0 6px; border-radius: 999px; background: #eef2f8;
     transition: background .15s ease; }
   .kotak-bulan:hover { background: #e3e9f3; }
   .kotak-bulan:focus-within { outline: 2px solid var(--astra-navy); outline-offset: 2px; }
   .kotak-bulan select { border: 0; background: none; cursor: pointer;
-    font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600;
-    color: #334155; padding: 0 2px; }
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600;
+    color: #334155; padding: 0 1px; }
   .kotak-bulan select:focus { outline: none; }
 
   /* Bilah alat edit ring. Melayang di atas peta karena yang disunting ada DI peta —
@@ -249,7 +253,7 @@
      jadi dia selalu terlihat tanpa position:sticky. Nilainya beda-beda per halaman;
      yang ditampilkan selalu milik halaman yang sedang dibuka. -->
 <div id="filter-bar-slot" class="shrink-0">
-  <div id="filter-bar" class="px-4 md:px-6 py-2 flex flex-wrap items-center gap-x-2.5 gap-y-2">
+  <div id="filter-bar" class="px-3 md:px-4 py-1.5 flex flex-wrap items-center gap-x-2 gap-y-1.5">
     <i class="ph-fill ph-funnel text-slate-300 shrink-0"></i>
     <div class="kotak-bulan shrink-0" title="Bulan awal. Pilih tanda hubung untuk mulai dari data paling awal.">
       <select id="dari-bulan" onchange="onPeriodChange('from', this)" aria-label="Bulan awal"></select>

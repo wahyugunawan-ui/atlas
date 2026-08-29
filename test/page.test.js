@@ -516,6 +516,22 @@ function test() {
   assert.match(html, /#fs-filter-host \{[^}]*width: max-content/,
     'rumah bilah filter layar penuh tidak lagi selebar isinya — bilahnya melipat ' +
     'jadi dua baris walau layarnya luas');
+
+  // Bilah filter harus tetap muat satu baris di layar ~980 px.
+  //
+  // Diukur di browser: dengan pil setinggi 32 px dan jarak yang lama, seluruh bilah
+  // 990 px — meleset tipis dari lebar layar tim, dan melipat jadi dua baris. Setelah
+  // dipadatkan jadi 865 px, dan tetap satu baris sampai lebar 880 px.
+  //
+  // Yang dijaga di sini ukurannya, bukan hasil ukurnya: menaikkan tinggi pil kembali
+  // ke 32 px atau melebarkan jaraknya akan mengembalikan lipatan itu, dan gejalanya
+  // baru terlihat di layar yang lebih sempit dari layar yang dipakai mengetes.
+  assert.match(html, /\.pilih-tombol \{[^}]*height: 28px/,
+    'tinggi pil filter dinaikkan lagi — bilahnya akan melipat dua baris di layar ~980 px');
+  assert.match(html, /\.kotak-bulan \{[^}]*height: 28px/,
+    'tinggi kotak bulan dinaikkan lagi — tingginya harus sama dengan pil di sebelahnya');
+  assert.match(html, /id="filter-bar" class="[^"]*gap-x-2\b/,
+    'jarak antar kendali di bilah filter dilebarkan lagi');
   assert.ok(!/id="cari-/.test(html),
     'kotak pencarian kembali ditulis langsung di markup bilah — tempatnya di dalam ' +
     'panel dropdown, dibangun combobox.js bersama daftarnya');

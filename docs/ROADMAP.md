@@ -148,6 +148,37 @@ cuma perluasan ke Sulawesi ke timur.
 
 ## Selesai
 
+### Bilah filter dipadatkan supaya muat satu baris (2026-08-30)
+
+Diminta tim: bilahnya melipat jadi dua baris di layar mereka, dan mereka mau ukurannya
+diperkecil supaya pas. Sebelumnya sudah dibuat muat satu baris di layar penuh; ini
+menyelesaikannya untuk mode biasa juga.
+
+Diukur di browser: seluruh bilah **990 px**, sementara layar tim ~980 px — meleset
+tipis, dan satu piksel kelebihan sudah cukup membuatnya melipat.
+
+Yang dipangkas cuma jarak dan tinggi, bukan isinya:
+
+| | sebelum | sesudah |
+|---|---|---|
+| Tinggi pil dan kotak bulan | 32 px | 28 px |
+| Jarak di dalam pil | 8 px | 6 px |
+| Jarak antar kendali | 10 px | 8 px |
+| Padding bilah | 16/24 px | 12/16 px |
+| Nilai pil | 13 px, maks 170 px | 12 px, maks 140 px |
+
+Label sumbu (`PROVINSI`, `KABUPATEN`, …) dan nilainya tetap utuh — itu yang membuat
+pilnya terbaca sekali lihat, dan memangkasnya berarti membuang hal yang jadi alasan
+bentuk pil ini dipilih.
+
+Hasilnya **865 px** dan tinggi bilah 49 px jadi 41 px. Diperiksa di beberapa lebar:
+tetap satu baris sampai 880 px, dan di 700 px melipat dengan rapi tanpa memaksa halaman
+menggulir mendatar.
+
+**Tes**: 19/19 hijau. Tiga mutasi tertangkap — tinggi pil, tinggi kotak bulan, dan jarak
+antar kendali yang dikembalikan. Yang dijaga ukurannya, bukan hasil ukurnya: gejalanya
+baru terlihat di layar yang lebih sempit dari layar yang dipakai mengetes.
+
 ### Dropdown terpotong di layar penuh — penyebab yang sebenarnya (2026-08-30)
 
 Dikejar tiga kali; dua yang pertama ke arah yang salah. Ditulis lengkap karena yang
