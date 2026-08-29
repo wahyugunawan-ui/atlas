@@ -96,6 +96,7 @@
   .baris-pos { cursor: pointer; border: 1px solid transparent; }
   .baris-pos:hover { border-color: #cbd5e1; background: rgba(11,47,107,.02); }
   .baris-pos.aktif { border-color: var(--astra-navy); background: rgba(11,47,107,.05); }
+  .live-nyala { background: var(--astra-navy) !important; border-color: transparent !important; color: #fff !important; }
 
   /* --- BILAH FILTER -------------------------------------------------------
      Bilahnya rak, bukan sambungan. Putih rata di bawah nav navy tidak terbaca
@@ -284,36 +285,9 @@
     </div>
   </div>
 
-  <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
-    <div class="xl:col-span-2 bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-      <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center gap-2 text-sm font-bold text-slate-700"><i class="ph-fill ph-chart-bar"></i> PROPORSI PENJUALAN</div>
-        <div class="flex bg-slate-100 rounded-xl p-1 text-xs font-bold">
-          <button onclick="setTreemapView('kota')" id="tm-kota" class="px-3 py-1.5 rounded-lg text-slate-500">Per Kota</button>
-          <button onclick="setTreemapView('dealer')" id="tm-dealer" class="px-3 py-1.5 rounded-lg bg-white text-slate-800 shadow-sm">Per Dealer</button>
-          <button onclick="setTreemapView('pos')" id="tm-pos" class="px-3 py-1.5 rounded-lg text-slate-500">Per Pos</button>
-        </div>
-      </div>
-      <p class="text-xs text-slate-400 mb-2">Klik salah satu blok untuk memfilter peta dan tabel.</p>
-      <div id="treemap-chart" style="height:330px"></div>
-    </div>
-
-    <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col">
-      <div class="flex items-center gap-2 text-sm font-bold text-slate-700"><i class="ph-fill ph-target"></i> ANALISIS PERFORMA POS DEALER</div>
-      <p class="text-xs text-slate-400 mt-0.5 mb-3">Bagian penjualan yang berada dalam radius jangkauan. Klik baris untuk memfilter peta.</p>
-      <div id="ringkas-jangkauan" class="mb-3"></div>
-      <div id="panel-performa" class="flex-1 overflow-y-auto space-y-2 pr-1" style="max-height:300px"></div>
-      <p class="text-[10px] text-slate-400 leading-snug mt-3 pt-2 border-t border-slate-100">
-        Diperkirakan dari luas kelurahan yang masuk radius, dengan anggapan konsumen
-        tersebar merata di dalam kelurahannya. Alamat konsumen belum punya koordinat,
-        jadi angka ini tidak bisa dihitung per orang.
-      </p>
-    </div>
-  </div>
-
-  <!-- Rekap dealer: muncul waktu satu dealer atau satu pos dipilih. -->
-  <div id="kartu-dealer" class="hidden bg-white rounded-2xl shadow-sm border-2 p-5 rise-in"></div>
-
+  <!-- Peta ada TEPAT di bawah empat blok ringkasan, bukan di bawah treemap.
+       Diminta tim: angka dan petanya dibaca bersamaan, dan sebelumnya peta baru
+       terlihat sesudah menggulir melewati dua panel setinggi layar. -->
   <div id="map-shell" class="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 relative">
     <div id="map" class="map-container rounded-xl overflow-hidden"></div>
 
@@ -417,6 +391,48 @@
       <div id="kelurahanDetailList"></div>
     </div>
   </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+    <div class="xl:col-span-2 bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2 text-sm font-bold text-slate-700"><i class="ph-fill ph-chart-bar"></i> PROPORSI PENJUALAN</div>
+        <div class="flex bg-slate-100 rounded-xl p-1 text-xs font-bold">
+          <button onclick="setTreemapView('kota')" id="tm-kota" class="px-3 py-1.5 rounded-lg text-slate-500">Per Kota</button>
+          <button onclick="setTreemapView('dealer')" id="tm-dealer" class="px-3 py-1.5 rounded-lg bg-white text-slate-800 shadow-sm">Per Dealer</button>
+          <button onclick="setTreemapView('pos')" id="tm-pos" class="px-3 py-1.5 rounded-lg text-slate-500">Per Pos</button>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400 mb-2">Klik salah satu blok untuk memfilter peta dan tabel.</p>
+      <div id="treemap-chart" style="height:330px"></div>
+    </div>
+
+    <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex flex-col">
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2 text-sm font-bold text-slate-700"><i class="ph-fill ph-target"></i> ANALISIS PERFORMA POS DEALER</div>
+        <div class="flex items-center gap-1.5">
+          <button id="btn-urut-performa" onclick="togglePerformanceSort()" title="Ubah urutan daftar"
+                  class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 whitespace-nowrap">
+            <i class="ph ph-sort-ascending"></i><span id="label-urut-performa">% terkecil</span>
+          </button>
+          <button id="btn-live-performa" onclick="toggleLivePerforma()" title="Gulir daftar otomatis, berulang"
+                  class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 whitespace-nowrap"><i class="ph ph-play"></i><span>Live</span></button>
+          <button onclick="openPerformaFull()" title="Tampilkan lebih besar"
+                  class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 whitespace-nowrap"><i class="ph ph-arrows-out"></i></button>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400 mt-0.5 mb-3">Bagian penjualan yang berada dalam radius jangkauan. Klik baris untuk memfilter peta.</p>
+      <div id="ringkas-jangkauan" class="mb-3"></div>
+      <div id="panel-performa" class="flex-1 overflow-y-auto space-y-2 pr-1" style="max-height:300px"></div>
+      <p class="text-[10px] text-slate-400 leading-snug mt-3 pt-2 border-t border-slate-100">
+        Diperkirakan dari luas kelurahan yang masuk radius, dengan anggapan konsumen
+        tersebar merata di dalam kelurahannya. Alamat konsumen belum punya koordinat,
+        jadi angka ini tidak bisa dihitung per orang.
+      </p>
+    </div>
+  </div>
+
+  <!-- Rekap dealer: muncul waktu satu dealer atau satu pos dipilih. -->
+  <div id="kartu-dealer" class="hidden bg-white rounded-2xl shadow-sm border-2 p-5 rise-in"></div>
 </section>
 
 <section id="tab-import" class="hidden p-4 md:p-6 space-y-5">
@@ -547,8 +563,8 @@
   </div>
 </section>
 
-<section id="tab-pos" class="hidden p-4 md:p-6 space-y-4">
-  <div class="flex flex-col md:flex-row md:items-end justify-between gap-3">
+<section id="tab-pos" class="hidden p-4 md:p-6 h-full flex flex-col gap-4">
+  <div class="shrink-0 flex flex-col md:flex-row md:items-end justify-between gap-3">
     <div>
       <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900">Master Pos Dealer</h1>
       <p class="text-sm text-slate-500 mt-0.5"><span id="pos-count">0</span> pos dari <span id="pos-dealer-count">0</span> dealer</p>
@@ -559,8 +575,8 @@
       <input id="mpos-search" oninput="renderOutletTable()" type="text" placeholder="Cari nama atau kode pos..." class="px-3 py-2 rounded-xl border border-slate-200 text-sm w-64">
     </div>
   </div>
-  <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-    <div class="overflow-x-auto max-h-[calc(100vh-320px)] overflow-y-auto">
+  <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex-1 min-h-0 flex flex-col">
+    <div class="overflow-auto flex-1 min-h-0">
       <table class="w-full">
         <thead class="sticky top-0 z-10 shadow-sm" style="background:#eef1f7"><tr>
           <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Kode Pos</th>
@@ -579,7 +595,7 @@
   </div>
 </section>
 
-<section id="tab-konsumen" class="hidden p-4 md:p-6 space-y-4">
+<section id="tab-konsumen" class="hidden p-4 md:p-6 h-full flex flex-col gap-4">
   <div class="flex flex-col md:flex-row md:items-end justify-between gap-3">
     <div>
       <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900">Data Konsumen</h1>
@@ -589,13 +605,13 @@
       <input id="mkon-search" oninput="searchCustomers()" type="text" placeholder="Cari nama atau alamat..." class="px-3 py-2 rounded-xl border border-slate-200 text-sm w-56">
     </div>
   </div>
-  <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+  <div class="shrink-0 flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
     <div id="mkon-note" class="text-xs text-slate-500 flex-1"></div>
     <button id="mkon-prev" onclick="customerPage(-1)" class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"><i class="ph ph-caret-left"></i> Sebelumnya</button>
     <button id="mkon-next" onclick="customerPage(1)" class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed">Berikutnya <i class="ph ph-caret-right"></i></button>
   </div>
-  <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-    <div class="overflow-x-auto max-h-[calc(100vh-360px)] overflow-y-auto">
+  <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex-1 min-h-0 flex flex-col">
+    <div class="overflow-auto flex-1 min-h-0">
       <table class="w-full">
         <thead class="sticky top-0 z-10 shadow-sm" style="background:#eef1f7"><tr>
           <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Nama</th>
@@ -611,7 +627,7 @@
   </div>
 </section>
 
-<section id="tab-kelurahan" class="hidden p-4 md:p-6 space-y-4">
+<section id="tab-kelurahan" class="hidden p-4 md:p-6 h-full flex flex-col gap-4">
   <div class="flex flex-col md:flex-row md:items-end justify-between gap-3">
     <div>
       <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900">Master Kelurahan</h1>
@@ -622,8 +638,8 @@
       <input id="mkel-search" oninput="renderVillageTable()" type="text" placeholder="Cari kelurahan atau kode..." class="px-3 py-2 rounded-xl border border-slate-200 text-sm w-56">
     </div>
   </div>
-  <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-    <div class="overflow-x-auto max-h-[calc(100vh-320px)] overflow-y-auto">
+  <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex-1 min-h-0 flex flex-col">
+    <div class="overflow-auto flex-1 min-h-0">
       <table class="w-full">
         <thead class="sticky top-0 z-10 shadow-sm" style="background:#eef1f7"><tr>
           <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Kode</th>
@@ -701,6 +717,24 @@
 </div>
 
 <!-- Pemilih ring satu kecamatan. Muncul di titik klik waktu mode edit ring aktif. -->
+<!-- Analisis Performa Pos versi besar. Dipakai waktu layarnya diproyeksikan:
+     tipenya lebih besar dan daftarnya bisa berjalan sendiri. Isinya digambar
+     renderPerformance() yang sama, jadi tidak ada angka kedua yang bisa menyimpang. -->
+<div id="modal-performa" class="hidden fixed inset-0 z-[310] bg-white flex flex-col p-6">
+  <div class="shrink-0 flex items-center gap-3 mb-4">
+    <i class="ph-fill ph-target text-2xl" style="color:var(--astra-navy)"></i>
+    <div>
+      <div class="text-xl font-extrabold text-slate-800">Analisis Performa Pos Dealer</div>
+      <div id="fp-lingkup" class="text-xs text-slate-500"></div>
+    </div>
+    <button id="btn-live-performa-besar" onclick="toggleLivePerforma()" title="Gulir daftar otomatis, berulang"
+            class="ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 whitespace-nowrap"><i class="ph ph-play"></i><span>Live</span></button>
+    <button onclick="closePerformaFull()" class="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-x mr-1"></i>Tutup</button>
+  </div>
+  <div id="fp-ringkas" class="shrink-0 mb-4"></div>
+  <div id="fp-performa" class="flex-1 min-h-0 overflow-y-auto space-y-2 pr-2"></div>
+</div>
+
 <div id="ring-pilih" class="hidden map-panel">
   <div class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Kecamatan</div>
   <div id="rp-kec-nama" class="text-sm font-extrabold text-slate-800 leading-tight"></div>

@@ -65,10 +65,9 @@ bagian per satu bagian**. Bagian pertama (FILTER) sudah selesai — entrinya di 
    jangkauan" jadi "ring 1 / ring 2 / ring 3 / di luar ketiganya". **Ini yang paling
    besar** — dia mengubah arti angka jangkauan di seluruh aplikasi, dan
    `backend/core/coverage.js` + `coverage-store.js` ikut terdampak. Bergantung pada 1.
-3. **Blok Analisis Performa Pos** — tombol urut berdasarkan persentase terkecil.
-4. Minor: peta digeser ke bawah 4 blok ringkasan; tabel responsif tanpa ruang kosong;
-   Analisis Performa Pos berjalan otomatis (live, auto-loop); batas ring kuning tebal;
-   tombol pop-up layar penuh.
+3. ~~Blok Analisis Performa Pos, minor UI.~~ **Selesai** (lihat entri teratas).
+4. **Batas ring kuning tebal** — menunggu agregasi ring, karena yang digambar tebal
+   adalah batas terluar ring yang belum ada artinya sebelum agregasinya jadi.
 
 ---
 
@@ -148,6 +147,47 @@ cuma perluasan ke Sulawesi ke timur.
 ---
 
 ## Selesai
+
+### Panel performa dan tata letak: urut, live, layar penuh, tabel tanpa ruang kosong (2026-08-30)
+
+Empat item minor plus satu mayor dari daftar revisi, semuanya soal tampilan.
+
+**Tombol urut di Analisis Performa Pos.** Daftarnya ternyata **sudah** urut persentase
+terkecil sejak awal — tapi tidak ada yang menuliskannya di layar, jadi tidak ada yang
+tahu, dan tidak ada yang bisa membaliknya waktu ingin melihat pos yang paling baik.
+Tombolnya menjawab dua-duanya: menyebutkan urutan yang berlaku, sekaligus membaliknya.
+
+**Peta pindah ke bawah empat blok ringkasan.** Sebelumnya peta baru terlihat sesudah
+menggulir melewati treemap dan panel performa — dua panel setinggi layar. Sekarang angka
+dan petanya terbaca bersamaan.
+
+**Tabel mengisi tinggi yang tersisa, tanpa angka ajaib.** Ketiga tabel master dulu
+dibatasi `max-h-[calc(100vh-320px)]`; 320 dan 360 itu tebakan tinggi kepala halaman
+waktu markupnya ditulis. Tiap kali ada yang ditambah di atas tabel — bilah filter,
+tombol reset, baris navigasi halaman — tebakan itu meleset dan menyisakan ruang kosong
+di bawah tabel. Sekarang tingginya dihitung browser lewat flexbox: section setinggi
+`<main>`, kepala halaman seukuran isinya, sisanya untuk tabel. Menambah apa pun di atas
+tabel tidak perlu menyentuh satu angka pun lagi.
+
+**Gulir otomatis (live) dan tampilan besar.** Dua-duanya untuk layar yang diproyeksikan
+waktu rapat. Gulirnya per piksel, bukan per baris — gerakan yang meloncat antar baris
+membuat orang kehilangan tempat bacanya — dan berhenti sendiri kalau daftarnya sudah
+muat seluruhnya, karena menggulir yang sudah muat cuma membuat layar bergetar.
+
+Tampilan besarnya digambar `renderPerformance()` yang sama dengan panel biasa dan panel
+layar penuh peta: tiga salinan, satu sumber. Kalau masing-masing menghitung sendiri,
+tiga angka berbeda bisa tampil bersamaan dan tidak ada yang tahu mana yang benar.
+
+**Tes**: 19/19 hijau. Empat mutasi tertangkap: tampilan besar yang menghitung daftarnya
+sendiri, interval gulir yang bocor waktu tampilannya ditutup, tombol urut yang cuma
+mengganti tulisan tanpa membalik urutan, dan tinggi tabel yang kembali dipatok angka
+ajaib.
+
+**Satu kesalahan tertangkap sendiri saat mengerjakan:** `scopeLabel` dipakai di
+`render.js` tanpa di-import. Itu `ReferenceError` yang baru muncul waktu tampilan
+besarnya dibuka, dan **tidak satu pun tes menangkapnya** — `page.test.js` memeriksa
+handler dan id, bukan pengenal yang tidak terdefinisi. Batas nyata dari tes yang ada;
+yang menangkapnya kali ini pembacaan kode, bukan tes.
 
 ### Edit ring di peta: batas kecamatan, kuas ring (2026-08-29)
 

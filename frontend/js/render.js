@@ -5,7 +5,9 @@ import {
   CLASS_LABELS, COLOR_EMPTY, RAMP, classRanges, dealerColor,
 } from './colors.js';
 import { $, esc, formatNumber, sumBy } from './dom.js';
-import { activeRows, applyScope, clearScope, pageFilters, scopeValue, splitByCoverage } from './filters.js';
+import {
+  activeRows, applyScope, clearScope, pageFilters, scopeLabel, scopeValue, splitByCoverage,
+} from './filters.js';
 import { S } from './state.js';
 
 export function renderKpi(rows, perVillage) {
@@ -82,7 +84,21 @@ function performanceByOutlet(rows) {
       units: split.total,
       percent: split.total ? (split.inside / split.total) * 100 : 0,
     };
-  }).sort((a, b) => a.percent - b.percent);   // yang paling bermasalah di atas
+  }).sort((a, b) => (S.performanceSort === 'desc'
+    ? b.percent - a.percent
+    : a.percent - b.percent));
+}
+
+/**
+ * Balik urutan daftar performa.
+ *
+ * Urutannya sebenarnya SUDAH terkecil-dulu sejak awal, tapi tidak ada yang menuliskan
+ * itu di layar — jadi tidak ada yang tahu, dan tidak ada yang bisa membaliknya waktu
+ * ingin melihat pos yang paling baik. Tombolnya menjawab dua-duanya sekaligus.
+ */
+export function togglePerformanceSort() {
+  S.performanceSort = S.performanceSort === 'asc' ? 'desc' : 'asc';
+  window.renderAll();
 }
 
 function performanceRow(item) {
@@ -139,6 +155,13 @@ function coverageSummary(rows) {
 }
 
 export function renderPerformance(rows) {
+  const naik = S.performanceSort !== 'desc';
+  if ($('label-urut-performa')) {
+    $('label-urut-performa').textContent = naik ? '% terkecil' : '% terbesar';
+    $('btn-urut-performa').querySelector('i').className =
+      naik ? 'ph ph-sort-ascending' : 'ph ph-sort-descending';
+  }
+
   const list = performanceByOutlet(rows);
   const body = list.length ? list.map(performanceRow).join('')
     : '<p class="text-center text-slate-400 text-sm py-8">Tidak ada pos pada filter ini.</p>';
@@ -146,8 +169,75 @@ export function renderPerformance(rows) {
 
   $('panel-performa').innerHTML = body;
   $('ringkas-jangkauan').innerHTML = summary;
+  // Tiga salinan daftar yang sama: panel biasa, panel layar penuh peta, dan tampilan
+  // besar. Semuanya digambar dari `body` yang SATU — kalau masing-masing menghitung
+  // sendiri, tiga angka berbeda bisa tampil bersamaan dan tidak ada yang tahu mana
+  // yang benar.
   if ($('fs-performa')) $('fs-performa').innerHTML = body;
   if ($('fs-ringkas')) $('fs-ringkas').innerHTML = summary;
+  if ($('fp-performa')) $('fp-performa').innerHTML = body;
+  if ($('fp-ringkas')) $('fp-ringkas').innerHTML = summary;
+  if ($('fp-lingkup')) $('fp-lingkup').textContent = 'Dihitung terhadap ' + scopeLabel();
+}
+
+/* ==========================================================================
+   TAMPILAN BESAR DAN GULIR OTOMATIS
+   ========================================================================== */
+
+export function openPerformaFull() {
+  $('modal-performa').classList.remove('hidden');
+  window.renderAll();
+}
+
+export function closePerformaFull() {
+  $('modal-performa').classList.add('hidden');
+  // Gulir otomatis ikut berhenti: kalau tidak, dia terus berjalan di panel yang
+  // tertutup dan tombol Live-nya tetap menyala tanpa ada yang bergerak.
+  if (S.livePerforma) toggleLivePerforma();
+}
+
+/** Wadah daftar yang sedang terlihat — tampilan besar menang kalau sedang terbuka. */
+function panelPerformaAktif() {
+  const besar = $('modal-performa');
+  if (besar && !besar.classList.contains('hidden')) return $('fp-performa');
+  return $('panel-performa');
+}
+
+/**
+ * Gulir daftar performa sendiri, berulang.
+ *
+ * Untuk layar yang diproyeksikan waktu rapat: daftarnya jalan pelan sampai ujung, lalu
+ * kembali ke atas. Sengaja per piksel dan bukan per baris — gerakan yang meloncat
+ * antar baris membuat orang kehilangan tempat bacanya.
+ *
+ * Berhenti sendiri kalau daftarnya tidak lebih panjang dari wadahnya: menggulir
+ * sesuatu yang sudah muat seluruhnya cuma membuat layar bergetar.
+ */
+export function toggleLivePerforma() {
+  const tombol = [$('btn-live-performa'), $('btn-live-performa-besar')].filter(Boolean);
+
+  if (S.livePerforma) {
+    clearInterval(S.livePerforma);
+    S.livePerforma = null;
+    tombol.forEach((b) => {
+      b.classList.remove('live-nyala');
+      b.querySelector('i').className = 'ph ph-play';
+    });
+    return;
+  }
+
+  S.livePerforma = setInterval(() => {
+    const panel = panelPerformaAktif();
+    if (!panel) return;
+    const sisa = panel.scrollHeight - panel.clientHeight;
+    if (sisa <= 4) return;
+    panel.scrollTop = panel.scrollTop >= sisa - 1 ? 0 : panel.scrollTop + 1;
+  }, 40);
+
+  tombol.forEach((b) => {
+    b.classList.add('live-nyala');
+    b.querySelector('i').className = 'ph ph-pause';
+  });
 }
 
 /* ==========================================================================

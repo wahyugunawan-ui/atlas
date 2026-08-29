@@ -27,7 +27,8 @@ import {
 } from './outlets.js';
 import {
   closeDealerCard, renderDealerCard, renderDealerLegend, renderKpi, renderLegend,
-  renderPerformance, renderTreemap, selectEntity, setTreemapView,
+  closePerformaFull, openPerformaFull, renderPerformance, renderTreemap, selectEntity,
+  setTreemapView, togglePerformanceSort, toggleLivePerforma,
 } from './render.js';
 import { S } from './state.js';
 import {
@@ -59,7 +60,8 @@ const HANDLERS = {
   redrawMap, setBasemap, setRadius, applyScope, toggleFullscreen, fitToScope,
   toggleDistrictNames,
   // ringkasan
-  setTreemapView, selectEntity, closeDealerCard,
+  setTreemapView, selectEntity, closeDealerCard, togglePerformanceSort,
+  toggleLivePerforma, openPerformaFull, closePerformaFull,
   // sunting pos
   openOutletEditor, closeOutletEditor, pickFromMap, saveOutletEditor, dealerChoiceChanged,
   // peta dan outlet

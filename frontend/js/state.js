@@ -73,6 +73,11 @@ export const S = {
   // dibaca lewat scopeValue('pos'). Menyimpannya lagi di sini berarti dua sumber
   // kebenaran untuk fakta yang sama, dan yang satu selalu bisa ketinggalan.
   selectedVillage: null,
+  // Urutan daftar Analisis Performa Pos: 'asc' = persentase terkecil di atas.
+  // Bawaannya yang terkecil, karena yang dicari orang di panel ini adalah pos yang
+  // paling bermasalah — bukan yang paling baik.
+  performanceSort: 'asc',
+  livePerforma: null,      // id interval gulir otomatis; null berarti mati
   treemapView: 'dealer',
   treemapChart: null,
   treemapCodes: [],

@@ -329,6 +329,44 @@ function test() {
   assert.match(mapSource, /fetchGeo\('kecamatan\.geojson'\)/,
     'batas kecamatan tidak lagi diambil dari berkas geo');
 
+  /* --------------------------------------------------------------------
+     PANEL ANALISIS PERFORMA POS
+     -------------------------------------------------------------------- */
+  const renderSource = source['render.js'];
+
+  // Tiga salinan daftar yang sama (panel biasa, layar penuh peta, tampilan besar)
+  // digambar dari SATU variabel. Kalau masing-masing menghitung sendiri, tiga angka
+  // berbeda bisa tampil bersamaan dan tidak ada yang tahu mana yang benar.
+  const perfBody = renderSource.slice(renderSource.indexOf('export function renderPerformance'));
+  const perfPotong = perfBody.slice(0, perfBody.indexOf('\n}'));
+  ['panel-performa', 'fs-performa', 'fp-performa'].forEach((id) => {
+    assert.match(perfPotong, new RegExp(`\\$\\('${id}'\\)[^=]*= body`),
+      `${id} tidak lagi digambar dari daftar yang sama — tiga angka berbeda bisa tampil`);
+  });
+
+  // Gulir otomatis WAJIB dihentikan waktu tampilan besarnya ditutup. Interval yang
+  // tertinggal terus berjalan di panel yang tidak terlihat, dan tombolnya tetap
+  // menyala tanpa ada yang bergerak.
+  const tutupBody = renderSource.slice(renderSource.indexOf('export function closePerformaFull'));
+  assert.match(tutupBody.slice(0, tutupBody.indexOf('\n}')), /S\.livePerforma/,
+    'menutup tampilan besar tidak menghentikan gulir otomatis — intervalnya bocor');
+  assert.match(renderSource, /clearInterval\(S\.livePerforma\)/,
+    'gulir otomatis tidak pernah dihentikan dengan clearInterval');
+
+  // Tombol urut membalik urutan, tidak cuma mengganti tulisannya.
+  assert.ok(html.includes('id="btn-urut-performa"'), 'tombol urut hilang dari panel performa');
+  assert.match(renderSource, /S\.performanceSort === 'asc' \? 'desc' : 'asc'/,
+    'tombol urut tidak lagi membalik urutan');
+  assert.match(renderSource, /S\.performanceSort === 'desc'/,
+    'urutan daftar tidak lagi menimbang S.performanceSort');
+
+  // Tabel mengisi tinggi yang tersisa lewat flexbox, bukan angka ajaib. Tiap kali ada
+  // yang ditambah di atas tabel, angka seperti calc(100vh-320px) meleset dan
+  // menyisakan ruang kosong di bawahnya — persis yang dikeluhkan tim.
+  assert.ok(!/100vh-\d+px/.test(html),
+    'tinggi tabel kembali dipatok angka ajaib (calc(100vh-...)) — sekali ada yang ' +
+    'ditambah di atasnya, akan ada sisa ruang kosong di bawah tabel lagi');
+
   // Nama kecamatan bisa dinyalakan sendiri lewat Opsi Peta (KF-PETA-17), tidak cuma
   // ikut mode edit ring — orang perlu tahu nama kecamatan waktu MEMBACA peta juga.
   assert.ok(html.includes('id="opt-kecamatan"'), 'sakelar Nama Kecamatan hilang dari Opsi Peta');

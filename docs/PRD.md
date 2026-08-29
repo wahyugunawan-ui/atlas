@@ -241,6 +241,11 @@ menjawab pertanyaan yang sama dengan angka yang berbeda.
 | KF-PETA-15 | Kursor di atas kelurahan menampilkan unit dan % jangkauannya, plus angka kabupatennya — tanpa klik | `test/page.test.js` |
 | KF-PETA-16 | Lingkaran radius di peta mengikuti radius yang dipilih (3/5/7/10 km), bukan nilai tetap | `test/page.test.js` |
 | KF-PETA-17 | Nama dan batas kecamatan bisa dinyalakan sendiri lewat Opsi Peta, terpisah dari mode edit ring | `test/page.test.js` |
+| KF-PETA-18 | Peta berada tepat di bawah empat blok ringkasan | belum dijaga |
+| KF-PETA-19 | Daftar performa pos bisa dibalik urutannya (persentase terkecil / terbesar) | `test/page.test.js` |
+| KF-PETA-20 | Daftar performa bisa digulir otomatis berulang, untuk layar yang diproyeksikan | `test/page.test.js` |
+| KF-PETA-21 | Daftar performa bisa dibuka layar penuh; isinya dari sumber yang sama dengan panel biasa | `test/page.test.js` |
+| KF-PETA-22 | Tabel master mengisi tinggi yang tersisa, tanpa sisa ruang kosong di bawahnya | `test/page.test.js` |
 
 **KF-PETA-11 satu-satunya fitur yang butuh internet**, dan itu disengaja: citra
 satelitnya dari Esri, diminta di meeting. Peta lokal (PMTiles) tetap jalan penuh tanpa
