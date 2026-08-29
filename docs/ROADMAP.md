@@ -148,6 +148,42 @@ cuma perluasan ke Sulawesi ke timur.
 
 ## Selesai
 
+### Dropdown hilang di atas peta, dan panel kanan yang harus digulir (2026-08-30)
+
+Dua keluhan yang datang setelah perbaikan sebelumnya belum menyelesaikannya.
+
+**Dropdown filter hilang begitu menimpa peta.** Perbaikan sebelumnya — tinggi mengikuti
+ruang, membuka ke atas kalau perlu — tidak menyelesaikannya, dan gejalanya tidak bisa
+direproduksi di Chromium tanpa GPU: di sana panelnya tergambar benar di atas peta.
+
+Tersangka yang tersisa: **`backdrop-filter`**. Efek kaca itu harus mengambil sampel dari
+apa yang ada di belakangnya, dan yang di belakang panel ini adalah kanvas WebGL peta —
+lapisan tersendiri yang dikompositkan GPU. Sebagian driver menggambarnya jadi kosong,
+dan panelnya hilang tanpa satu pun error di konsol. Latarnya sekarang **padat**.
+
+Bukan cuma menghindari bug: daftar 39 kabupaten di atas peta yang ramai memang lebih
+terbaca dengan latar padat. Kaca tetap dipakai panel yang ada DI DALAM peta — yang
+bermasalah hanya yang di luar dan menimpanya.
+
+Karena penyebabnya bergantung driver dan tidak bisa direproduksi di sini, yang menjaga
+di tes adalah bentuk gayanya: `.pilih-panel` tidak boleh punya `backdrop-filter` lagi.
+Itu penjaga yang lebih lemah dari biasanya, dan ditulis begitu dengan sadar.
+
+**Panel Opsi Peta harus digulir untuk melihat sisanya.** Diukur di browser: isinya
+887 px sementara yang muat 462 px — 427 px tersembunyi. Tim memintanya terlihat semua
+tanpa perlu layar penuh.
+
+Dua legenda (kelas heatmap dan 51 dealer) yang membuatnya panjang. Keduanya dilipat
+dengan `<details>` bawaan HTML — nol baris JavaScript, keyboard ikut jalan sendiri — dan
+tertutup secara bawaan: yang dipakai tiap saat adalah sakelar di atasnya, sementara
+legenda dibuka waktu ada yang perlu dibaca. Baris sakelar ikut dipadatkan dari 7 px jadi
+4 px; tujuh sakelar dikali 6 px yang dihemat persis menutup selisih terakhir.
+
+Hasilnya 466 px isi untuk 466 px ruang — muat tanpa digulir sama sekali.
+
+**Tes**: 19/19 hijau. Tiga mutasi tertangkap: kaca dikembalikan ke dropdown, legenda
+tidak lagi dilipat, dan lipatan yang terbuka secara bawaan.
+
 ### Tiga perbaikan tampilan dari mencoba langsung (2026-08-30)
 
 Tiga hal yang cuma ketahuan waktu aplikasinya dipakai di layar sungguhan, bukan dari

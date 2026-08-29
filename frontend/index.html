@@ -56,7 +56,9 @@
   .switch .track:before { content: ''; position: absolute; width: 15px; height: 15px; left: 2px; top: 2px; background: #fff; border-radius: 50%; transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
   .switch input:checked + .track { background: var(--astra-navy); }
   .switch input:checked + .track:before { transform: translateX(15px); }
-  .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 2px; border-radius: 8px; }
+  /* Padat sedikit dari sebelumnya (7px jadi 4px). Tujuh sakelar dikali 6 px yang
+     dihemat = 42 px, dan itu selisih yang membuat seluruh panel muat tanpa digulir. */
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 2px; border-radius: 8px; }
   .toggle-row:hover { background: rgba(11,47,107,0.04); }
 
   .stat-card { transition: all 0.25s cubic-bezier(0.16,1,0.3,1); }
@@ -130,10 +132,16 @@
   .pilih.nyala .pilih-kunci { color: rgba(255,255,255,.55); }
   .pilih.nyala .pilih-nilai, .pilih.nyala .pilih-caret { color: #fff; }
 
-  .pilih-panel { position: absolute; top: calc(100% + 6px); left: 0; z-index: 60;
-    width: 268px; padding: 8px; background: rgba(255,255,255,.92);
-    backdrop-filter: blur(14px) saturate(160%); border: 1px solid rgba(255,255,255,.7);
-    border-radius: 14px; box-shadow: 0 16px 40px rgba(11,47,107,.18);
+  /* Latar PADAT, bukan kaca.
+     backdrop-filter harus mengambil sampel dari apa yang ada di belakangnya. Waktu yang
+     di belakang itu kanvas WebGL peta — lapisan tersendiri yang dikompositkan GPU —
+     sebagian driver menggambarnya jadi kosong, dan panelnya "hilang" tanpa satu pun
+     error. Untuk daftar di atas peta yang ramai, latar padat juga lebih terbaca.
+     Kaca tetap dipakai panel yang ADA DI DALAM peta; yang bermasalah cuma yang di luar. */
+  .pilih-panel { position: absolute; top: calc(100% + 6px); left: 0; z-index: 200;
+    width: 268px; padding: 8px; background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px; box-shadow: 0 16px 40px rgba(11,47,107,.22);
     animation: pilih-masuk .12s ease-out; }
   @keyframes pilih-masuk { from { opacity: 0; transform: translateY(-4px); } }
   .pilih-cari { width: 100%; height: 32px; padding: 0 10px; margin-bottom: 6px;
@@ -172,7 +180,10 @@
 
   /* Pemilih ring satu kecamatan. Melayang di titik klik, bukan di pinggir layar:
      yang dipilih orang ada di bawah kursornya. */
-  #ring-pilih { position: fixed; z-index: 320; padding: 10px 12px; min-width: 208px; }
+  /* Latar padat, alasan sama dengan .pilih-panel: dia melayang DI ATAS kanvas peta. */
+  #ring-pilih { position: fixed; z-index: 320; padding: 10px 12px; min-width: 208px;
+    background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px;
+    box-shadow: 0 16px 40px rgba(11,47,107,.22); backdrop-filter: none; }
   .rp-ring { transition: background .15s ease, color .15s ease; }
   .rp-ring:hover { background: #eef2f8; }
   .rp-ring.aktif { color: #fff; border-color: transparent; }
@@ -339,7 +350,7 @@
     <div id="fs-kartu" class="hanya-penuh absolute bottom-6 left-1/2 -translate-x-1/2 z-20 map-panel px-4 py-3 max-w-[calc(100vw-46rem)]"></div>
     <div id="mapError" class="hidden absolute inset-3 z-30 flex items-center justify-center bg-white/95 rounded-xl p-6"></div>
 
-    <div class="map-panel absolute top-6 right-6 p-4 w-60 z-10 max-h-[calc(100%-3rem)] overflow-y-auto">
+    <div class="map-panel absolute top-6 right-6 p-4 w-60 z-10 max-h-[calc(100%-2rem)] overflow-y-auto">
       <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Opsi Peta</div>
 
       <div class="text-[10px] font-bold text-slate-400 uppercase mb-1">Tampilan Dasar</div>
@@ -367,15 +378,20 @@
         <div id="pilihan-radius" class="flex bg-slate-100 rounded-lg p-0.5"></div>
       </div>
 
-      <div class="mt-3 pt-3 border-t border-slate-200">
-        <div class="text-[10px] font-bold text-slate-400 uppercase mb-1">Legenda</div>
-        <div id="legend" class="space-y-1"></div>
-      </div>
+      <!-- Dua legenda ini yang membuat panelnya tidak muat: isinya 887 px sementara
+           yang terlihat cuma 462 px, jadi 427 px harus digulir. Dilipat dengan
+           <details> bawaan HTML — nol baris JavaScript, dan keyboard-nya ikut jalan
+           sendiri. Tertutup secara bawaan: yang dipakai tiap saat adalah sakelar di
+           atas, sementara legenda dibuka waktu ada yang perlu dibaca. -->
+      <details class="mt-3 pt-3 border-t border-slate-200">
+        <summary class="text-[10px] font-bold text-slate-400 uppercase mb-1 cursor-pointer select-none">Legenda</summary>
+        <div id="legend" class="space-y-1 mt-1"></div>
+      </details>
 
-      <div class="mt-3 pt-3 border-t border-slate-200">
-        <div class="text-[10px] font-bold text-slate-400 uppercase mb-1">Dealer</div>
-        <div id="legend-dealer" class="space-y-1 max-h-52 overflow-y-auto pr-1"></div>
-      </div>
+      <details class="mt-3 pt-3 border-t border-slate-200">
+        <summary class="text-[10px] font-bold text-slate-400 uppercase mb-1 cursor-pointer select-none">Dealer</summary>
+        <div id="legend-dealer" class="space-y-1 max-h-52 overflow-y-auto pr-1 mt-1"></div>
+      </details>
     </div>
 
     <div id="map-note" class="hidden absolute bottom-6 left-6 z-10 bg-amber-50 border border-amber-200 text-amber-900 text-[11px] px-3 py-2 rounded-xl max-w-xs shadow-sm">

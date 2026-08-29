@@ -473,6 +473,31 @@ function test() {
   assert.match(comboSource, /window\.innerWidth/,
     'panel dropdown tidak lagi menimbang lebar jendela — tombol di ujung kanan bilah ' +
     'akan membuka panel yang separuh keluar layar');
+
+  // Panel dropdown TIDAK boleh memakai backdrop-filter.
+  //
+  // backdrop-filter harus mengambil sampel dari apa yang ada di belakangnya. Waktu yang
+  // di belakang itu kanvas WebGL peta — lapisan tersendiri yang dikompositkan GPU —
+  // sebagian driver menggambarnya jadi kosong, dan panelnya "hilang" tanpa satu pun
+  // error di konsol. Tidak bisa direproduksi di Chromium tanpa GPU, jadi yang menjaga
+  // di sini bentuk gayanya, bukan hasil gambarnya.
+  const gayaPanel = html.match(/\.pilih-panel \{[^}]*\}/);
+  assert.ok(gayaPanel, 'gaya .pilih-panel hilang dari markup');
+  assert.ok(!/backdrop-filter/.test(gayaPanel[0]),
+    'panel dropdown memakai backdrop-filter lagi — di atas kanvas peta sebagian ' +
+    'driver menggambarnya jadi kosong, dan dropdown-nya terlihat hilang tanpa error');
+
+  // Legenda di panel opsi peta dilipat, kalau tidak panelnya tidak muat dan harus
+  // digulir. Diukur: dengan keduanya terbuka isinya 845 px, sementara yang muat 466 px.
+  const opsiBlok = html.slice(html.indexOf('>Opsi Peta<') - 400,
+    html.indexOf('id="legend-dealer"') + 200);
+  ['Legenda', 'Dealer'].forEach((judul) => {
+    assert.match(opsiBlok, new RegExp(`<details[^>]*>\\s*<summary[^>]*>${judul}</summary>`),
+      `bagian ${judul} tidak lagi dilipat — panel opsi peta jadi tidak muat dan ` +
+      'harus digulir untuk melihat sisanya');
+  });
+  assert.ok(!/<details open/.test(opsiBlok),
+    'lipatan legenda terbuka secara bawaan — panelnya kembali tidak muat');
   assert.ok(!/id="cari-/.test(html),
     'kotak pencarian kembali ditulis langsung di markup bilah — tempatnya di dalam ' +
     'panel dropdown, dibangun combobox.js bersama daftarnya');
