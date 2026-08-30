@@ -209,6 +209,23 @@ async function test() {
       'kode dealer tidak dipakai ulang — jadi dua dealer dengan nama yang sama persis');
     assert.strictEqual(digabung.outlet.dealerName, tujuan.dealerName);
 
+    // Bergabung ke dealer yang SUDAH ADA tidak boleh membuat baris dealers kedua —
+    // resolveDealer() cuma menulis dealers untuk nama yang benar-benar baru.
+    assert.strictEqual(
+      (await store.one(db, "SELECT COUNT(*) AS n FROM dealers WHERE dealer_code = 'DIKURASI'")).n,
+      1, 'bergabung ke dealer yang sudah ada menggandakan barisnya di tabel dealers');
+
+    // Jalur patch.dealerCode LANGSUNG (skrip/tes, dipakai lagi di sini dengan nama
+    // yang beda dari yang sudah tersimpan) tidak boleh menimpa nama dealer yang
+    // sudah ada — upsertDealer() memakai ON CONFLICT DO NOTHING, bukan DO UPDATE.
+    // Tanpa penjaga ini, jalur langsung bisa mengganti nama dealer diam-diam cuma
+    // karena kebetulan dipanggil dengan ejaan berbeda.
+    await repo.updateOutlet('O01', { dealerCode: 'DIKURASI', dealerName: 'Nama Lain Sekali' });
+    assert.strictEqual(
+      (await store.one(db, "SELECT dealer_name AS n FROM dealers WHERE dealer_code = 'DIKURASI'")).n,
+      'Sudah Diperiksa',
+      'jalur dealerCode langsung menimpa nama dealer yang sudah tersimpan di tabel dealers');
+
     // Nama dicocokkan tanpa memandang besar-kecil huruf dan spasi berlebih, karena
     // itu yang diketik manusia.
     await repo.updateOutlet('O02', { dealerName: '  sudah diperiksa ' });
@@ -228,6 +245,15 @@ async function test() {
     assert.strictEqual(baru.outlet.dealerCode, 'DEALERBARUSEKALI',
       'kode dealer baru tidak diturunkan dengan aturan yang sama');
     assert.strictEqual(baru.outlet.dealerName, 'Dealer Baru Sekali');
+
+    // Dealer yang benar-benar baru HARUS langsung tercatat di tabel dealers — wajib
+    // sejak outlets.dealer_code jadi FOREIGN KEY ke sana. Kalau tidak, baris outlet
+    // di atas mestinya sudah ditolak database sebelum sampai ke assert ini; tes ini
+    // memeriksa ISINYA, bukan cuma bahwa penulisannya tidak melempar error.
+    const dealerBaruTercatat = await store.one(db,
+      "SELECT dealer_name AS n FROM dealers WHERE dealer_code = 'DEALERBARUSEKALI'");
+    assert.strictEqual(dealerBaruTercatat && dealerBaruTercatat.n, 'Dealer Baru Sekali',
+      'dealer baru tidak tercatat di tabel dealers dengan nama yang benar');
 
     // Memindahkan dealer tidak memicu hitung ulang jangkauan — jangkauan bergantung
     // pada lokasi, bukan pada pengelompokan.

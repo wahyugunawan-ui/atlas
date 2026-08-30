@@ -76,6 +76,9 @@ async function seed(geo) {
       f.geometry.coordinates[0][0][1], f.geometry.coordinates[0][0][0],
       JSON.stringify(f.geometry), JSON.stringify(f.geometry)]);
   }
+  // outlets.dealer_code sekarang FOREIGN KEY ke dealers.
+  await store.run(db,
+    `INSERT INTO dealers (dealer_code, dealer_name) VALUES ('D1', 'DEALER SATU')`);
   await store.run(db, `
     INSERT INTO outlets (outlet_code, outlet_name, dealer_code, dealer_name, lat, lng)
     VALUES ('O1', 'POS UJI', 'D1', 'DEALER SATU', ?, ?)`, [OUTLET_LAT, OUTLET_LNG]);

@@ -217,6 +217,27 @@ async function runImport(options) {
     const now = new Date().toISOString();
 
     await store.transaction(db, async (conn) => {
+      // Dealer yang dipakai outlet BARU (tebakan resolveGroups()) mungkin belum ada
+      // di tabel dealers — outlets.dealer_code sekarang FOREIGN KEY ke situ, jadi
+      // INSERT outlet di bawah akan ditolak database kalau dealernya belum ada.
+      //
+      // ON CONFLICT DO NOTHING: untuk dealer yang SUDAH ada (termasuk yang namanya
+      // sudah disunting manual lewat Master Dealer) ini no-op — impor bulanan tidak
+      // boleh menimpa nama dealer, sama seperti dealer_code/lat/lng outlet di bawah.
+      // Cuma dealer yang benar-benar baru yang ikut ditulis di sini.
+      const dealerPairs = new Map();
+      Object.values(groups.outlets).forEach((o) => {
+        if (!dealerPairs.has(o.dealerCode)) dealerPairs.set(o.dealerCode, o.dealerName);
+      });
+      const dealerRows = [...dealerPairs].map(([code, name]) => [code, name, now]);
+      for (let i = 0; i < dealerRows.length; i += BATCH) {
+        const bulk = store.bulkValues(dealerRows.slice(i, i + BATCH));
+        await conn.query(`
+          INSERT INTO dealers (dealer_code, dealer_name, updated_at)
+          VALUES ${bulk.text}
+          ON CONFLICT (dealer_code) DO NOTHING`, bulk.params);
+      }
+
       // dealer_code, lat, dan lng SENGAJA tidak ikut diperbarui: ketiganya hasil
       // suntingan manusia, dan impor bulanan tidak boleh menimpanya.
       //

@@ -60,6 +60,10 @@ async function seed(dir) {
     ['34.04.01.2002', 'Timur', '34.04.01', 'Mlati', '34.04', 'Sleman', '34', -7.80, 110.20,
       JSON.stringify(timur.geometry), JSON.stringify(timur.geometry)]);
 
+  // outlets.dealer_code sekarang FOREIGN KEY ke dealers — baris dealernya harus ada
+  // dulu, sebelum outlet mana pun yang menunjuknya.
+  await store.run(db, `
+    INSERT INTO dealers (dealer_code, dealer_name) VALUES ('D1', 'DEALER SATU')`);
   await store.run(db, `
     INSERT INTO outlets (outlet_code, outlet_name, dealer_code, dealer_name, lat, lng)
     VALUES ('O1', 'POS BARAT', 'D1', 'DEALER SATU', -7.80, 110.00)`);
@@ -142,6 +146,8 @@ async function test() {
     assert.strictEqual(renamed.outlet.lat, -7.80, 'alamat menimpa koordinat');
 
     // --- hitung ulang satu outlet tidak menyentuh yang lain ---
+    await store.run(store.db(),
+      `INSERT INTO dealers (dealer_code, dealer_name) VALUES ('D2', 'DEALER DUA')`);
     await store.run(store.db(), `
       INSERT INTO outlets (outlet_code, outlet_name, dealer_code, dealer_name, lat, lng)
       VALUES ('O3', 'POS LAIN', 'D2', 'DEALER DUA', -7.80, 110.00)`);

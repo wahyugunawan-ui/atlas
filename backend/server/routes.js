@@ -45,6 +45,9 @@ const CITY = /^\d{2}\.\d{2}$/;
 const PROVINCE = /^\d{2}$/;
 const DISTRICT = /^\d{2}\.\d{2}\.\d{2}$/;
 const OUTLET = /^[A-Za-z0-9._-]{1,32}$/;
+// Kode dealer selalu hasil toDealerCode(), tidak pernah diketik manusia — beda dari
+// OUTLET yang memang wajib diketik cocok Excel Astra.
+const DEALER = /^[A-Z0-9]{1,64}$/;
 
 /**
  * Periksa koordinat. Dipakai bersama rute tambah dan rute sunting pos.
@@ -63,6 +66,23 @@ function cekKoordinat(lat, lng) {
   if ((lat !== undefined && (lat < -9 || lat > -5)) ||
       (lng !== undefined && (lng < 107 || lng > 113))) {
     return 'Koordinat di luar wilayah cakupan. Lintang dan bujur tertukar?';
+  }
+  return null;
+}
+
+/**
+ * Periksa koordinat dealer. Beda dari cekKoordinat(): kantor pusat dealer boleh saja
+ * di luar cakupan peta DIY+Jateng (mis. Jakarta) — cuma dicek sebagai angka lat/lng
+ * yang sah, tanpa batas wilayah.
+ */
+function cekKoordinatBebas(lat, lng) {
+  if ((lat !== undefined && !Number.isFinite(lat)) ||
+      (lng !== undefined && !Number.isFinite(lng))) {
+    return 'Koordinat harus angka.';
+  }
+  if ((lat !== undefined && (lat < -90 || lat > 90)) ||
+      (lng !== undefined && (lng < -180 || lng > 180))) {
+    return 'Koordinat di luar rentang yang mungkin.';
   }
   return null;
 }
@@ -447,6 +467,73 @@ function build(config) {
     }
     if (!hasil) return res.status(404).json({ error: 'Outlet tidak ditemukan.' });
     res.json(hasil);
+  });
+
+  /* ------------------------------------------------------------------------
+     MASTER DEALER
+     ------------------------------------------------------------------------
+     Terpisah dari outlets sejak dealers jadi tabel sendiri (lihat schema.sql). Kode
+     dealer tidak pernah diketik manusia — selalu turunan toDealerCode(nama), jadi
+     rute-rute ini tidak menerima dealerCode di body, cuma di URL untuk PUT/DELETE.
+     ------------------------------------------------------------------------ */
+
+  api.post('/dealers', async (req, res) => {
+    const body = req.body || {};
+    const lat = body.lat === null || body.lat === undefined || body.lat === ''
+      ? undefined : Number(body.lat);
+    const lng = body.lng === null || body.lng === undefined || body.lng === ''
+      ? undefined : Number(body.lng);
+    const salah = cekKoordinatBebas(lat, lng);
+    if (salah) return res.status(400).json({ error: salah });
+    if ((lat === undefined) !== (lng === undefined)) {
+      return res.status(400).json({ error: 'Isi lintang dan bujur dua-duanya, atau kosongkan dua-duanya.' });
+    }
+    try {
+      const dealer = await repo.createDealer({
+        dealerName: body.dealerName,
+        address: body.address,
+        lat: lat === undefined ? null : lat,
+        lng: lng === undefined ? null : lng,
+      });
+      res.status(201).json({ dealer });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  api.put('/dealers/:code', async (req, res) => {
+    if (!DEALER.test(req.params.code)) return res.status(404).json({ error: 'Dealer tidak ditemukan.' });
+    const patch = req.body || {};
+    const lat = patch.lat === null || patch.lat === undefined ? undefined : Number(patch.lat);
+    const lng = patch.lng === null || patch.lng === undefined ? undefined : Number(patch.lng);
+    const salah = cekKoordinatBebas(lat, lng);
+    if (salah) return res.status(400).json({ error: salah });
+
+    let dealer;
+    try {
+      dealer = await repo.updateDealer(req.params.code, {
+        dealerName: patch.dealerName,
+        address: typeof patch.address === 'string' ? patch.address.trim() : undefined,
+        lat,
+        lng,
+      });
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
+    }
+    if (!dealer) return res.status(404).json({ error: 'Dealer tidak ditemukan.' });
+    res.json({ dealer });
+  });
+
+  api.delete('/dealers/:code', async (req, res) => {
+    if (!DEALER.test(req.params.code)) return res.status(404).json({ error: 'Dealer tidak ditemukan.' });
+    let hasil;
+    try {
+      hasil = await repo.deleteDealer(req.params.code);
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
+    }
+    if (!hasil) return res.status(404).json({ error: 'Dealer tidak ditemukan.' });
+    res.json({ ok: true });
   });
 
   /**

@@ -90,6 +90,7 @@ async function summary() {
   return {
     villages,
     outlets,
+    dealers: await listDealers(),
     sales,
     periods: periodRows.map((r) => r.period),
     lastImport,
@@ -704,6 +705,10 @@ async function logCustomerAccess(ip, villageCode, count) {
  * dengan nama yang sama persis. Pencocokannya tanpa memandang besar-kecil huruf dan
  * spasi berlebih, karena itu yang diketik manusia.
  *
+ * Nama BARU langsung ditulis ke tabel `dealers` (upsert, ON CONFLICT DO NOTHING) —
+ * wajib sejak `outlets.dealer_code` jadi FOREIGN KEY ke sana: outlet yang menunjuk
+ * dealer yang belum ada baris-nya akan ditolak database.
+ *
  * @return {{code: string, name: string}|null} null kalau namanya tidak bisa dipakai
  */
 async function resolveDealer(name) {
@@ -712,7 +717,7 @@ async function resolveDealer(name) {
 
   const adaSama = await store.one(store.db(), `
     SELECT dealer_code AS "dealerCode", dealer_name AS "dealerName"
-    FROM outlets
+    FROM dealers
     WHERE LOWER(dealer_name) = LOWER(?)
     LIMIT 1`, [bersih]);
   if (adaSama) return { code: adaSama.dealerCode, name: adaSama.dealerName };
@@ -721,7 +726,116 @@ async function resolveDealer(name) {
   // Nama yang seluruhnya tanda baca ('---') menghasilkan kode kosong. Kode kosong
   // akan menggabungkan semua outlet bernasib sama jadi satu dealer hantu.
   if (!code) return null;
+  await upsertDealer(code, bersih);
   return { code, name: bersih };
+}
+
+/**
+ * Pastikan baris `dealers` ada untuk (code, name) — TIDAK menimpa nama yang sudah
+ * tersimpan kalau kodenya sudah ada (`ON CONFLICT DO NOTHING`). Dipakai di mana pun
+ * kode dealer siap ditulis ke `outlets`: resolveDealer() untuk nama yang diketik
+ * manusia, dan jalur `patch.dealerCode` langsung di updateOutlet() (skrip/tes).
+ */
+async function upsertDealer(code, name) {
+  await store.run(store.db(), `
+    INSERT INTO dealers (dealer_code, dealer_name, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT (dealer_code) DO NOTHING`, [code, name, new Date().toISOString()]);
+}
+
+/** Semua dealer, lengkap jumlah pos yang menunjuknya. Untuk halaman Master Dealer. */
+async function listDealers() {
+  return store.all(store.db(), `
+    SELECT d.dealer_code AS code, d.dealer_name AS name, d.address, d.lat, d.lng,
+           COUNT(o.outlet_code) AS "outletCount"
+    FROM dealers d
+    LEFT JOIN outlets o ON o.dealer_code = d.dealer_code
+    GROUP BY d.dealer_code
+    ORDER BY d.dealer_name`);
+}
+
+/**
+ * Dealer baru, dibuat manual dari halaman Master Dealer — bukan lewat resolveDealer(),
+ * karena di sini nama dealernya sendiri yang sedang didefinisikan, bukan ditebak dari
+ * nama pos.
+ */
+async function createDealer(data) {
+  const db = store.db();
+  const name = String(data.dealerName || '').trim().replace(/\s+/g, ' ');
+  if (!name) throw new Error('Nama dealer wajib diisi.');
+  const code = toDealerCode(name);
+  if (!code) throw new Error('Nama dealer tidak bisa dipakai. Harus memuat huruf atau angka.');
+
+  const ada = await store.one(db,
+    'SELECT dealer_name FROM dealers WHERE dealer_code = ?', [code]);
+  if (ada) throw new Error(`Nama ${name} sudah dipakai oleh dealer "${ada.dealer_name}".`);
+
+  await store.run(db, `
+    INSERT INTO dealers (dealer_code, dealer_name, address, lat, lng, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)`,
+  [code, name, data.address ? String(data.address).trim() : null,
+    data.lat === undefined || data.lat === null ? null : data.lat,
+    data.lng === undefined || data.lng === null ? null : data.lng,
+    new Date().toISOString()]);
+
+  return store.one(db,
+    'SELECT dealer_code AS code, dealer_name AS name, address, lat, lng FROM dealers WHERE dealer_code = ?',
+    [code]);
+}
+
+/**
+ * Sunting dealer. Kodenya TIDAK berubah meski namanya berubah — lihat toDealerCode()
+ * di createDealer(): kode cuma diturunkan sekali, waktu dealer dibuat.
+ */
+async function updateDealer(code, patch) {
+  const db = store.db();
+  const current = await store.one(db, 'SELECT * FROM dealers WHERE dealer_code = ?', [code]);
+  if (!current) return null;
+
+  const name = patch.dealerName === undefined
+    ? current.dealer_name
+    : String(patch.dealerName).trim().replace(/\s+/g, ' ');
+  if (!name) throw new Error('Nama dealer wajib diisi.');
+
+  // Kode dealer tidak ikut berubah waktu namanya disunting (lihat createDealer): jadi
+  // dua dealer beda kode bisa saja diberi nama yang sama persis kalau tidak dicegah
+  // di sini — dan itu akan membingungkan di dropdown pos, dua pilihan terlihat sama.
+  if (name.toLowerCase() !== current.dealer_name.toLowerCase()) {
+    const bentrok = await store.one(db,
+      'SELECT dealer_code FROM dealers WHERE LOWER(dealer_name) = LOWER(?) AND dealer_code != ?',
+      [name, code]);
+    if (bentrok) throw new Error(`Nama ${name} sudah dipakai dealer lain.`);
+  }
+
+  await store.run(db, `
+    UPDATE dealers SET dealer_name = ?, address = ?, lat = ?, lng = ?, updated_at = ?
+    WHERE dealer_code = ?`, [
+    name,
+    patch.address === undefined ? current.address : patch.address,
+    patch.lat === undefined ? current.lat : patch.lat,
+    patch.lng === undefined ? current.lng : patch.lng,
+    new Date().toISOString(), code,
+  ]);
+
+  return store.one(db,
+    'SELECT dealer_code AS code, dealer_name AS name, address, lat, lng FROM dealers WHERE dealer_code = ?',
+    [code]);
+}
+
+/** Tolak kalau masih ada pos yang menunjuk dealer ini — pindahkan dulu manual. */
+async function deleteDealer(code) {
+  const db = store.db();
+  const current = await store.one(db, 'SELECT dealer_name FROM dealers WHERE dealer_code = ?', [code]);
+  if (!current) return null;
+
+  const { n } = await store.one(db,
+    'SELECT COUNT(*) AS n FROM outlets WHERE dealer_code = ?', [code]);
+  if (Number(n) > 0) {
+    throw new Error(`Dealer "${current.dealer_name}" masih punya ${n} pos. Pindahkan posnya dulu.`);
+  }
+
+  await store.run(db, 'DELETE FROM dealers WHERE dealer_code = ?', [code]);
+  return { code, name: current.dealer_name };
 }
 
 /**
@@ -748,6 +862,10 @@ async function updateOutlet(code, patch, config) {
   let dealer = null;
   if (patch.dealerCode) {
     dealer = { code: patch.dealerCode, name: patch.dealerName || current.dealer_name };
+    // Jalur ini melewati resolveDealer() sepenuhnya (skrip/tes yang sudah tahu
+    // kodenya) — upsert dealers-nya harus dilakukan di sini juga, kalau tidak FK
+    // menolak outlet yang menunjuk dealer_code yang belum pernah tercatat.
+    await upsertDealer(dealer.code, dealer.name);
   } else if (patch.dealerName !== undefined) {
     dealer = await resolveDealer(patch.dealerName);
     if (!dealer) {
@@ -795,6 +913,7 @@ module.exports = {
   customersInVillage, browseCustomers, hasCustomers, logCustomerAccess, updateOutlet,
   resetOutlets, allRings, districts, saveOutletRings,
   resolveDealer, createOutlet, deletePeriod,
+  listDealers, createDealer, updateDealer, deleteDealer,
   aliases, saveAlias, deleteAlias, latestUnmatchedPeriod, unmatchedWithSuggestions,
   BROWSE_LIMIT,
 };
