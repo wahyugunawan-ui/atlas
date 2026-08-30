@@ -213,6 +213,30 @@ export function uploadImport({ file, period, onProgress }) {
   });
 }
 
+/**
+ * Baca sheet "Dealer" dari Excel dan bandingkan dengan pos yang sudah ada. Tidak
+ * mengubah apa pun di server — cuma menghitung bedanya dan menyimpan hasilnya
+ * sebentar di balik previewToken.
+ */
+export async function previewOutletImport(file) {
+  const form = new FormData();
+  form.append('file', file);
+  const response = await fetch(API + 'outlets/import/preview', { method: 'POST', body: form });
+  if (response.status === 401) { location.replace('/login'); throw new Error('Sesi habis.'); }
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || `Server menjawab ${response.status}.`);
+  return body;
+}
+
+/** Terapkan hasil pratinjau. previewToken kedaluwarsa 1 jam sejak dibuat. */
+export function commitOutletImport(previewToken) {
+  return request(`${API}outlets/import/commit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ previewToken }),
+  });
+}
+
 /** Berkas geo. Dilayani statis, bukan dari database. */
 export async function fetchGeo(name) {
   const response = await fetch(GEO_BASE + name, { cache: 'default' });

@@ -743,6 +743,13 @@ async function upsertDealer(code, name) {
     ON CONFLICT (dealer_code) DO NOTHING`, [code, name, new Date().toISOString()]);
 }
 
+/** Kode, nama, alamat seluruh pos. Untuk dibandingkan dengan Excel di impor massal pos. */
+async function listOutletsForImport() {
+  return store.all(store.db(), `
+    SELECT outlet_code AS "outletCode", outlet_name AS "outletName", address
+    FROM outlets`);
+}
+
 /** Semua dealer, lengkap jumlah pos yang menunjuknya. Untuk halaman Master Dealer. */
 async function listDealers() {
   return store.all(store.db(), `
@@ -913,7 +920,7 @@ module.exports = {
   customersInVillage, browseCustomers, hasCustomers, logCustomerAccess, updateOutlet,
   resetOutlets, allRings, districts, saveOutletRings,
   resolveDealer, createOutlet, deletePeriod,
-  listDealers, createDealer, updateDealer, deleteDealer,
+  listDealers, createDealer, updateDealer, deleteDealer, listOutletsForImport,
   aliases, saveAlias, deleteAlias, latestUnmatchedPeriod, unmatchedWithSuggestions,
   BROWSE_LIMIT,
 };

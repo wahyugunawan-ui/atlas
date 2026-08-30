@@ -53,6 +53,9 @@ import {
   importStep, pickFile, refreshImportTab, reimportPeriod, reviewImport, runUpload,
   setupImportTab,
 } from './import.js';
+import {
+  applyPosImport, closePosImport, openPosImport, posImportFileChosen,
+} from './pos-import.js';
 
 const HANDLERS = {
   // filter dan peta
@@ -77,6 +80,7 @@ const HANDLERS = {
   renderDealerTable, openNewDealer, closeNewDealer, saveNewDealer,
   openDealerEditor, closeDealerEditor, saveDealerEditor, deleteDealerConfirm,
   openMatchNames, closeMatchNames, confirmMatch, undoMatch,
+  applyPosImport, closePosImport, openPosImport, posImportFileChosen,
   // impor
   importStep, importPeriodChanged, pickFile, fileChosen, dropFile, dragOver, dragLeave,
   runUpload, reviewImport, finishImport, reimportPeriod, refreshImportTab,

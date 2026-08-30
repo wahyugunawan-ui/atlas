@@ -4,10 +4,12 @@
  */
 const express = require('express');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const repo = require('./repository');
 const { runImport, isRunning } = require('./importer');
+const { previewOutletImport, commitOutletImport } = require('./pos-import');
 const { RateLimiter } = require('./auth');
 
 /** Batas ukuran unggahan. Berkas Astra ±2,5 MB; 25 MB memberi ruang lega. */
@@ -599,6 +601,59 @@ function build(config) {
         res.status(status).json({ error: error.message });
       }
     });
+
+  /* ------------------------------------------------------------------------
+     IMPOR MASSAL POS (Master Dealer/Pos)
+     ------------------------------------------------------------------------
+     Beda dari /import di atas: ini menyunting outlet_name/address pos yang SUDAH
+     ada dari sheet "Dealer" AHM, dua langkah terpisah (pratinjau lalu terapkan) —
+     lihat backend/server/pos-import.js untuk alasannya boleh menimpa.
+     ------------------------------------------------------------------------ */
+
+  api.post('/outlets/import/preview',
+    express.raw({ type: 'multipart/form-data', limit: MAX_UPLOAD }),
+    async (req, res) => {
+      let parsed;
+      try {
+        parsed = parseMultipart(req.body, req.headers['content-type']);
+      } catch (error) {
+        return res.status(400).json({ error: error.message });
+      }
+      if (!parsed.file) return res.status(400).json({ error: 'Tidak ada berkas yang terkirim.' });
+
+      const ext = path.extname(String(parsed.file.filename || '')).toLowerCase();
+      if (!['.xlsx', '.xlsm', '.csv', '.txt'].includes(ext)) {
+        return res.status(400).json({
+          error: `Format ${ext || 'itu'} tidak bisa dibaca. Kirim .xlsx atau .csv.`,
+        });
+      }
+
+      // Ke folder sementara sistem, BUKAN folder uploads yang diarsipkan — berkas ini
+      // tidak memuat PII dan cuma dibutuhkan sesaat untuk dibaca, tidak seperti
+      // arsip impor bulanan yang sengaja disimpan.
+      const temp = path.join(os.tmpdir(),
+        `pos-import-${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`);
+      fs.writeFileSync(temp, parsed.file.data);
+      try {
+        res.json(await previewOutletImport(temp));
+      } catch (error) {
+        res.status(400).json({ error: error.message });
+      } finally {
+        fs.unlink(temp, () => {});
+      }
+    });
+
+  api.post('/outlets/import/commit', async (req, res) => {
+    const previewToken = String((req.body || {}).previewToken || '');
+    if (!previewToken) return res.status(400).json({ error: 'previewToken wajib diisi.' });
+    try {
+      res.json(await commitOutletImport(previewToken));
+    } catch (error) {
+      const status = error.code === 'SEDANG_BERJALAN' ? 409
+        : error.code === 'KEDALUWARSA' ? 410 : 400;
+      res.status(status).json({ error: error.message });
+    }
+  });
 
   return api;
 }

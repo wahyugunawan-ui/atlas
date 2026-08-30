@@ -18,6 +18,7 @@ const { COLUMN, aggregate } = require('../core/aggregate');
 const { regionKey } = require('../core/region');
 const { resolveGroups } = require('../core/grouping');
 const store = require('./db');
+const importLock = require('./import-lock');
 
 /**
  * Ejaan kecamatan di Excel yang berbeda dari referensi BPS.
@@ -32,15 +33,6 @@ const DISTRICT_ALIASES = {
 };
 
 /**
- * Kunci sekali-jalan.
- *
- * ponytail: hanya berlaku dalam satu proses. Yang menjaga integritas data adalah
- * transaksi di bawah, bukan kunci ini — kunci ini soal pesan error yang bisa
- * dimengerti orang non-IT, bukan menunggu sampai database timeout.
- */
-let running = false;
-
-/**
  * Baris per INSERT borongan.
  *
  * Menulis 18 ribu baris satu per satu lewat jaringan memakan menit; borongan 500 baris
@@ -50,7 +42,7 @@ let running = false;
  */
 const BATCH = 500;
 
-const isRunning = () => running;
+const isRunning = importLock.isRunning;
 
 /** Baca .xlsx jadi array of array. Sheet pertama, apa adanya. */
 async function readXlsx(file) {
@@ -134,13 +126,7 @@ function checkHeader(header) {
  *   config         dari config.js; dibutuhkan kalau withCustomers dinyalakan
  */
 async function runImport(options) {
-  if (running) {
-    const error = new Error(
-      'Sedang ada impor yang berjalan. Tunggu sampai selesai, lalu coba lagi.');
-    error.code = 'SEDANG_BERJALAN';
-    throw error;
-  }
-  running = true;
+  importLock.begin();
 
   const db = store.db();
   const startedAt = new Date().toISOString();
@@ -313,7 +299,7 @@ async function runImport(options) {
     [new Date().toISOString(), String(error.message).slice(0, 500), importId]);
     throw error;
   } finally {
-    running = false;
+    importLock.end();
   }
 }
 
