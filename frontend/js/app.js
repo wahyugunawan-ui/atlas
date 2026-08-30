@@ -19,7 +19,7 @@ import { fillFilterBar, onPeriodChange, resetFilters, syncFilterBar } from './fi
 import { activeRows, applyScope, scopeLabel, scopeValue } from './filters.js';
 import {
   addLayers, fitToScope, invalidateSalePoints, paintChoropleth, redrawMap, setBasemap,
-  toggleDistrictNames,
+  setHeatmapMode, toggleDistrictNames,
   setRadius, setupMap, toggleFullscreen,
 } from './map.js';
 import {
@@ -62,7 +62,7 @@ const HANDLERS = {
   onPeriodChange, toggleCombo, comboSearch, chooseCombo, resetFilters,
   startRingEdit, cancelRingEdit, saveRingEdit, ringEditing,
   openRingChooser, closeRingChooser, assignRing,
-  redrawMap, setBasemap, setRadius, applyScope, toggleFullscreen, fitToScope,
+  redrawMap, setBasemap, setRadius, setHeatmapMode, applyScope, toggleFullscreen, fitToScope,
   toggleDistrictNames,
   // ringkasan
   setTreemapView, selectEntity, closeDealerCard, togglePerformanceSort,

@@ -127,6 +127,14 @@ async function test() {
       `rentang terbalik di legenda: ${r.label}`);
   });
 
+  // Formatter opsional (dipakai panel wilayah untuk kontribusi %, bukan unit mentah):
+  // label dibentuk dari HASIL formatter, bukan angka mentahnya.
+  const berpersen = classRanges(values, breaks, (n) => `${n}%`);
+  assert.ok(berpersen.some((r) => !r.empty && r.label.includes('%')),
+    'classRanges() dengan formatter tidak memakai hasilnya di label');
+  assert.strictEqual(classRanges(values, breaks).length, berpersen.length,
+    'formatter mengubah jumlah kelas — seharusnya cuma mengubah tampilan labelnya');
+
   // --- ramp ---
   for (const ramp of [RAMP, shadeRamp('#2a78d6')]) {
     for (let i = 1; i < ramp.length; i++) {

@@ -21,6 +21,11 @@ export const POSISI_LABEL = ['Terbawah', 'Bawah', 'Tengah', 'Atas', 'Teratas'];
  */
 export const KONTRIBUSI_TETAP = [0.02, 0.04, 0.06, 0.08, 1];
 
+/** Label tetap untuk legenda mode "Per Nilai Kontribusi" — SATU indeks dengan fixedContributionClass(). */
+export const KONTRIBUSI_LABEL = [
+  '0–0,02%', '0,021–0,04%', '0,041–0,06%', '0,061–0,08%', '0,081–1%', 'Lebih dari 1%',
+];
+
 /**
  * Kelompokkan baris penjualan per kota, lalu per kelurahan di dalamnya.
  *

@@ -2,12 +2,13 @@
  * KPI, legenda, treemap, dan panel peringkat.
  */
 import {
-  CLASS_LABELS, COLOR_EMPTY, RAMP, classRanges, dealerColor,
+  COLOR_EMPTY, RAMP, RAMP6, classRanges, dealerColor,
 } from './colors.js';
-import { $, esc, formatNumber, sumBy } from './dom.js';
+import { $, esc, formatNumber, formatPercent, sumBy } from './dom.js';
 import {
   activeRows, applyScope, clearScope, pageFilters, scopeLabel, scopeValue, splitByCoverage,
 } from './filters.js';
+import { fixedContributionClass, KONTRIBUSI_LABEL, POSISI_LABEL } from './sales-stats.js';
 import { S } from './state.js';
 
 export function renderKpi(rows, perVillage) {
@@ -27,25 +28,50 @@ export function renderKpi(rows, perVillage) {
  * Rentang tiap kelas diambil dari nilai yang benar-benar jatuh di kelas itu, bukan
  * dihitung dari batasnya — lihat classRanges() di colors.js untuk alasannya.
  */
+/**
+ * `perVillage` sejak 2026-08-30 berisi Kontribusi Penjualan (%), bukan unit mentah —
+ * lihat paintChoropleth() di map.js. Dua mode, S.heatmapMode:
+ * - 'relative': lima kelas persentil (mesin sama seperti sebelumnya, colors.js).
+ * - 'fixed': enam kelas interval TETAP (sales-stats.js KONTRIBUSI_TETAP) — beda
+ *   jumlah kelas, jadi rendernya terpisah, bukan cuma ganti label.
+ */
 export function renderLegend(perVillage, breaks) {
   const values = Object.values(perVillage).filter((v) => v > 0);
-  const ranges = classRanges(values, breaks);
-  const used = ranges.filter((r) => !r.empty).length;
-
-  $('legend').innerHTML =
-    `<div class="flex items-center gap-2 text-[11px] text-slate-500">` +
+  const kosong = `<div class="flex items-center gap-2 text-[11px] text-slate-500">` +
     `<span class="w-3.5 h-3.5 rounded shrink-0" style="background:${COLOR_EMPTY}"></span>` +
     `<span class="flex-1">tidak ada penjualan</span>` +
-    `<span class="mono text-slate-400">${esc(formatNumber(S.villages.length - values.length))}</span></div>` +
+    `<span class="mono text-slate-400">${esc(formatNumber(S.villages.length - values.length))}</span></div>`;
+
+  if (S.heatmapMode === 'fixed') {
+    const counts = new Array(KONTRIBUSI_LABEL.length).fill(0);
+    values.forEach((v) => {
+      const cls = fixedContributionClass(v);
+      if (cls >= 0) counts[Math.min(cls, KONTRIBUSI_LABEL.length - 1)]++;
+    });
+    $('legend').innerHTML = kosong +
+      RAMP6.map((color, i) =>
+        `<div class="flex items-center gap-2 text-[11px] ${counts[i] ? 'text-slate-600' : 'text-slate-300'}">` +
+        `<span class="w-3.5 h-3.5 rounded shrink-0" style="background:${color}"></span>` +
+        `<span class="flex-1">${esc(KONTRIBUSI_LABEL[i])}</span>` +
+        `<span class="mono ${counts[i] ? 'text-slate-400' : 'text-slate-300'}">${esc(formatNumber(counts[i]))}</span></div>`).join('') +
+      `<p class="text-[10px] text-slate-400 pt-1.5 leading-snug">` +
+      `Interval Kontribusi Penjualan TETAP — sama di mana pun dan kapan pun, tidak bergantung wilayah lain yang sedang tampil.</p>`;
+    return;
+  }
+
+  const ranges = classRanges(values, breaks, (n) => formatPercent(n));
+  const used = ranges.filter((r) => !r.empty).length;
+
+  $('legend').innerHTML = kosong +
     RAMP.map((color, i) =>
       `<div class="flex items-center gap-2 text-[11px] ${ranges[i].empty ? 'text-slate-300' : 'text-slate-600'}">` +
       `<span class="w-3.5 h-3.5 rounded shrink-0" style="background:${color}"></span>` +
-      `<span class="flex-1">${CLASS_LABELS[i]}</span>` +
+      `<span class="flex-1">${POSISI_LABEL[i]}</span>` +
       `<span class="mono ${ranges[i].empty ? 'text-slate-300' : 'text-slate-400'}">${esc(ranges[i].label)}</span></div>`).join('') +
     `<p class="text-[10px] text-slate-400 pt-1.5 leading-snug">` +
     (used < RAMP.length && values.length
       ? `Sebarannya terlalu sempit untuk lima kelas — ${used} kelas terpakai. ` : '') +
-    `Kelas dihitung dari sebaran yang sedang tampil, jadi ikut berubah waktu filternya diganti.</p>`;
+    `Kelas dihitung dari sebaran Kontribusi Penjualan yang sedang tampil, jadi ikut berubah waktu filternya diganti.</p>`;
 }
 
 /** Legenda dealer. Nama SELALU menempel di sebelah warnanya. */

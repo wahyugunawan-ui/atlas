@@ -393,6 +393,14 @@
         <div id="pilihan-radius" class="flex bg-slate-100 rounded-lg p-0.5"></div>
       </div>
 
+      <div class="mt-3 pt-3 border-t border-slate-200">
+        <div class="text-[10px] font-bold text-slate-400 uppercase mb-1">Mode Heatmap</div>
+        <div class="flex bg-slate-100 rounded-lg p-1 text-[10px] font-bold">
+          <button onclick="setHeatmapMode('relative')" id="hm-relative" class="flex-1 px-2 py-1.5 rounded-md bg-white text-slate-800 shadow-sm">Per Peringkat Relatif</button>
+          <button onclick="setHeatmapMode('fixed')" id="hm-fixed" class="flex-1 px-2 py-1.5 rounded-md text-slate-500">Per Nilai Kontribusi</button>
+        </div>
+      </div>
+
       <!-- Dua legenda ini yang membuat panelnya tidak muat: isinya 887 px sementara
            yang terlihat cuma 462 px, jadi 427 px harus digulir. Dilipat dengan
            <details> bawaan HTML — nol baris JavaScript, dan keyboard-nya ikut jalan

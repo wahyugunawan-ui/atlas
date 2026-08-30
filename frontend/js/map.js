@@ -4,11 +4,12 @@
 import {
   ATTRIBUTION, ATTRIBUTION_SATELLITE, BASEMAP_PMTILES, BASEMAP_SATELLITE,
 } from './config.js';
-import { classOf, dealerColor, percentileBreaks, RAMP, COLOR_EMPTY } from './colors.js';
+import { classOf, dealerColor, percentileBreaks, RAMP, RAMP6, COLOR_EMPTY } from './colors.js';
 import { $, bbox, sumBy, toast } from './dom.js';
 import { fetchGeo } from './api.js';
 import { activeRows, pageFilters, scopeValue } from './filters.js';
 import { circle, EMPTY_COLLECTION } from './geo.js';
+import { contributionsForRows, fixedContributionClass } from './sales-stats.js';
 import { S } from './state.js';
 
 /**
@@ -277,19 +278,56 @@ export function setRingPaint(draft) {
     Object.keys(draft).length ? opasitas : 0.06);
 }
 
-/** Warnai kelurahan menurut kelas persentil sebaran yang sedang tampil. */
+/**
+ * Warnai kelurahan menurut Kontribusi Penjualan (% terhadap total KOTANYA SENDIRI),
+ * bukan lagi unit mentah — sejak 2026-08-30. Kelurahan kecil yang justru dominan di
+ * kotanya sendiri sekarang terlihat gelap, bukan tenggelam di bawah kelurahan
+ * bervolume besar dari kota lain yang kebetulan ikut tampil.
+ *
+ * Dua mode (S.heatmapMode, lihat setHeatmapMode()):
+ * - 'relative' (bawaan): kelas persentil dari sebaran kontribusi yang sedang tampil —
+ *   mesin yang sama dengan sebelumnya (percentileBreaks/classOf di colors.js), cuma
+ *   input-nya sekarang kontribusi %.
+ * - 'fixed': interval TETAP (sales-stats.js KONTRIBUSI_TETAP), sama di mana pun dan
+ *   kapan pun — dua kelurahan dengan kontribusi yang sama persis SELALU warna sama,
+ *   tidak bergantung siapa lagi yang sedang difilter.
+ */
 export function paintChoropleth(rows) {
-  const perVillage = sumBy(rows, 'village');
-  const breaks = percentileBreaks(Object.values(perVillage));
+  const kontribusi = contributionsForRows(rows, S.villageByCode);
+  const perVillage = Object.fromEntries(kontribusi);
+  const breaks = percentileBreaks([...kontribusi.values()]);
+  const fixed = S.heatmapMode === 'fixed';
 
   S.geo.features.forEach((f) => {
-    const value = perVillage[f.properties.kode] || 0;
-    const cls = classOf(value, breaks);
-    S.map.setFeatureState({ source: 'kel', id: f.properties.kode },
-      { warna: cls < 0 ? COLOR_EMPTY : RAMP[cls] });
+    const value = kontribusi.get(f.properties.kode);
+    let warna = COLOR_EMPTY;
+    if (value != null) {
+      if (fixed) {
+        const cls = fixedContributionClass(value);
+        warna = cls < 0 ? COLOR_EMPTY : RAMP6[Math.min(cls, RAMP6.length - 1)];
+      } else {
+        const cls = classOf(value, breaks);
+        warna = cls < 0 ? COLOR_EMPTY : RAMP[cls];
+      }
+    }
+    S.map.setFeatureState({ source: 'kel', id: f.properties.kode }, { warna });
   });
 
   return { perVillage, breaks };
+}
+
+/** @param {'relative'|'fixed'} mode */
+export function setHeatmapMode(mode) {
+  if (mode !== 'relative' && mode !== 'fixed') return;
+  S.heatmapMode = mode;
+  ['relative', 'fixed'].forEach((m) => {
+    const button = $('hm-' + m);
+    if (button) {
+      button.className = 'flex-1 px-2 py-1.5 rounded-md text-[10px] font-bold ' +
+        (m === mode ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500');
+    }
+  });
+  window.renderAll();
 }
 
 export function redrawMap() {

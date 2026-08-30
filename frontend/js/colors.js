@@ -22,6 +22,9 @@
 /** Ramp volume, terang -> gelap. Lima langkah, satu untuk tiap kelas persentil. */
 export const RAMP = ['#cde2fb', '#9ec5f4', '#5598e7', '#256abf', '#104281'];
 
+/** Ramp enam langkah untuk mode heatmap "Per Nilai Kontribusi" (interval tetap). */
+export const RAMP6 = ['#e8f0fc', '#cde2fb', '#9ec5f4', '#5598e7', '#256abf', '#104281'];
+
 /**
  * Kelurahan tanpa penjualan. Bukan langkah paling terang dari ramp — "nol" dan
  * "paling sedikit" harus bisa dibedakan, karena kekosongan itu justru yang jadi bahan
@@ -167,7 +170,13 @@ export function classOf(value, breaks) {
  * batas menghasilkan rentang mustahil seperti "2–1", dan kelas yang memang kosong
  * tampak seolah punya isi.
  */
-export function classRanges(values, breaks) {
+/**
+ * @param {(n: number) => string} [format]  String secara bawaan (unit bulat). Panel
+ *   yang nilainya persen (kontribusi penjualan) mengoper formatter sendiri supaya
+ *   tidak menampilkan angka desimal panjang mentah.
+ */
+export function classRanges(values, breaks, format) {
+  const fmt = format || String;
   const buckets = RAMP.map(() => []);
   values.forEach((v) => {
     const c = classOf(v, breaks);
@@ -177,6 +186,6 @@ export function classRanges(values, breaks) {
     if (!list.length) return { empty: true, label: '—', count: 0 };
     const lo = Math.min(...list);
     const hi = Math.max(...list);
-    return { empty: false, label: lo === hi ? String(lo) : `${lo}–${hi}`, count: list.length };
+    return { empty: false, label: lo === hi ? fmt(lo) : `${fmt(lo)}–${fmt(hi)}`, count: list.length };
   });
 }
