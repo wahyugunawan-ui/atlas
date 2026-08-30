@@ -19,8 +19,8 @@ const url = (name) => pathToFileURL(
 
 async function test() {
   const {
-    groupByCity, contributionPercent, relativePosition, fixedContributionClass,
-    referenceGap, referenceRatio, KONTRIBUSI_TETAP,
+    groupByCity, contributionPercent, contributionsForRows, relativePosition,
+    fixedContributionClass, referenceGap, referenceRatio, KONTRIBUSI_TETAP,
   } = await import(url('sales-stats.js'));
   const { percentileBreaks } = await import(url('colors.js'));
 
@@ -31,15 +31,17 @@ async function test() {
     V1: { cityCode: 'KOTA-A' },
     V2: { cityCode: 'KOTA-A' },
     V3: { cityCode: 'KOTA-B' },
+    V4: { cityCode: 'KOTA-C' },
   };
   const rows = [
     { village: 'V1', units: 8 },
     { village: 'V2', units: 92 },
     { village: 'V3', units: 5 },
+    { village: 'V4', units: 0 }, // kota totalnya nol -- kontribusinya tidak terdefinisi
     { village: 'TIDAK-DIKENAL', units: 999 }, // kelurahan tak dikenal, harus dilewati
   ];
   const perCity = groupByCity(rows, villageByCode);
-  assert.strictEqual(perCity.size, 2, 'kelurahan tak dikenal ikut membuat kota baru');
+  assert.strictEqual(perCity.size, 3, 'kelurahan tak dikenal ikut membuat kota baru');
   assert.strictEqual(perCity.get('KOTA-A').total, 100);
   assert.strictEqual(perCity.get('KOTA-B').total, 5);
   assert.strictEqual(perCity.get('KOTA-A').villages.get('V1'), 8);
@@ -57,6 +59,16 @@ async function test() {
   assert.strictEqual(contributionPercent(5, 0), null,
     'total kota nol menghasilkan nilai selain null (NaN/Infinity lolos ke layar)');
   assert.strictEqual(contributionPercent(0, 0), null);
+
+  // contributionsForRows() = groupByCity() + contributionPercent() sekaligus, untuk
+  // seluruh kelurahan yang muncul di rows — dipakai bersama panel DAN pewarnaan peta.
+  const kontribusi = contributionsForRows(rows, villageByCode);
+  assert.strictEqual(kontribusi.get('V1'), 8);
+  assert.strictEqual(kontribusi.get('V2'), 92);
+  assert.strictEqual(kontribusi.get('V3'), 100, 'V3 satu-satunya di KOTA-B, harus 100%');
+  assert.strictEqual(kontribusi.has('V4'), false,
+    'V4 di kota bertotal nol ikut masuk hasil — seharusnya dilewati, bukan NaN diam-diam');
+  assert.strictEqual(kontribusi.has('TIDAK-DIKENAL'), false);
 
   /* ------------------------------------------------------------------
      3. relativePosition — bungkus classOf() colors.js, label Indonesia baru

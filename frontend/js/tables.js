@@ -5,15 +5,19 @@ import {
   browseCustomers, createDealer, createOutlet, deleteAlias, deleteDealer, fetchAliases,
   fetchCustomers, resetOutlets, saveAlias, saveDealer, saveOutlet,
 } from './api.js';
-import { dealerColor } from './colors.js';
+import { dealerColor, percentileBreaks } from './colors.js';
 import {
   CUSTOMER_PANEL_LIMIT, PROVINCE_NAMES, SHOW_ENGINE_NUMBER, SHOW_HOUSE_PHOTO,
   TABLE_ROW_LIMIT,
 } from './config.js';
-import { $, esc, formatNumber, sumBy, toast } from './dom.js';
+import { $, esc, formatNumber, formatPercent, monthLabel, sumBy, toast } from './dom.js';
 import { syncFilterBar } from './filter-bar.js';
 import { activeRows, clearScope, dealerBreakdown, pageFilters, scopeValue } from './filters.js';
 import { selectOutlet } from './outlets.js';
+import {
+  contributionPercent, contributionsForRows, groupByCity, referenceGap, referenceRatio,
+  relativePosition,
+} from './sales-stats.js';
 import { S } from './state.js';
 
 /* ==========================================================================
@@ -190,7 +194,108 @@ export function jumpFromDealer(villageCode, dealerCode) {
 }
 
 /**
- * Panel rincian satu kelurahan.
+ * Badge kecil berwarna untuk Posisi Relatif. `null` berarti kota belum punya
+ * penjualan sama sekali pada filter aktif — "Data belum tersedia", bukan "Terbawah".
+ */
+function posisiBadgeHtml(label) {
+  if (!label) return '<span class="text-xs text-slate-400">Data belum tersedia</span>';
+  const WARNA = {
+    Terbawah: 'bg-red-50 text-red-700 border-red-200',
+    Bawah: 'bg-orange-50 text-orange-700 border-orange-200',
+    Tengah: 'bg-slate-100 text-slate-600 border-slate-200',
+    Atas: 'bg-sky-50 text-sky-700 border-sky-200',
+    Teratas: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  };
+  return `<span class="inline-block px-2 py-0.5 rounded-full text-[11px] font-bold border ${WARNA[label]}" ` +
+    'title="Dihitung dari sebaran Kontribusi Penjualan seluruh kelurahan pada filter yang sedang aktif -- bukan ambang tetap. 20% terendah = Terbawah, 20% teratas = Teratas.">' +
+    `${esc(label)}</span>`;
+}
+
+/** '+0,50 poin persentase' / '-0,58 poin persentase' / 'Data belum tersedia'. */
+function formatGap(n) {
+  if (n == null) return 'Data belum tersedia';
+  const tanda = n > 0 ? '+' : '';
+  return tanda + n.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) +
+    ' poin persentase';
+}
+
+/**
+ * Semua angka Blok 3 (Distribution) dan Blok 4 (Business Reference) untuk satu
+ * kelurahan, dihitung dari `rows` yang SUDAH melewati seluruh filter aktif (periode,
+ * kota, dealer, pos, provinsi) — bukan disaring ulang di sini.
+ *
+ * Kontribusi dan posisi relatif kota lain TIDAK bisa saling memengaruhi: masing-
+ * masing dihitung terhadap total KOTANYA SENDIRI (groupByCity), sesuai desain
+ * sales-stats.js.
+ */
+function villageStats(code, rows) {
+  const village = S.villageByCode[code] || {};
+  const perCity = groupByCity(rows, S.villageByCode);
+  const kota = perCity.get(village.cityCode);
+
+  const myUnits = kota ? (kota.villages.get(code) || 0) : 0;
+  const contribution = kota ? contributionPercent(myUnits, kota.total) : null;
+
+  const kontribusiAktif = contributionsForRows(rows, S.villageByCode);
+  const breaks = percentileBreaks([...kontribusiAktif.values()]);
+  const posisi = contribution == null ? null : relativePosition(contribution, breaks);
+
+  let rank = null;
+  let rankTotal = null;
+  let cityAverage = null;
+  if (kota) {
+    const sorted = [...kota.villages.entries()].sort((a, b) => b[1] - a[1]);
+    const idx = sorted.findIndex(([kode]) => kode === code);
+    rank = idx === -1 ? null : idx + 1;
+    rankTotal = sorted.length;
+    cityAverage = sorted.length
+      ? sorted.reduce((sum, [, units]) => sum + contributionPercent(units, kota.total), 0) / sorted.length
+      : null;
+  }
+
+  const benchmark = S.businessReferencePercent;
+  return {
+    myUnits,
+    contribution,
+    posisi,
+    rank,
+    rankTotal,
+    cityAverage,
+    benchmark,
+    gap: referenceGap(contribution, benchmark),
+    ratio: referenceRatio(contribution, benchmark),
+  };
+}
+
+/** Unit per bulan untuk satu kelurahan, atau `null` kalau cuma satu bulan (tidak ada tren untuk digambar). */
+function villageTrend(code, rows) {
+  const perPeriod = {};
+  rows.forEach((r) => { perPeriod[r.period] = (perPeriod[r.period] || 0) + r.units; });
+  const periods = Object.keys(perPeriod).sort();
+  return periods.length >= 2 ? periods.map((p) => ({ period: p, units: perPeriod[p] })) : null;
+}
+
+/** Gambar (atau bongkar) grafik tren Blok 2. Dipanggil SETELAH innerHTML terpasang. */
+function renderVillageTrend(trend) {
+  if (S.villageTrendChart) { S.villageTrendChart.destroy(); S.villageTrendChart = null; }
+  const holder = $('village-trend-chart');
+  if (!holder || !trend) return;
+  S.villageTrendChart = new ApexCharts(holder, {
+    chart: { type: 'line', height: 130, toolbar: { show: false }, fontFamily: 'Manrope' },
+    series: [{ name: 'Unit', data: trend.map((t) => t.units) }],
+    xaxis: { categories: trend.map((t) => monthLabel(t.period)), labels: { style: { fontSize: '10px' } } },
+    yaxis: { labels: { style: { fontSize: '10px' } } },
+    colors: ['#0b2f6b'],
+    dataLabels: { enabled: false },
+    stroke: { width: 2, curve: 'smooth' },
+    tooltip: { y: { formatter: (v) => formatNumber(v) + ' unit' } },
+  });
+  S.villageTrendChart.render();
+}
+
+/**
+ * Panel rincian satu kelurahan — 4 blok: Overview, Sales, Distribution, Business
+ * Reference (di atas daftar per-pos dan konsumen yang sudah ada sebelumnya).
  *
  * @param {string} code        kode kelurahan
  * @param {string} [fromDealer] kalau dibuka dari panel dealer, kode dealernya —
@@ -200,10 +305,14 @@ export function openVillageDetail(code, fromDealer) {
   S.selectedVillage = code;
   S.panelView = { kind: 'village', code: code };
   const village = S.villageByCode[code] || {};
-  const rows = activeRows().filter((r) => r.village === code);
+  const semuaAktif = activeRows();
+  const rows = semuaAktif.filter((r) => r.village === code);
   const perOutlet = sumBy(rows, 'outlet');
   const total = Object.values(perOutlet).reduce((sum, n) => sum + n, 0);
   const order = Object.keys(perOutlet).sort((a, b) => perOutlet[b] - perOutlet[a]);
+
+  const stats = villageStats(code, semuaAktif);
+  const trend = villageTrend(code, rows);
 
   $('kelurahanDetailBack').innerHTML = fromDealer
     ? `<button onclick="openDealerDetail('${esc(fromDealer)}')" ` +
@@ -215,9 +324,40 @@ export function openVillageDetail(code, fromDealer) {
     `${village.district || ''} · ${village.cityName || ''} · ${code}`;
 
   $('kelurahanDetailList').innerHTML =
-    `<div class="pb-3 border-b border-slate-200">` +
-    `<div class="text-[11px] uppercase font-bold text-slate-400">Total penjualan</div>` +
-    `<div class="text-3xl font-extrabold text-slate-900 mono">${esc(formatNumber(total))}</div></div>` +
+    // --- Blok 1: OVERVIEW ---
+    `<div class="grid grid-cols-2 gap-3 pb-4 border-b border-slate-200">` +
+    `<div><div class="text-[10px] uppercase font-bold text-slate-400">Total Penjualan</div>` +
+    `<div class="text-xl font-extrabold text-slate-900 mono">${esc(formatNumber(total))}</div></div>` +
+    `<div><div class="text-[10px] uppercase font-bold text-slate-400" ` +
+    `title="Kontribusi penjualan kelurahan terhadap total penjualan kotanya.">Kontribusi Penjualan</div>` +
+    `<div class="text-xl font-extrabold text-slate-900 mono">${esc(formatPercent(stats.contribution))}</div></div>` +
+    `<div><div class="text-[10px] uppercase font-bold text-slate-400">Posisi Relatif</div>` +
+    `<div class="mt-0.5">${posisiBadgeHtml(stats.posisi)}</div></div>` +
+    `<div><div class="text-[10px] uppercase font-bold text-slate-400" ` +
+    'title="Acuan bisnis dari Marketing/Head Department, bukan hasil statistik.">Acuan Bisnis</div>' +
+    `<div class="text-sm font-bold text-slate-700 mt-0.5">${
+      stats.ratio == null ? 'Data belum tersedia'
+        : `${esc(formatPercent(stats.ratio, 0))} dari ${esc(formatPercent(stats.benchmark, 0))}`
+    }</div></div></div>` +
+
+    // --- Blok 2: SALES ---
+    `<div class="pb-4 border-b border-slate-200">` +
+    `<div class="text-[11px] uppercase font-bold text-slate-400 mb-2">Tren Bulanan</div>` +
+    (trend
+      ? '<div id="village-trend-chart"></div>'
+      : '<p class="text-xs text-slate-400">Data belum tersedia atau filter cuma satu bulan.</p>') +
+    '</div>' +
+
+    // --- Blok 3: DISTRIBUTION ---
+    `<div class="pb-4 border-b border-slate-200">` +
+    `<div class="text-[11px] uppercase font-bold text-slate-400 mb-2">Distribusi</div>` +
+    `<div class="grid grid-cols-2 gap-2 text-xs text-slate-600">` +
+    `<div>Peringkat: <b class="text-slate-800">${
+      stats.rank == null ? '—' : `${esc(formatNumber(stats.rank))} / ${esc(formatNumber(stats.rankTotal))}`
+    }</b></div>` +
+    `<div title="Rata-rata Kontribusi Penjualan seluruh kelurahan berpenjualan di kota yang sama.">` +
+    `Rata-rata Kota: <b class="text-slate-800">${esc(formatPercent(stats.cityAverage))}</b></div>` +
+    '</div></div>' +
 
     sectionHeader('storefront', 'Penjualan per Pos', order.length) +
     (order.length ? order.map((outletCode) => {
@@ -237,11 +377,24 @@ export function openVillageDetail(code, fromDealer) {
     }).join('')
       : '<p class="text-xs text-slate-400 text-center py-4">Tidak ada penjualan pada filter ini.</p>') +
 
+    // --- Blok 4: BUSINESS REFERENCE ---
+    `<div class="pt-4 pb-4 border-b border-slate-200">` +
+    `<div class="text-[11px] uppercase font-bold text-slate-400 mb-2" ` +
+    'title="Acuan bisnis dari Marketing/Head Department, bukan hasil statistik.">Business Reference</div>' +
+    `<div class="text-xs text-slate-600 space-y-1">` +
+    `<div>Acuan aktif: <b class="text-slate-800">${esc(formatPercent(stats.benchmark, 0))}</b></div>` +
+    `<div title="Kontribusi Penjualan dikurangi Acuan Bisnis.">Selisih dari Acuan: ` +
+    `<b class="text-slate-800">${esc(formatGap(stats.gap))}</b></div>` +
+    `<div title="Kontribusi Penjualan dibagi Acuan Bisnis.">Rasio terhadap Acuan: ` +
+    `<b class="text-slate-800">${esc(formatPercent(stats.ratio, 0))}</b></div>` +
+    '</div></div>' +
+
     (S.hasCustomers
       ? sectionHeader('users-three', 'Konsumen', 0).replace('>0<', '>…<') +
         '<p class="text-xs text-slate-400 text-center py-3" id="village-customers">memuat…</p>'
       : '');
 
+  renderVillageTrend(trend);
   showPanel();
 
   if (S.hasCustomers) loadVillageCustomers(code);

@@ -15,6 +15,10 @@ export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
 
 export const formatNumber = (n) => Number(n || 0).toLocaleString('id-ID');
 
+/** `null`/`undefined` -> 'Data belum tersedia', bukan dipaksa jadi "0%". */
+export const formatPercent = (n, digits = 2) => (n == null ? 'Data belum tersedia' :
+  Number(n).toLocaleString('id-ID', { minimumFractionDigits: digits, maximumFractionDigits: digits }) + '%');
+
 /** '2026-08' -> 'Agustus 2026'. */
 export function monthLabel(period) {
   const [year, month] = String(period || '').split('-');

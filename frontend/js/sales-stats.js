@@ -53,6 +53,26 @@ export function contributionPercent(villageUnits, cityTotal) {
   return (villageUnits / cityTotal) * 100;
 }
 
+/**
+ * Kontribusi % tiap kelurahan yang muncul di `rows`, terhadap total KOTANYA SENDIRI.
+ * Dipakai bersama: panel wilayah (Rank/City Average) DAN pewarnaan peta — satu
+ * hitungan, dua pemakai, supaya angka di panel dan di peta tidak pernah menyimpang.
+ *
+ * @return {Map<string, number>} kode kelurahan -> kontribusi %. Kelurahan dari kota
+ *   yang totalnya nol TIDAK ikut masuk (bukan NaN).
+ */
+export function contributionsForRows(rows, villageByCode) {
+  const perCity = groupByCity(rows, villageByCode);
+  const result = new Map();
+  perCity.forEach((kota) => {
+    kota.villages.forEach((units, villageCode) => {
+      const pct = contributionPercent(units, kota.total);
+      if (pct != null) result.set(villageCode, pct);
+    });
+  });
+  return result;
+}
+
 /** Label posisi relatif untuk satu nilai, atau `null` kalau tidak ada penjualan. */
 export function relativePosition(value, breaks) {
   const kelas = classOf(value, breaks);

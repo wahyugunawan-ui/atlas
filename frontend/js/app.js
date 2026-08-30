@@ -170,6 +170,8 @@ function buildIndexes(data) {
   S.lastImport = data.lastImport;
   S.hasCustomers = data.hasCustomers;
   S.pendingNames = data.pendingNames || 0;
+  // Acuan bisnis (Business Reference), bukan hasil statistik — lihat config.js.
+  S.businessReferencePercent = data.businessReferencePercent;
 
   S.rings = data.rings || {};
   S.districtNames = {};

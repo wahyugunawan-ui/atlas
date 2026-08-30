@@ -51,6 +51,7 @@ export const S = {
   lastImport: null,
   hasCustomers: false,
   pendingNames: 0,         // nama kelurahan yang menunggu dicocokkan manusia
+  businessReferencePercent: 1, // acuan bisnis default; ditimpa data.businessReferencePercent
   panelView: null,         // {kind:'village'|'dealer', code} — isi panel geser
 
   // --- indeks, dibangun sekali saat muat ---
@@ -85,6 +86,7 @@ export const S = {
   treemapView: 'dealer',
   treemapChart: null,
   treemapCodes: [],
+  villageTrendChart: null, // grafik tren bulanan di panel Blok 2 (Sales)
 
   // --- ring layanan: rings[outletCode][districtCode] = 1|2|3 ---
   rings: {},
