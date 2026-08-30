@@ -79,6 +79,11 @@ yang sama memakai ulang kode yang sudah ada, supaya tidak muncul dua dealer bern
 persis sama. Pengelompokan awalnya tebakan dari nama pos, dan tim bisa membetulkannya
 sendiri lewat halaman Master Pos Dealer.
 
+Sejak 2026-08-30, dealer punya tabelnya sendiri (`dealers`) dan halamannya sendiri
+(Master Dealer) — alamat dan koordinat kantor dealer disimpan di situ, terpisah dari
+pos. `outlets.dealer_code` menunjuk ke sana lewat FOREIGN KEY sungguhan, bukan lagi
+kolom string yang kebetulan konsisten.
+
 ### jangkauan (coverage)
 
 **Berapa bagian LUAS sebuah kelurahan yang masuk lingkaran radius sebuah pos.** Bukan
@@ -287,6 +292,23 @@ satelit di bawahnya — dengan ubin yang dijawab 200 OK dan tanpa satu pun error
 | KF-POS-18 | Ring dipilih dengan mengklik SATU kecamatan di peta, lalu menentukan ringnya | `test/page.test.js` |
 | KF-POS-19 | Batas kecamatan dimuat hanya saat mode edit ring, bukan saat halaman dibuka | `test/page.test.js` |
 | KF-POS-20 | Kolom ring menyebut NAMA kecamatannya, dibatasi dan diringkas supaya tabel tetap bisa dipindai | `test/page.test.js` |
+| KF-POS-21 | Impor massal dari Excel (sheet "Dealer" AHM): pratinjau diff per field SEBELUM diterapkan, tidak pernah auto-apply | `test/pos-diff.test.js`, `test/pos-import.test.js` |
+| KF-POS-22 | Impor massal MEMANG menimpa nama/alamat yang beda dari Excel — beda dari impor bulanan yang melindungi kurasi dealer/koordinat | `test/pos-diff.test.js` |
+| KF-POS-23 | Kode pos di Excel yang belum ada di database dilaporkan saja, tidak pernah dibuat otomatis | `test/pos-diff.test.js`, `test/pos-import.test.js` |
+| KF-POS-24 | Baris Excel dengan kode pos ganda: kandidat pertama dipakai, sisanya dilaporkan sebagai peringatan | `test/pos-diff.test.js` |
+| KF-POS-25 | Terapkan perubahan atomik (satu baris gagal membatalkan semuanya), dan menolak selagi impor bulanan sedang berjalan | `test/pos-import.test.js` |
+
+### KF-DEALER — Master Dealer
+
+| ID | Kebutuhan | Dijaga |
+|---|---|---|
+| KF-DEALER-1 | Tabel seluruh dealer beserta alamat, koordinat, dan jumlah pos yang menunjuknya | `test/dealers-crud.test.js` |
+| KF-DEALER-2 | Tambah dealer baru tanpa pos sama sekali — langsung muncul di dropdown "Dealer induk" editor pos | `test/dealers-crud.test.js` |
+| KF-DEALER-3 | Sunting alamat dan koordinat dealer; koordinat TIDAK dibatasi rentang wilayah peta (kantor dealer boleh di luar DIY+Jateng) | `test/dealers-crud.test.js` |
+| KF-DEALER-4 | Kode dealer selalu turunan nama, tidak bisa diedit manual; ganti nama tidak mengganti kode | `test/dealers-crud.test.js` |
+| KF-DEALER-5 | Hapus dealer ditolak selama masih punya pos, pesan menyebut jumlahnya | `test/dealers-crud.test.js` |
+| KF-DEALER-6 | Rename ke nama yang sudah dipakai dealer lain ditolak — tidak diam-diam digabung | `test/dealers-crud.test.js` |
+| KF-DEALER-7 | `outlets.dealer_code` dijamin menunjuk dealer yang ada lewat FOREIGN KEY, bukan disiplin kode saja | `test/dealers-schema.test.js` |
 
 ### KF-KELURAHAN — Master Kelurahan
 

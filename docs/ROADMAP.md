@@ -148,6 +148,78 @@ cuma perluasan ke Sulawesi ke timur.
 
 ## Selesai
 
+### Master Dealer terpisah dari Master Pos, impor massal pos, skrip koordinat (2026-08-30)
+
+Dipicu oleh `Dealer & POS_.xlsx` dari AHM. Audit sebelum mulai (dicatat di rencana,
+bukan tebakan): sheet "Dealer" (78 baris) sudah 100% identik dengan `outlets` — nol
+yang perlu diubah hari ini. Sheet "POS" (109 baris) pakai kode internal AHM yang lebih
+rinci dari `outlet_code` kita, jadi cuma dipakai mengisi koordinat kosong, bukan
+menggantikan `outlets`. Lima bagian, lima commit, tiap bagian lulus tes penuh sebelum
+lanjut ke berikutnya.
+
+**1. Tabel `dealers` + FK.** `dealer_code`/`dealer_name` di `outlets` tadinya cuma
+string yang DIDUPLIKASI, tidak ada master sungguhan. Tabel `dealers` baru + FK
+`NOT VALID` (aman untuk 79 outlet lama yang belum pernah divalidasi — `schema.sql`
+jalan tiap server start, termasuk di production yang sudah punya isi) +
+`scripts/backfill-dealers.js` yang mengisinya sekali dan memvalidasi FK-nya. Sekalian
+memperbaiki `runSchema()`: splitter lama memecah blok `DO $$...$$` di tengah karena
+tidak mengerti dollar-quoting — `ADD CONSTRAINT` di skema ini tidak akan pernah jalan
+tanpa perbaikan itu. Dijalankan terhadap `C:\astra-data`: 52 dealer diisi dari 79
+outlet, FK tervalidasi, nol anomali nama bercabang.
+
+**2. `resolveDealer()` pindah sumber + CRUD dealer.** Pencarian nama dealer pindah
+dari menebak-nebak `outlets` ke membaca `dealers` langsung, dan meng-upsert baris
+`dealers` untuk kode manapun yang ditulis ke `outlets.dealer_code` — wajib begitu FK
+aktif. Tiga jalur tulis diperbaiki: `resolveDealer()` sendiri, jalur `patch.dealerCode`
+langsung di `updateOutlet()` (skrip/tes), dan `resolveGroups()` di `importer.js` untuk
+outlet baru hasil tebakan impor bulanan. `listDealers`/`createDealer`/`updateDealer`/
+`deleteDealer` di `repository.js` + rute `/api/dealers`. Kode dealer sendiri tidak
+pernah bisa diedit manual (selalu turunan `toDealerCode()`); hapus ditolak selama
+dealer masih punya pos; rename ditolak kalau namanya sudah dipakai dealer lain;
+koordinat dealer divalidasi tanpa batas wilayah peta (`cekKoordinatBebas`) — kantor
+pusat dealer boleh di luar DIY+Jateng.
+
+**3. Halaman Master Dealer.** Tab baru, tabel Kode | Nama | Alamat | Koordinat |
+Jumlah Pos | Aksi, CRUD lengkap. `S.dealerNames` sekarang dari `data.dealers`, bukan
+ditebak dari `S.outlets` — dealer baru yang belum punya pos ikut muncul di dropdown
+"Dealer induk" pada editor pos.
+
+**4. Impor massal pos dari Excel.** Tombol "Impor dari Excel" di Master Pos: baca
+sheet "Dealer", diff per field (`backend/core/pos-diff.js`, murni), pratinjau
+eksplisit + satu tombol "Terapkan Perubahan" — TIDAK ada auto-apply diam-diam, sesuai
+keputusan tim. Beda dari impor penjualan bulanan (yang sengaja tidak menimpa kurasi
+dealer/koordinat): impor ini MEMANG dimaksudkan menimpa nama/alamat pos kalau beda
+dari Excel. Kode pos yang belum ada di database cuma dilaporkan (`added`), tidak
+pernah dibuat — sheet ini tidak punya dealer induk untuk dijadikan outlet baru yang
+valid. Token pratinjau di memori proses, kedaluwarsa 1 jam. Kunci sekali-jalan yang
+tadinya privat ke `importer.js` dipindah ke `backend/server/import-lock.js` supaya
+commit pos dan impor bulanan saling menolak lewat kunci yang sama — keduanya menulis
+`outlets`.
+
+**5. `scripts/fill-pos-coordinates.js`.** Baca sheet "POS", kelompokkan per Kode AHM
+Dealer (= `outlet_code` kita), kandidat pertama mengisi `lat`/`lng` yang MASIH KOSONG
+(`AND lat IS NULL` di UPDATE-nya sendiri, bukan cuma dicek di JS), sisanya + baris
+yang gagal diparse dilaporkan penuh — bukan cuma angka.
+
+**Diverifikasi di browser terhadap data sungguhan** (bukan cuma `npm test`): tambah
+dealer, edit alamat, hapus yang kosong, hapus yang masih punya pos ditolak dengan
+pesan yang benar. Sheet "Dealer" `Dealer & POS_.xlsx` menghasilkan pratinjau NOL
+perubahan — bukti hidup diff-nya benar. Satu perubahan uji diterapkan lalu
+dikembalikan lewat alur "Terapkan Perubahan" yang sama. `fill-pos-coordinates`
+dijalankan terhadap database production: cuma `DEMO-01` (baris demo) yang belum punya
+koordinat, tidak ada di sheet POS, dilaporkan — tidak ada yang ditulis.
+
+**Tes**: 24/24 berkas hijau (naik dari 19). Berkas baru: `dealers-schema`,
+`dealers-crud`, `pos-diff`, `pos-import`, `fill-pos-coordinates`. Semua logika baru
+diuji mutasi. Satu pengecualian dicatat eksplisit sebagai `ponytail:` di kodenya:
+jendela balapan `AND lat IS NULL` di `fill-pos-coordinates.js` tidak disimulasikan
+tesnya (butuh mock `store.run` untuk menyuntik tulisan konkuren) — jalur non-balapan
+sudah teruji lewat `SELECT ... WHERE lat IS NULL` yang mendahuluinya.
+
+**Belum dikerjakan / sengaja di luar cakupan**: pos baru dari sheet POS/Dealer tidak
+pernah dibuat otomatis (butuh dealer induk, tidak ada di kedua sheet); tidak ada alur
+"pindahkan pos dulu" otomatis waktu hapus dealer yang masih terisi.
+
 ### Bilah filter dipadatkan supaya muat satu baris (2026-08-30)
 
 Diminta tim: bilahnya melipat jadi dua baris di layar mereka, dan mereka mau ukurannya

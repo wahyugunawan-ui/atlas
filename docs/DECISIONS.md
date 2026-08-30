@@ -884,3 +884,58 @@ bilah kedua: `appendChild` MEMINDAH node ke dalam panel layar penuh dan mengemba
 saat keluar. Nilai tiap `<select>` ikut utuh karena memang elemen yang sama. Cermin
 `fs-*` yang lama dibuang — dua daftar yang harus disamakan terus-menerus pasti
 menyimpang suatu hari.
+
+## [2026-08-30] Dealer jadi tabel sendiri, bukan lagi kolom yang diduplikasi di `outlets`
+
+**Konteks:** `dealer_code`/`dealer_name` tadinya cuma kolom string di tiap baris
+`outlets` yang kebetulan sama untuk pos-pos milik dealer yang sama (12 dari 79 outlet
+berbagi dealer, sampai 8 outlet untuk NUSANTARA SAKTI). Dropdown pemilih dealer di
+editor pos menebak daftarnya dari `S.outlets`, bukan dari master sungguhan — dealer
+yang belum punya pos sama sekali tidak bisa dibuat lebih dulu, dan tidak ada tempat
+menyimpan alamat/koordinat kantor dealer.
+**Keputusan:** Tabel `dealers` baru (`dealer_code` PK, `dealer_name`, `address`,
+`lat`, `lng`), dengan `outlets.dealer_code` jadi FOREIGN KEY sungguhan ke situ.
+`resolveDealer()` mencari dan menulis ke `dealers`, bukan lagi menebak dari `outlets`.
+**Alasan:** Master Dealer dan Master Pos adalah dua entitas berbeda bagi tim channel
+— diminta eksplisit waktu membahas rencana ini. Tanpa tabel sendiri, "tambah dealer
+baru sebelum ada posnya" dan "sunting alamat kantor dealer" tidak punya tempat untuk
+disimpan.
+**Alternatif yang ditolak:** Menyimpan alamat/koordinat dealer sebagai kolom
+tambahan di baris `outlets` pertama milik dealer itu — ditolak, itu memilih satu baris
+secara sewenang-wenang untuk mewakili sesuatu yang levelnya beda dari baris lainnya,
+dan pecah begitu baris itu dihapus.
+**Konsekuensi:** FK ditambahkan lewat `NOT VALID` (bukan `ADD CONSTRAINT` polos) karena
+`schema.sql` jalan tiap server start, termasuk terhadap database production yang sudah
+punya 79 outlet sebelum `dealers` pernah ada — `scripts/backfill-dealers.js` mengisi
+data lama lalu memvalidasi FK-nya sekali secara terpisah. Tiga jalur tulis
+(`resolveDealer()`, jalur `patch.dealerCode` langsung, dan `resolveGroups()` di impor
+bulanan) semuanya wajib meng-upsert `dealers` sebelum menulis `outlets` — kalau tidak,
+FK menolak baris yang menunjuk dealer yang belum tercatat.
+
+## [2026-08-30] Impor massal pos MEMANG boleh menimpa; impor penjualan bulanan TIDAK
+
+**Konteks:** Impor penjualan bulanan (`importer.js`) sengaja tidak pernah menimpa
+`dealer_code`/`dealer_name`/`lat`/`lng` hasil kurasi manusia — itu peredam eksplisit
+CLAUDE.md terhadap tebakan `resolveGroups()`. Fitur baru "impor massal pos dari
+Excel" (sheet "Dealer" AHM) butuh aturan sebaliknya: kalau nama atau alamat pos di
+Excel beda dari database, itu memang perubahan yang harus masuk — Excel-nya yang
+dianggap benar untuk dua field itu.
+**Keputusan:** `backend/core/pos-diff.js` + rute preview/commit MEMANG menimpa
+`outlet_name`/`address` kalau beda dari Excel. Pengamannya pratinjau eksplisit (tabel
+diff per field) + satu tombol konfirmasi "Terapkan Perubahan", bukan perlindungan
+diam-diam seperti impor bulanan.
+**Alasan:** Dua impor ini menjawab pertanyaan yang berbeda. Impor bulanan menjawab
+"penjualan bulan ini berapa" dan dealer/koordinat cuma tumpangan yang harus dijaga
+dari tertimpa tebakan. Impor massal pos MEMANG dipakai untuk menyamakan
+`outlet_name`/`address` dengan sumber AHM yang lebih baru — kalau tidak boleh
+menimpa, fiturnya tidak berguna sama sekali.
+**Alternatif yang ditolak:** Menyatukan ke satu mekanisme impor yang sama dengan flag
+"boleh timpa" — ditolak, dua impor ini punya bentuk data, sumber, dan risiko yang
+beda jauh (satu menulis `sales` + `outlets`, yang lain cuma `outlets`), menyatukannya
+cuma menambah percabangan tanpa mengurangi kode.
+**Konsekuensi:** `dealer_code`/koordinat TIDAK ada di cakupan field impor pos massal
+ini sama sekali — sheet "Dealer" AHM tidak memuatnya, dan keduanya tetap murni kurasi
+manusia lewat editor yang sudah ada. Kode pos di Excel yang belum ada di database
+cuma dilaporkan, tidak pernah dibuat otomatis — sheet ini tidak punya dealer induk
+untuk dijadikan outlet baru yang valid, dan CLAUDE.md melarang menebak identitas dari
+nama.
