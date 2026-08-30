@@ -20,6 +20,7 @@
     "seed-regions": "node scripts/seed-regions.js",
     "import": "node scripts/import-cli.js",
     "seed-outlets": "node scripts/seed-outlets.js",
+    "backfill-dealers": "node scripts/backfill-dealers.js",
     "seed-coverage": "node scripts/seed-coverage.js",
     "fetch-boundaries": "node scripts/fetch-boundaries.js",
     "seed-boundaries": "node scripts/seed-boundaries.js",

@@ -159,12 +159,51 @@ function wrap(client) {
   };
 }
 
+/**
+ * Pecah berkas skema jadi daftar pernyataan, di titik koma yang jadi akhir baris
+ * (sisa barisnya cuma spasi) — supaya titik koma di dalam KOMENTAR PROSA (kalimat
+ * Indonesia banyak memakainya, mis. "...bertitik; jangan pernah...") tidak ikut
+ * dianggap pemisah.
+ *
+ * Titik koma di DALAM blok dollar-quoted (`$$...$$`, dipakai blok `DO` untuk migrasi
+ * bersyarat seperti FK `dealers`) SENGAJA dilewati juga — itu bagian dari badan
+ * PL/pgSQL, bukan pemisah antar pernyataan. Tanpa ini, `DO $$ BEGIN ... END $$;`
+ * terpotong jadi beberapa "pernyataan" yang masing-masing bukan SQL sah.
+ */
+function splitStatements(sql) {
+  const statements = [];
+  let current = '';
+  let i = 0;
+  while (i < sql.length) {
+    if (sql[i] === '$') {
+      const tag = /^\$[A-Za-z0-9_]*\$/.exec(sql.slice(i));
+      if (tag) {
+        const end = sql.indexOf(tag[0], i + tag[0].length);
+        const stop = end === -1 ? sql.length : end + tag[0].length;
+        current += sql.slice(i, stop);
+        i = stop;
+        continue;
+      }
+    }
+    if (sql[i] === ';') {
+      const sisaBaris = /^[ \t]*(?:\r?\n|$)/.exec(sql.slice(i + 1));
+      if (sisaBaris) {
+        statements.push(current);
+        current = '';
+        i += 1 + sisaBaris[0].length;
+        continue;
+      }
+    }
+    current += sql[i];
+    i += 1;
+  }
+  if (current.trim()) statements.push(current);
+  return statements;
+}
+
 async function runSchema(pool, file) {
   const sql = fs.readFileSync(path.join(__dirname, file), 'utf8');
-  // Skemanya cuma CREATE TABLE/INDEX, jadi pemisahan per titik koma aman — tidak ada
-  // trigger atau fungsi yang memuat titik koma di dalam badannya.
-  const statements = sql
-    .split(/;\s*(?:\r?\n|$)/)
+  const statements = splitStatements(sql)
     .map((s) => s.replace(/^\s*--[^\n]*$/gm, '').trim())
     .filter(Boolean);
   for (const statement of statements) {

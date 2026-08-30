@@ -41,6 +41,27 @@ CREATE INDEX IF NOT EXISTS idx_villages_city ON villages (city_code);
 -- poligon penuh 78 x 3.466 kali, dan yang tadinya detik jadi menit.
 CREATE INDEX IF NOT EXISTS idx_villages_geom_m ON villages USING GIST (geom_m);
 
+-- Dealer: perusahaan yang menaungi satu atau lebih pos (outlet).
+--
+-- Dulu cuma dua kolom yang DIDUPLIKASI di tiap baris outlets yang sama dealernya —
+-- tidak ada satu tempat untuk melihat "dealer ini alamatnya di mana", dan mengedit
+-- nama dealer berarti mengedit tiap baris outlet satu per satu. Tabel ini yang jadi
+-- satu tempat itu; outlets.dealer_code sekarang FOREIGN KEY ke sini, bukan sekadar
+-- string yang kebetulan konsisten.
+--
+-- lat/lng SENGAJA nullable dan tidak punya sumber Excel — kantor pusat dealer bukan
+-- sesuatu yang dikirim Astra tiap bulan, jadi diisi manual lewat halaman Master
+-- Dealer kalau memang diperlukan. Tanpa geom_m tergenerasi seperti outlets: titik
+-- dealer tidak pernah dipakai hitungan jangkauan PostGIS mana pun.
+CREATE TABLE IF NOT EXISTS dealers (
+  dealer_code VARCHAR(64) NOT NULL PRIMARY KEY,     -- turunan toDealerCode(nama)
+  dealer_name VARCHAR(200) NOT NULL,
+  address     VARCHAR(400),
+  lat         DOUBLE PRECISION,
+  lng         DOUBLE PRECISION,
+  updated_at  TIMESTAMPTZ
+);
+
 CREATE TABLE IF NOT EXISTS outlets (
   outlet_code VARCHAR(32) NOT NULL PRIMARY KEY,     -- kolom "Kode Dealer" di Excel
   outlet_name VARCHAR(200) NOT NULL,
@@ -53,6 +74,28 @@ CREATE TABLE IF NOT EXISTS outlets (
 );
 
 CREATE INDEX IF NOT EXISTS idx_outlets_dealer ON outlets (dealer_code);
+
+-- outlets.dealer_code jadi FK sungguhan ke dealers.dealer_code, bukan sekadar kolom
+-- yang kebetulan konsisten.
+--
+-- NOT VALID, bukan ALTER TABLE ... ADD CONSTRAINT polos. Berkas ini dijalankan TIAP
+-- KALI server start, termasuk di database production yang sudah punya puluhan outlet
+-- SEBELUM tabel dealers pernah dibackfill (lihat scripts/backfill-dealers.js).
+-- Constraint biasa akan gagal ditambahkan pertama kali karena dealer_code outlet lama
+-- belum punya baris dealers-nya. NOT VALID membuat constraint berlaku untuk tulisan BARU
+-- sejak sekarang tanpa memindai baris lama dulu — aman dijalankan berulang, sama
+-- seperti seluruh CREATE TABLE IF NOT EXISTS di berkas ini. scripts/backfill-dealers.js
+-- yang memvalidasinya terhadap data lama, sekali, secara eksplisit.
+--
+-- pg_constraint dicek manual karena Postgres tidak punya
+-- ADD CONSTRAINT IF NOT EXISTS untuk foreign key.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_outlets_dealer') THEN
+    ALTER TABLE outlets ADD CONSTRAINT fk_outlets_dealer
+      FOREIGN KEY (dealer_code) REFERENCES dealers(dealer_code) NOT VALID;
+  END IF;
+END $$;
 
 -- Titik outlet dalam UTM 49S, diturunkan dari lat/lng.
 --
