@@ -98,6 +98,9 @@ async function test() {
     assert.strictEqual(await coverage.isEmpty(), true);
     assert.strictEqual((await repo.summary()).coverageReady, false,
       'server yang belum menghitung harus mengaku belum, bukan melaporkan 0%');
+    assert.strictEqual((await repo.summary()).businessReferencePercent,
+      require('../backend/server/config').config.businessReferencePercent,
+      'summary() tidak mengirim businessReferencePercent dari config.js');
 
     // --- hitung pertama ---
     const first = await coverage.rebuild(config, null);

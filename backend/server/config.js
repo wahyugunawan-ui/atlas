@@ -123,6 +123,13 @@ const config = {
   passwordHash: process.env.PASSWORD_HASH || '',
   sessionSecret: process.env.SESSION_SECRET || '',
   cookieSecure: process.env.COOKIE_SECURE === '1',
+
+  // Acuan bisnis (bukan hasil statistik): berapa persen kontribusi penjualan satu
+  // kelurahan terhadap kotanya yang dianggap wajar oleh Marketing/Head Department.
+  // BUKAN rahasia -- tidak lewat rantai resolusi .env khusus rahasia di atas, cukup
+  // env var biasa. Mengubahnya: edit .env, restart server. Tanpa UI admin atau audit
+  // log -- lihat DECISIONS.md untuk alasannya.
+  businessReferencePercent: Number(process.env.BUSINESS_REFERENCE_PERCENT) || 1,
 };
 
 /**

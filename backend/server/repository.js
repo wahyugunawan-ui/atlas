@@ -9,6 +9,7 @@
  */
 const store = require('./db');
 const coverage = require('./coverage-store');
+const { config } = require('./config');
 const { toDealerCode } = require('../core/grouping');
 const { regionKey } = require('../core/region');
 const { suggestVillages } = require('../core/matching');
@@ -115,6 +116,9 @@ async function summary() {
     pendingNames: (await store.one(db, `
       SELECT COUNT(*) AS n FROM unmatched
       WHERE period = (SELECT MAX(period) FROM unmatched)`)).n,
+    // Acuan bisnis, bukan hasil statistik — lihat config.js. Dikirim di sini supaya
+    // panel wilayah bisa menghitung Selisih/Rasio terhadap Acuan tanpa permintaan kedua.
+    businessReferencePercent: config.businessReferencePercent,
   };
 }
 
