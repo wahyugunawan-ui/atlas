@@ -87,6 +87,10 @@ export const S = {
   treemapChart: null,
   treemapCodes: [],
   villageTrendChart: null, // grafik tren bulanan di panel Blok 2 (Sales)
+  // 'relative' (persentil, bawaan) | 'fixed' (interval tetap). Ditulis di sini dari
+  // sekarang supaya panel ringkasan kota/dealer bisa menyebut mode aktif; belum
+  // mengubah warna peta sungguhan sampai togglenya dipasang di bagian berikutnya.
+  heatmapMode: 'relative',
 
   // --- ring layanan: rings[outletCode][districtCode] = 1|2|3 ---
   rings: {},

@@ -131,7 +131,15 @@ export function fillFilterBar() {
 
   fillCombo('kota', 'Kabupaten', Object.keys(S.cityNames)
     .sort((a, b) => S.cityNames[a].localeCompare(S.cityNames[b]))
-    .map((c) => [c, S.cityNames[c]]), 'Semua', pilihLingkup('kota'));
+    .map((c) => [c, S.cityNames[c]]), 'Semua', (value) => {
+      pilihLingkup('kota')(value);
+      // Kota dipilih TANPA kelurahan spesifik yang sedang aktif -> buka ringkasan
+      // kota langsung. Lewat window: tables.js sudah meng-import berkas ini untuk
+      // switchTab(), meng-import baliknya akan membuat lingkaran.
+      if (value !== 'ALL' && !S.selectedVillage && window.openCitySummary) {
+        window.openCitySummary(value);
+      }
+    });
 
   fillCombo('dealer', 'Dealer', S.registry.order
     .filter((code) => S.dealerNames[code])

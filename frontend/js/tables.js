@@ -113,18 +113,109 @@ export function openDealerDetail(dealerCode) {
   const total = cities.reduce((sum, k) => sum + k.units, 0);
   const villageCount = cities.reduce((sum, k) => sum + k.villages.length, 0);
 
+  // Kontribusi % tiap kelurahan TERHADAP DATA DEALER INI SAJA — rows sudah disaring ke
+  // dealerCode, jadi "total kota" yang dipakai contributionsForRows() otomatis jadi
+  // "total dealer ini di kota itu", bukan total seluruh dealer. Sama persis prinsipnya
+  // dengan panel kelurahan: satu fungsi, input yang beda mengikuti filter aktif.
+  const kontribusiDealer = contributionsForRows(rows, S.villageByCode);
+  const avgContribution = kontribusiDealer.size
+    ? [...kontribusiDealer.values()].reduce((a, b) => a + b, 0) / kontribusiDealer.size
+    : null;
+
+  $('kelurahanDetailBack').innerHTML = '';
   $('kelurahanDetailTitle').textContent = name;
   $('kelurahanDetailMeta').textContent =
     `${formatNumber(cities.length)} kabupaten · ${formatNumber(villageCount)} kelurahan`;
 
   $('kelurahanDetailList').innerHTML =
-    `<div class="pb-3 border-b border-slate-200">` +
-    `<div class="text-[11px] uppercase font-bold text-slate-400">Total penjualan</div>` +
-    `<div class="text-3xl font-extrabold text-slate-900 mono">${esc(formatNumber(total))}</div></div>` +
+    `<div class="grid grid-cols-2 gap-3 pb-4 border-b border-slate-200">` +
+    `<div><div class="text-[10px] uppercase font-bold text-slate-400">Total Penjualan</div>` +
+    `<div class="text-xl font-extrabold text-slate-900 mono">${esc(formatNumber(total))}</div></div>` +
+    `<div><div class="text-[10px] uppercase font-bold text-slate-400">Kelurahan Ber-sales</div>` +
+    `<div class="text-xl font-extrabold text-slate-900 mono">${esc(formatNumber(villageCount))}</div></div>` +
+    `<div><div class="text-[10px] uppercase font-bold text-slate-400" ` +
+    'title="Rata-rata Kontribusi Penjualan seluruh kelurahan yang dilayani dealer ini, terhadap total dealer ini per kota.">Rata-rata Kontribusi</div>' +
+    `<div class="text-xl font-extrabold text-slate-900 mono">${esc(formatPercent(avgContribution))}</div></div>` +
+    `<div><div class="text-[10px] uppercase font-bold text-slate-400">Mode Heatmap</div>` +
+    `<div class="text-sm font-bold text-slate-700 mt-0.5">${esc(heatmapModeLabel())}</div></div>` +
+    '</div>' +
     sectionHeader('buildings', 'Sebaran per Kabupaten', cities.length) +
     (cities.length
       ? cities.map((k) => dealerCityHtml(k, dealerCode)).join('')
       : '<p class="text-xs text-slate-400 text-center py-4">Tidak ada penjualan pada filter ini.</p>');
+
+  showPanel();
+}
+
+/** Belum fungsional mengubah warna peta — togglenya dipasang di bagian berikutnya. */
+function heatmapModeLabel() {
+  return S.heatmapMode === 'fixed' ? 'Per Nilai Kontribusi' : 'Per Peringkat Relatif';
+}
+
+/**
+ * Panel ringkasan satu kota — dipakai waktu kota dipilih TANPA kelurahan spesifik
+ * yang aktif. Muncul dari `frontend/js/filter-bar.js` (dropdown Kabupaten) dan
+ * digambar ulang otomatis tiap filter berubah lewat S.panelView di renderAll()
+ * (app.js), pola yang sama persis dengan panel dealer di atas.
+ *
+ * Angkanya SELALU dihitung ulang dari activeRows() — tidak ada nilai yang
+ * dipertahankan dari kota sebelumnya (aturan spek: ganti kota = ganti semua angka).
+ */
+export function openCitySummary(cityCode) {
+  S.panelView = { kind: 'city', code: cityCode };
+  S.selectedVillage = null;
+  if (S.layersReady) S.map.setFilter('kel-terpilih', ['==', ['get', 'kode'], '']);
+
+  const rows = activeRows().filter((r) => {
+    const village = S.villageByCode[r.village];
+    return village && village.cityCode === cityCode;
+  });
+  const perCity = groupByCity(rows, S.villageByCode);
+  const kota = perCity.get(cityCode) || { total: 0, villages: new Map() };
+  const villageCount = kota.villages.size;
+  const avgContribution = villageCount
+    ? [...kota.villages.entries()]
+      .reduce((sum, [, units]) => sum + contributionPercent(units, kota.total), 0) / villageCount
+    : null;
+
+  // Posisi Relatif dihitung dari SELURUH filter aktif (semua kota kalau tidak ada
+  // filter kota lain yang menyempitkan) — definisi yang sama dengan panel kelurahan,
+  // supaya label "Terbawah"/"Teratas" berarti hal yang sama di mana pun dilihat.
+  const kontribusiAktif = contributionsForRows(activeRows(), S.villageByCode);
+  const breaks = percentileBreaks([...kontribusiAktif.values()]);
+  const distribusi = { Terbawah: 0, Bawah: 0, Tengah: 0, Atas: 0, Teratas: 0 };
+  kota.villages.forEach((units, villageCode) => {
+    const pct = contributionPercent(units, kota.total);
+    const label = pct == null ? null : relativePosition(pct, breaks);
+    if (label) distribusi[label]++;
+  });
+
+  $('kelurahanDetailBack').innerHTML = '';
+  $('kelurahanDetailTitle').textContent = S.cityNames[cityCode] || cityCode;
+  $('kelurahanDetailMeta').textContent = `${formatNumber(villageCount)} kelurahan berpenjualan · ${cityCode}`;
+
+  $('kelurahanDetailList').innerHTML =
+    `<div class="grid grid-cols-2 gap-3 pb-4 border-b border-slate-200">` +
+    `<div><div class="text-[10px] uppercase font-bold text-slate-400">Total Penjualan</div>` +
+    `<div class="text-xl font-extrabold text-slate-900 mono">${esc(formatNumber(kota.total))}</div></div>` +
+    `<div><div class="text-[10px] uppercase font-bold text-slate-400">Jumlah Kelurahan</div>` +
+    `<div class="text-xl font-extrabold text-slate-900 mono">${esc(formatNumber(villageCount))}</div></div>` +
+    `<div><div class="text-[10px] uppercase font-bold text-slate-400" ` +
+    'title="Rata-rata Kontribusi Penjualan seluruh kelurahan berpenjualan di kota ini.">Rata-rata Kontribusi</div>' +
+    `<div class="text-xl font-extrabold text-slate-900 mono">${esc(formatPercent(avgContribution))}</div></div>` +
+    `<div><div class="text-[10px] uppercase font-bold text-slate-400">Mode Heatmap</div>` +
+    `<div class="text-sm font-bold text-slate-700 mt-0.5">${esc(heatmapModeLabel())}</div></div>` +
+    '</div>' +
+
+    `<div class="pb-4">` +
+    `<div class="text-[11px] uppercase font-bold text-slate-400 mb-2">Distribusi Posisi Relatif</div>` +
+    (villageCount
+      ? Object.entries(distribusi).map(([label, n]) =>
+        `<div class="flex items-center justify-between text-xs py-1.5">` +
+        `<span>${posisiBadgeHtml(label)}</span>` +
+        `<span class="mono font-bold text-slate-800">${esc(formatNumber(n))} wilayah</span></div>`).join('')
+      : '<p class="text-xs text-slate-400">Data belum tersedia.</p>') +
+    '</div>';
 
   showPanel();
 }

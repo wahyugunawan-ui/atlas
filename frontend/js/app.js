@@ -33,7 +33,7 @@ import {
 import { S } from './state.js';
 import {
   acceptMapPoint, closeOutletEditor, closeVillageDetail, jumpToVillage,
-  openDealerDetail, toggleDealerCity, jumpFromDealer,
+  openDealerDetail, openCitySummary, toggleDealerCity, jumpFromDealer,
   closeNewOutlet, closeMatchNames, confirmMatch, customerPage, dealerChoiceChanged,
   newOutletDealerChanged, openMatchNames, undoMatch,
   openNewOutlet, saveNewOutlet,
@@ -73,7 +73,7 @@ const HANDLERS = {
   selectOutlet, closeSelectionInfo, openVillageDetail, closeVillageDetail,
   // tabel
   switchTab, renderOutletTable, renderVillageTable, showOnMap, jumpToVillage, promptPin,
-  openDealerDetail, toggleDealerCity, jumpFromDealer,
+  openDealerDetail, openCitySummary, toggleDealerCity, jumpFromDealer,
   renderCustomerTable, searchCustomers, customerPage, editRingFromTable,
   openNewOutlet, closeNewOutlet, newOutletDealerChanged, saveNewOutlet,
   askResetOutlets, closeResetOutlets, resetOutletsTyped, confirmResetOutlets,
@@ -150,11 +150,25 @@ export function renderAll() {
     redrawMap();
   }
   // Panel geser digambar ulang mengikuti ISINYA, bukan selalu dianggap kelurahan.
-  // Sebelum ada panel dealer, baris ini cukup berbunyi "kalau ada kelurahan terpilih,
-  // buka lagi" — dan begitu panel dealer ada, tiap filter disentuh panelnya akan
-  // tertimpa jadi panel kelurahan tanpa ada yang meminta.
-  if (S.panelView && S.panelView.kind === 'dealer') openDealerDetail(S.panelView.code);
-  else if (S.selectedVillage) openVillageDetail(S.selectedVillage);
+  // Dealer dan kota memakai S.panelView; keduanya cuma dibuka lewat aksi eksplisit
+  // (tombol/dropdown), jadi menutupnya tetap "nempel" — tidak ada baris di sini yang
+  // membuka ulang panel yang sengaja ditutup pengguna.
+  if (S.panelView && S.panelView.kind === 'dealer') {
+    openDealerDetail(S.panelView.code);
+  } else if (S.panelView && S.panelView.kind === 'city') {
+    openCitySummary(S.panelView.code);
+  } else if (S.selectedVillage) {
+    // Kalau kotanya sendiri berubah dan kelurahan yang sedang dibuka sudah tidak
+    // termasuk kota aktif, panel diganti jadi ringkasan kota itu — bukan tetap
+    // menampilkan kelurahan yang sudah di luar cakupan filter (aturan spek).
+    const village = S.villageByCode[S.selectedVillage];
+    const cityAktif = scopeValue('kota');
+    if (village && cityAktif !== 'ALL' && village.cityCode !== cityAktif) {
+      openCitySummary(cityAktif);
+    } else {
+      openVillageDetail(S.selectedVillage);
+    }
+  }
 }
 
 /* ==========================================================================
