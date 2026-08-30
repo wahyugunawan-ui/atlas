@@ -89,9 +89,9 @@ function tandaiTerpilih(name) {
 /**
  * Tulis nilai ke pilnya. Satu arah: state -> layar.
  *
- * Pil MENYALA hanya kalau dia benar-benar menyempitkan tampilan. Karena kabupaten,
- * dealer, dan pos berbagi satu slot, tidak akan pernah ada dua di antara ketiganya yang
- * menyala bersamaan — aturannya jadi terlihat, bukan cuma berlaku.
+ * Pil MENYALA hanya kalau dia benar-benar menyempitkan tampilan. Kabupaten, dealer,
+ * dan pos independen sejak 2026-08-30 — dua atau tiga di antaranya BISA menyala
+ * bersamaan sekarang, masing-masing menandai slotnya sendiri.
  */
 export function setComboValue(name, value) {
   const el = host(name);

@@ -459,11 +459,11 @@ function salePointFilter() {
   const clauses = ['all'];
   const f = pageFilters();
 
-  // Kota, dealer, dan pos berbagi satu slot, jadi di sini tidak ada lagi urutan
-  // "pos mengalahkan dealer" yang harus dijaga — cuma satu yang bisa aktif.
-  if (f.scopeKind === 'pos') clauses.push(['==', ['get', 'outlet'], f.scopeCode]);
-  else if (f.scopeKind === 'dealer') clauses.push(['==', ['get', 'dealer'], f.scopeCode]);
-  else if (f.scopeKind === 'kota') clauses.push(['==', ['get', 'kota'], f.scopeCode]);
+  // Kota, dealer, dan pos independen — semuanya di-AND-kan lewat 'all', bukan lagi
+  // if/else-if satu slot.
+  if (f.outletCode !== 'ALL') clauses.push(['==', ['get', 'outlet'], f.outletCode]);
+  if (f.dealerCode !== 'ALL') clauses.push(['==', ['get', 'dealer'], f.dealerCode]);
+  if (f.cityCode !== 'ALL') clauses.push(['==', ['get', 'kota'], f.cityCode]);
 
   if (f.province !== 'ALL') clauses.push(['==', ['get', 'prov'], f.province]);
 

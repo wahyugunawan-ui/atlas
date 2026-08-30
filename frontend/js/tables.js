@@ -92,7 +92,7 @@ export function openDealerDetail(dealerCode) {
   // sama seperti kartu dealernya. Kalau berbeda, angka di panel dan di kartu tidak
   // akan bersambung dan tidak ada yang tahu mana yang benar.
   const f = pageFilters();
-  const city = f.scopeKind === 'kota' ? f.scopeCode : 'ALL';
+  const city = f.cityCode;
   const province = f.province;
   const rows = S.sales.filter((r) => {
     if (r.dealer !== dealerCode) return false;
@@ -352,8 +352,8 @@ export function renderOutletTable() {
   // kabupaten sendiri di data ini — yang punya kabupaten adalah kelurahan tempat
   // penjualannya jatuh. Menebaknya dari koordinat pos akan salah tanpa gejala.
   const list = S.outlets.filter((o) =>
-    (f.scopeKind !== 'dealer' || o.dealerCode === f.scopeCode) &&
-    (f.scopeKind !== 'pos' || o.code === f.scopeCode) &&
+    (f.dealerCode === 'ALL' || o.dealerCode === f.dealerCode) &&
+    (f.outletCode === 'ALL' || o.code === f.outletCode) &&
     (!query || o.name.toLowerCase().includes(query) || o.code.includes(query)))
     .sort((a, b) => (perOutlet[b.code] || 0) - (perOutlet[a.code] || 0));
 
@@ -398,7 +398,7 @@ export function renderOutletTable() {
 export function editRingFromTable(code) {
   switchTab('peta');
   setTimeout(() => {
-    clearScope();
+    clearScope('pos');
     selectOutlet(code);
     window.startRingEdit(code);
   }, 120);
@@ -411,7 +411,7 @@ export function showOnMap(code) {
     // Lingkupnya dikosongkan dulu supaya selectOutlet() pasti MENYALAKAN. Menekan
     // tombol ini berarti "tampilkan pos ini"; tanpa ini, menekannya untuk pos yang
     // kebetulan sedang aktif justru mematikannya.
-    clearScope();
+    clearScope('pos');
     selectOutlet(code);
     toast('Heatmap dihitung ulang untuk ' + ((S.outletByCode[code] || {}).name || code), 'ok');
   }, 120);
@@ -654,14 +654,14 @@ export function renderVillageTable() {
   // Kalau lingkupnya dealer atau pos, yang ditampilkan adalah kelurahan yang BENAR-
   // BENAR disentuh dealer atau pos itu — bukan seluruh kelurahan dengan angka nol.
   // Daftar 8.999 baris yang 8.900 di antaranya nol tidak menjawab apa pun.
-  const disentuh = f.scopeKind === 'dealer' || f.scopeKind === 'pos'
+  const disentuh = f.dealerCode !== 'ALL' || f.outletCode !== 'ALL'
     ? new Set(rows.map((r) => r.village)) : null;
 
   // Sudah datang terurut dari server (provinsi -> kabupaten -> kecamatan ->
   // kelurahan). Diminta di meeting: urutan sebelumnya mengikuti volume, jadi
   // kelurahan dari kabupaten berbeda berselang-seling dan tidak bisa ditelusuri.
   const list = S.villages.filter((v) =>
-    (f.scopeKind !== 'kota' || v.cityCode === f.scopeCode) &&
+    (f.cityCode === 'ALL' || v.cityCode === f.cityCode) &&
     (f.province === 'ALL' || v.provinceCode === f.province) &&
     (!disentuh || disentuh.has(v.code)) &&
     (!query || v.name.toLowerCase().includes(query) || v.code.includes(query)));
@@ -1126,14 +1126,15 @@ export async function renderCustomerTable(keepOffset) {
     periodFrom: f.from,
     periodTo: f.to,
     province: f.province,
-    city: f.scopeKind === 'kota' ? f.scopeCode : 'ALL',
-    outlet: f.scopeKind === 'pos' ? f.scopeCode : null,
+    city: f.cityCode,
+    outlet: f.outletCode !== 'ALL' ? f.outletCode : null,
     query: ($('mkon-search').value || '').trim(),
     // Tabel konsumen tidak menyimpan kode dealer — itu milik tabel outlets di database
     // yang berbeda, jadi tidak bisa di-JOIN. Dealer diterjemahkan di sini jadi daftar
-    // kode pos miliknya.
-    outlets: f.scopeKind === 'dealer'
-      ? S.outlets.filter((o) => o.dealerCode === f.scopeCode).map((o) => o.code) : null,
+    // kode pos miliknya. Server sudah meng-AND-kan city/outlet/outlets kalau lebih
+    // dari satu terisi (browseCustomers()), jadi ketiganya boleh dikirim bersamaan.
+    outlets: f.dealerCode !== 'ALL'
+      ? S.outlets.filter((o) => o.dealerCode === f.dealerCode).map((o) => o.code) : null,
     offset: customerOffset,
   };
 

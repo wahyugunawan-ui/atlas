@@ -14,16 +14,18 @@
  * mengubah angka yang dilihat orang di Master Pos Dealer. Sebelumnya nilainya tinggal
  * di <select> — dan satu set <select> tidak bisa menyimpan empat halaman sekaligus.
  *
- * scopeKind/scopeCode itu SATU slot untuk kota, dealer, dan pos. Alasannya di
- * filters.js; yang penting di sini: dua lingkup aktif bersamaan tidak bisa ditulis.
+ * cityCode/dealerCode/outletCode masing-masing slot sendiri, di-AND-kan — sama seperti
+ * province. Sebelum 2026-08-30 ketiganya berbagi satu slot (scopeKind/scopeCode);
+ * alasan dipecah ada di filters.js.
  */
 export function makeFilter() {
   return {
     from: 'ALL',        // batas bawah periode 'YYYY-MM', 'ALL' = sejak awal
     to: 'ALL',          // batas atas periode 'YYYY-MM', 'ALL' = sampai terbaru
-    province: 'ALL',    // MANDIRI — selalu boleh dipakai bersama slot di bawah
-    scopeKind: null,    // 'kota' | 'dealer' | 'pos' | null
-    scopeCode: 'ALL',
+    province: 'ALL',    // MANDIRI — selalu boleh dipakai bersama tiga field di bawah
+    cityCode: 'ALL',
+    dealerCode: 'ALL',
+    outletCode: 'ALL',
   };
 }
 

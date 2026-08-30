@@ -19,7 +19,7 @@ import {
 import { invalidateSalePoints } from './map.js';
 import { S } from './state.js';
 
-/** Ketiga dropdown yang berebut satu slot. Urutannya urutan tampil di bilah. */
+/** Tiga dropdown lingkup, masing-masing slot sendiri. Urutannya urutan tampil di bilah. */
 const SCOPE_KINDS = ['kota', 'dealer', 'pos'];
 
 /** Halaman yang punya bilah, dan fungsi yang menggambar ulang isinya. */
@@ -156,9 +156,9 @@ export function fillFilterBar() {
 /**
  * Tulis nilai halaman yang sedang aktif ke bilah.
  *
- * Satu arah saja: objek -> DOM. Inilah yang membuat aturan saling-eksklusif tidak
- * perlu kode "reset yang sebelumnya" — dua dari tiga dropdown lingkup otomatis kembali
- * ke "Semua ..." karena slotnya memang cuma satu.
+ * Satu arah saja: objek -> DOM. Ketiga dropdown lingkup (kota/dealer/pos) independen
+ * sejak 2026-08-30 — semuanya bisa menunjukkan pilihan aktif sekaligus, bukan cuma
+ * satu yang tidak "Semua ...".
  */
 export function syncFilterBar() {
   const f = pageFilters();

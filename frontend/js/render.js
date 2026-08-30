@@ -262,7 +262,7 @@ function dealerCardHtml(compact) {
   // Seluruh pos milik dealer ini pada periode dan wilayah aktif — TIDAK ikut
   // dipersempit filter pos. Yang ditanyakan kartu ini memang rekap dealernya.
   const f = pageFilters();
-  const city = f.scopeKind === 'kota' ? f.scopeCode : 'ALL';
+  const city = f.cityCode;
   const rows = S.sales.filter((r) => {
     if (r.dealer !== code) return false;
     if (f.from !== 'ALL' && r.period < f.from) return false;
@@ -338,7 +338,11 @@ export function renderDealerCard() {
 }
 
 export function closeDealerCard() {
-  clearScope();
+  // Kartu ini muncul kalau pos ATAU dealer aktif (activeDealerCode() di atas cek
+  // dua-duanya) — menutupnya harus melepas dua-duanya, kalau tidak kartunya muncul
+  // lagi begitu renderAll() berikutnya jalan.
+  clearScope('pos');
+  clearScope('dealer');
   window.renderAll();
 }
 

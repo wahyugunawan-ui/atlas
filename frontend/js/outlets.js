@@ -77,7 +77,7 @@ export function moveTooltip(event) {
 export function selectOutlet(code) { applyScope('pos', code); }
 
 export function closeSelectionInfo() {
-  clearScope();
+  clearScope('pos');
   window.renderAll();
 }
 
