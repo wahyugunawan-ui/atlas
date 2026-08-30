@@ -148,6 +148,83 @@ cuma perluasan ke Sulawesi ke timur.
 
 ## Selesai
 
+### Panel wilayah jadi 4 blok: Overview, Sales, Distribution, Business Reference (2026-08-30)
+
+Permintaan tim: rombak panel info kelurahan/kota/dealer jadi 4 blok berjenjang
+(Identitas Wilayah → Actual Sales → Sales Contribution → Relative Sales Position →
+Business Reference), dengan dua mode heatmap dan benchmark bisnis yang bisa
+dikonfigurasi. Spesifikasi aslinya ditulis untuk WebGIS generik (menyebut
+"OpenSearch" untuk batas wilayah, mengasumsikan infrastruktur admin/audit-log yang
+tidak ada di sini) — sebelum menulis rencana, kodenya diaudit dulu: heatmap
+TERNYATA sudah persentil-based (`colors.js`), tapi filter kota/dealer/pos berbagi
+satu slot (mutually exclusive), dan tidak ada tabel/klasifikasi kontribusi %
+sama sekali. Lima bagian, lima commit, tiap bagian lulus tes penuh sebelum lanjut.
+
+**1. Filter jadi tiga slot independen (`21c8787`).** `cityCode`/`dealerCode`/
+`outletCode` masing-masing slot sendiri di `S.filters[page]`, di-AND-kan — bukan lagi
+`scopeKind`/`scopeCode` tunggal yang saling menghapus. Digeneralisasi ke pos juga
+(bukan cuma kota+dealer yang diminta): mengecualikan satu dari tiga field lebih
+rumit daripada memperlakukan ketiganya seragam, dan polanya sudah ada dari
+`province` yang independen sejak awal. `clearScope(kind)` sekarang bisa
+menargetkan satu slot saja — empat pemanggil lama diperbaiki sesuai maksud
+aslinya (tiga di antaranya ternyata cuma bermaksud melepas satu slot, bukan
+mereset semuanya). Diverifikasi: pilih kabupaten DAN dealer sekaligus, keduanya
+tetap aktif, dan mengganti salah satu benar-benar mengubah angka (bukti AND
+sungguhan).
+
+**2. `sales-stats.js` + config Business Reference (`951bfd0`).** Modul murni baru,
+gaya sama dengan `colors.js`: `contributionPercent`/`contributionsForRows`
+(kontribusi % kelurahan terhadap total KOTANYA SENDIRI, bukan global),
+`relativePosition` (bungkus `percentileBreaks`/`classOf` yang SUDAH ADA, label
+baru Terbawah/Bawah/Tengah/Atas/Teratas), `fixedContributionClass` (6 kelas
+interval tetap dari spek), `referenceGap`/`referenceRatio`. `businessReferencePercent`
+baru di `config.js` (`BUSINESS_REFERENCE_PERCENT`, default 1%, env var biasa —
+bukan rahasia), dikirim lewat `summary()`. Tanpa UI admin atau audit log —
+keputusan "config sederhana", lihat DECISIONS.md.
+
+**3. Panel kelurahan jadi 4 blok (`0f19e79`).** `openVillageDetail()` dirombak:
+kartu ringkas 4 angka di atas (Total, Kontribusi, badge Posisi Relatif, Acuan
+Bisnis), grafik tren bulanan ApexCharts (kalau rentang periode aktif >1 bulan dan
+ada datanya — kalau tidak, "Data belum tersedia atau filter cuma satu bulan"),
+blok Distribution (Peringkat X/Y di kota, Rata-rata Kota) di atas daftar
+"Penjualan per Pos" yang sudah ada, blok Business Reference (Selisih/Rasio
+terhadap acuan) di bawahnya. Panel dilebarkan w-80 → w-96. Konsumen dan tautan
+"kembali ke dealer" tidak berubah, cuma posisinya bergeser.
+
+**4. Panel ringkasan kota (baru) + kartu ringkas dealer (`96355c5`).**
+`openCitySummary(cityCode)` baru, dipicu dari dropdown Kabupaten waktu tidak ada
+kelurahan spesifik aktif. `openDealerDetail()` dapat baris ringkas gaya sama di
+atas breakdown kota→kelurahan yang sudah ada. `renderAll()` diperluas:
+`S.panelView.kind === 'city'` digambar ulang seperti `'dealer'` yang sudah ada,
+plus aturan baru — kelurahan yang sedang terbuka jadi di luar filter kota aktif →
+panel berganti jadi ringkasan kota itu. Panel yang ditutup manual tetap tertutup
+(tidak ada logika "selalu tampil selama filter aktif" yang membukanya lagi sendiri).
+
+**5. Peta ganti default + dua mode heatmap (`107e624`).** `paintChoropleth()`
+tidak lagi mewarnai dari unit mentah — sumbernya sekarang Kontribusi Penjualan.
+**Ini perubahan visual nyata terhadap peta yang sudah dipakai tim sehari-hari,
+dikonfirmasi dan disetujui, bukan efek samping.** Toggle baru di panel Opsi Peta:
+"Per Peringkat Relatif" (bawaan, mesin persentil yang SAMA dengan sebelumnya, cuma
+input beda) dan "Per Nilai Kontribusi" (6 kelas interval tetap dari spek).
+`classRanges()` dapat parameter formatter opsional (backward-compatible) supaya
+legenda bisa menampilkan label persen.
+
+**Tes**: dari 24 jadi 26 berkas hijau (`business-reference.test.js`,
+`sales-stats.test.js` baru; `filters.test.js`, `colors.test.js`, `coverage-store.test.js`
+diperluas). Semua logika baru diuji mutasi.
+
+**Diverifikasi di browser terhadap data production sungguhan** di tiap bagian —
+bukan cuma `npm test`. Contoh: kelurahan Pondokrejo (Sleman) → kontribusi 0,09%,
+posisi Terbawah, acuan 9% dari 1%, selisih -0,91 poin — cocok hitungan manual.
+Kabupaten Sleman → 86 kelurahan, kontribusi rata-rata 1,16%, distribusi ~17/kelompok
+(seperlima dari 86, sesuai kuantil). Mode heatmap: kedua mode menghasilkan warna
+dan legenda yang berbeda dan konsisten dengan angka aslinya.
+
+**Sengaja di luar cakupan** (sesuai penutup spek sendiri): Market Potential, Sales
+Gap, Coverage Gap, Opportunity Score, Recommended Action — tahap berikutnya, bukan
+bagian dari 4 blok ini. Audit log perubahan Business Reference dan UI admin untuk
+mengubahnya — di luar cakupan sesuai keputusan "config sederhana".
+
 ### Master Dealer terpisah dari Master Pos, impor massal pos, skrip koordinat (2026-08-30)
 
 Dipicu oleh `Dealer & POS_.xlsx` dari AHM. Audit sebelum mulai (dicatat di rencana,

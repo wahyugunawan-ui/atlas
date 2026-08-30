@@ -939,3 +939,80 @@ manusia lewat editor yang sudah ada. Kode pos di Excel yang belum ada di databas
 cuma dilaporkan, tidak pernah dibuat otomatis — sheet ini tidak punya dealer induk
 untuk dijadikan outlet baru yang valid, dan CLAUDE.md melarang menebak identitas dari
 nama.
+
+## [2026-08-30] Filter kota/dealer/pos digeneralisasi jadi tiga slot independen
+
+**Konteks:** Panel ringkasan baru untuk tim channel butuh kota DAN dealer aktif
+bersamaan (mis. "penjualan Dealer A di Kota Yogyakarta"). Sebelumnya kota, dealer,
+dan pos berbagi SATU slot (`scopeKind`/`scopeCode`) — mutually exclusive by design,
+sengaja begitu sejak filter direstrukturisasi (lihat entri 2026-08-29 "Nilai filter
+di objek per halaman").
+**Keputusan:** Tiga field independen (`cityCode`/`dealerCode`/`outletCode`), semuanya
+di-AND-kan — bukan cuma kota+dealer yang diminta, tapi ketiganya. Pola yang sama
+dengan `province`, yang sudah independen sejak awal.
+**Alasan:** Mengecualikan satu dari tiga field (pos tetap eksklusif, kota+dealer
+independen) butuh percabangan khusus di `activeRows()`, `salePointFilter()`, dan
+setiap pemanggil manual yang menyaring `scopeKind`/`scopeCode` — sementara
+memperlakukan ketiganya seragam justru kodenya LEBIH SEDIKIT (satu pola AND yang
+sama untuk tiga field, bukan dua pola berbeda).
+**Alternatif yang ditolak:** Menambah field keempat "kombinasi kota+dealer" khusus di
+samping slot lama — ditolak, itu state ganda untuk fakta yang sama dan cara pasti
+menyimpang begitu satu jalur update lupa menyentuh salah satunya.
+**Konsekuensi:** `clearScope()` yang tadinya selalu mengosongkan satu-satunya slot
+sekarang menerima `kind` opsional. Empat pemanggil lama diperiksa ulang satu per satu
+untuk memastikan maksudnya benar (tiga di antaranya ternyata cuma bermaksud melepas
+SATU slot spesifik — menutup info pos, menutup kartu dealer — bukan mereset
+semuanya, dan sebelumnya kebetulan benar karena memang cuma ada satu slot untuk
+dilepas). `test/filters.test.js` dibalik: yang tadinya menguji SALING MENGOSONGKAN
+sekarang menguji KEDUANYA TETAP AKTIF bersamaan.
+
+## [2026-08-30] Business Reference: nilai config sederhana, bukan sistem audit-log
+
+**Konteks:** Panel wilayah baru butuh "acuan bisnis" (Business Reference) — angka
+persentase dari Marketing/Head Department untuk dibandingkan dengan Kontribusi
+Penjualan tiap kelurahan. Spesifikasi awal (ditulis untuk WebGIS enterprise generik)
+minta ini bisa diubah lewat konfigurasi terpusat dengan audit log (waktu perubahan,
+siapa yang mengubah, nilai lama/baru), cakupan bertingkat (global/kota/dealer/periode),
+dan validasi format.
+**Keputusan:** Satu nilai `businessReferencePercent` di `config.js`, dibaca dari env
+var `BUSINESS_REFERENCE_PERCENT` (default 1%). Tanpa UI admin, tanpa audit log, tanpa
+cakupan bertingkat. Mengubahnya: edit `.env`, restart server.
+**Alasan:** CLAUDE.md eksplisit — aplikasi ini untuk tim 5-20 orang non-IT TANPA tim
+IT. Sistem audit-log dengan cakupan bertingkat adalah infrastruktur untuk organisasi
+yang punya admin console dan proses change-management; membangunnya di sini adalah
+kerja besar untuk kebutuhan yang belum pernah diminta secara konkret ("kalau nanti
+manajemen benar-benar butuh riwayat perubahan, itu permintaan baru dengan konteks
+sungguhan, bukan diasumsikan sekarang").
+**Alternatif yang ditolak:** Tabel `business_reference` di database dengan riwayat
+perubahan — ditolak untuk rilis ini; disebut eksplisit di rencana sebagai kandidat
+kalau kebutuhannya muncul nyata nanti.
+**Konsekuensi:** Perubahan acuan butuh akses ke server (edit `.env` + restart) — tidak
+bisa diubah tim channel sendiri lewat UI. Tidak ada jejak siapa mengubah kapan. Kalau
+kebutuhan itu muncul konkret, migrasinya jadi rencana terpisah (tabel + rute admin +
+kolom `changed_by`/`changed_at`), bukan tambal di config.js.
+
+## [2026-08-30] Peta ganti metrik pewarnaan default: Kontribusi Penjualan, bukan unit mentah
+
+**Konteks:** Choropleth peta sejak awal mewarnai kelurahan berdasar persentil UNIT
+PENJUALAN MENTAH yang sedang tampil (`percentileBreaks` atas `sumBy(rows,'village')`).
+Permintaan panel 4-blok butuh "Sales Contribution" — % kontribusi kelurahan terhadap
+total KOTANYA SENDIRI — sebagai metrik utama, dan peta idealnya konsisten dengan
+angka yang ditampilkan di panel.
+**Keputusan:** `paintChoropleth()` diganti total: sumber nilainya sekarang kontribusi
+% per kelurahan (`contributionsForRows()`), bukan unit mentah. Ini metrik DEFAULT
+baru untuk semua orang, bukan opsi tersembunyi.
+**Alasan:** Dikonfirmasi eksplisit ke pengguna sebelum dikerjakan (bukan diasumsikan)
+— lihat rencana `revisi-pra-present-ho-zazzy-grove.md`. Dua metrik yang berbeda
+makna (unit mentah = volume, kontribusi % = konsentrasi/dominasi di kotanya sendiri)
+menampilkan warna yang beda untuk kelurahan yang sama, dan membiarkan panel bicara
+kontribusi % sementara peta tetap bicara unit mentah akan membingungkan — dua sumber
+kebenaran untuk "kelurahan mana yang penting" tanpa ada yang tahu yang mana benar.
+**Alternatif yang ditolak:** Menjadikan kontribusi % opsi TAMBAHAN dengan unit mentah
+tetap jadi default — ditolak secara eksplisit oleh pengguna waktu ditanya langsung,
+demi konsistensi peta ↔ panel.
+**Konsekuensi:** Tampilan peta yang sudah dipakai tim sehari-hari BERUBAH — kelurahan
+kecil yang dominan di kotanya sendiri sekarang bisa terlihat gelap meski unit
+mentahnya kecil dibanding kelurahan di kota besar lain. Mode kedua ("Per Nilai
+Kontribusi", interval tetap dari spek) ditambahkan sebagai alternatif eksplisit lewat
+toggle, bukan pengganti — defaultnya tetap "Per Peringkat Relatif" (persentil, mesin
+yang sama dengan sebelumnya, cuma input berbeda).
