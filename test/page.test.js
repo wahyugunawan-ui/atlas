@@ -210,15 +210,20 @@ function test() {
     'jadi begitu bilahnya di dalam, dia ikut menggulir pergi — dan tidak ada CSS yang ' +
     'menahannya, karena memang tidak pernah dipasang position:sticky');
 
-  // Halaman Import tidak punya filter, jadi bilahnya disembunyikan di sana. Kalau
-  // baris ini hilang, bilah yang tidak mengendalikan apa pun tetap tampil dan
-  // menyaring di situ terasa seperti aplikasinya rusak.
+  // Halaman Import dan Master Dealer tidak punya filter (periode/kelurahan tidak
+  // berlaku), jadi bilahnya disembunyikan di situ. Kalau baris ini hilang, bilah yang
+  // tidak mengendalikan apa pun tetap tampil dan menyaring di situ terasa seperti
+  // aplikasinya rusak.
   const switchBody = source['tables.js'].slice(
     source['tables.js'].indexOf('export function switchTab'));
-  assert.match(switchBody.slice(0, switchBody.indexOf('\n}')),
-    /filter-bar'\)\.classList\.toggle\('hidden', name === 'import'\)/,
-    'switchTab tidak lagi menyembunyikan bilah filter di halaman Import');
-  assert.match(switchBody.slice(0, switchBody.indexOf('\n}')), /S\.filterPage = name/,
+  const switchBodyFn = switchBody.slice(0, switchBody.indexOf('\n}'));
+  assert.match(switchBodyFn, /filter-bar'\)\.classList\.toggle\('hidden',/,
+    'switchTab tidak lagi menyembunyikan bilah filter');
+  const daftarTanpaFilter = /const TANPA_FILTER = (\[[^\]]*\]);/.exec(switchBodyFn);
+  assert.ok(daftarTanpaFilter, 'daftar halaman tanpa bilah filter tidak ditemukan di switchTab');
+  assert.match(daftarTanpaFilter[1], /'import'/, 'halaman Import tidak dikecualikan dari bilah filter');
+  assert.match(daftarTanpaFilter[1], /'dealer'/, 'halaman Master Dealer tidak dikecualikan dari bilah filter');
+  assert.match(switchBodyFn, /S\.filterPage = name/,
     'switchTab tidak menyetel halaman filter yang aktif — tabelnya akan digambar ' +
     'dengan filter halaman sebelumnya');
 

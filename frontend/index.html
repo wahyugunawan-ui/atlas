@@ -236,6 +236,7 @@
     <button onclick="switchTab('peta')" id="nav-peta" class="nav-btn active whitespace-nowrap flex items-center px-4 py-2.5 rounded-xl text-sm font-semibold"><i class="ph ph-squares-four text-lg mr-2"></i> Insight &amp; Peta</button>
     <button onclick="switchTab('import')" id="nav-import" class="nav-btn whitespace-nowrap flex items-center px-4 py-2.5 rounded-xl text-sm font-semibold"><i class="ph ph-upload-simple text-lg mr-2"></i> Import Data</button>
     <button onclick="switchTab('pos')" id="nav-pos" class="nav-btn whitespace-nowrap flex items-center px-4 py-2.5 rounded-xl text-sm font-semibold"><i class="ph ph-storefront text-lg mr-2"></i> Master Pos Dealer</button>
+    <button onclick="switchTab('dealer')" id="nav-dealer" class="nav-btn whitespace-nowrap flex items-center px-4 py-2.5 rounded-xl text-sm font-semibold"><i class="ph ph-buildings text-lg mr-2"></i> Master Dealer</button>
     <button onclick="switchTab('konsumen')" id="nav-konsumen" class="nav-btn whitespace-nowrap flex items-center px-4 py-2.5 rounded-xl text-sm font-semibold"><i class="ph ph-users-three text-lg mr-2"></i> Data Konsumen</button>
     <button onclick="switchTab('kelurahan')" id="nav-kelurahan" class="nav-btn whitespace-nowrap flex items-center px-4 py-2.5 rounded-xl text-sm font-semibold"><i class="ph ph-map-pin-line text-lg mr-2"></i> Master Kelurahan</button>
   </div>
@@ -625,6 +626,34 @@
   </div>
 </section>
 
+<section id="tab-dealer" class="hidden p-4 md:p-6 h-full flex flex-col gap-4">
+  <div class="shrink-0 flex flex-col md:flex-row md:items-end justify-between gap-3">
+    <div>
+      <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900">Master Dealer</h1>
+      <p class="text-sm text-slate-500 mt-0.5"><span id="dealer-count">0</span> dealer</p>
+    </div>
+    <div class="flex gap-2">
+      <button onclick="openNewDealer()" style="background:var(--astra-navy)" class="px-4 py-2 rounded-xl text-white text-sm font-semibold hover:opacity-90 whitespace-nowrap"><i class="ph ph-plus mr-1"></i>Tambah Dealer</button>
+      <input id="mdeal-search" oninput="renderDealerTable()" type="text" placeholder="Cari nama atau kode dealer..." class="px-3 py-2 rounded-xl border border-slate-200 text-sm w-64">
+    </div>
+  </div>
+  <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex-1 min-h-0 flex flex-col">
+    <div class="overflow-auto flex-1 min-h-0">
+      <table class="w-full">
+        <thead class="sticky top-0 z-10 shadow-sm" style="background:#eef1f7"><tr>
+          <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Kode</th>
+          <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Nama Dealer</th>
+          <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Alamat</th>
+          <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Koordinat</th>
+          <th class="px-3 py-2.5 text-right text-[11px] font-bold text-slate-500 uppercase">Jumlah Pos</th>
+          <th class="px-3 py-2.5 text-center text-[11px] font-bold text-slate-500 uppercase">Aksi</th>
+        </tr></thead>
+        <tbody id="table-dealer-body" class="text-sm divide-y divide-slate-100"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
 <section id="tab-konsumen" class="hidden p-4 md:p-6 h-full flex flex-col gap-4">
   <div class="flex flex-col md:flex-row md:items-end justify-between gap-3">
     <div>
@@ -719,6 +748,56 @@
       <button id="np-simpan" onclick="saveNewOutlet()" style="background:var(--astra-navy)" class="flex-1 px-4 py-2.5 rounded-xl text-white text-sm font-bold hover:opacity-90">Tambah</button>
       <button onclick="closeNewOutlet()" class="px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600">Batal</button>
     </div>
+  </div>
+</div>
+
+<div id="modal-dealer-baru" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[300] flex items-center justify-center p-4" onclick="if(event.target===this) closeNewDealer()">
+  <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 relative rise-in">
+    <button onclick="closeNewDealer()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><i class="ph ph-x text-xl"></i></button>
+    <div class="text-lg font-extrabold text-slate-800 pr-8">Tambah Dealer</div>
+    <p class="text-xs text-slate-400 mb-4">Kodenya diturunkan otomatis dari nama, tidak perlu diisi.</p>
+
+    <label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Nama dealer</label>
+    <input id="nd-nama" type="text" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm mb-3">
+
+    <label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Alamat</label>
+    <textarea id="nd-alamat" rows="2" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm mb-3"></textarea>
+
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Lintang</label>
+        <input id="nd-lat" type="text" inputmode="decimal" placeholder="-6.20876" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm mono"></div>
+      <div><label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Bujur</label>
+        <input id="nd-lng" type="text" inputmode="decimal" placeholder="106.84559" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm mono"></div>
+    </div>
+    <p class="text-[11px] text-slate-400 mt-1 mb-3">Boleh dikosongkan. Kantor dealer boleh di luar wilayah peta.</p>
+
+    <div id="nd-pesan" class="text-xs mb-3"></div>
+    <div class="flex gap-2">
+      <button id="nd-simpan" onclick="saveNewDealer()" style="background:var(--astra-navy)" class="flex-1 px-4 py-2.5 rounded-xl text-white text-sm font-bold hover:opacity-90">Tambah</button>
+      <button onclick="closeNewDealer()" class="px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600">Batal</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-dealer" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[300] flex items-center justify-center p-4" onclick="if(event.target===this) closeDealerEditor()">
+  <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 relative rise-in">
+    <button onclick="closeDealerEditor()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><i class="ph ph-x text-xl"></i></button>
+    <div class="text-lg font-extrabold text-slate-800 pr-8" id="sd-nama"></div>
+    <div class="text-xs mono text-slate-400 mb-4" id="sd-kode"></div>
+
+    <label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Alamat</label>
+    <textarea id="sd-alamat" rows="2" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm mb-3"></textarea>
+
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Lintang</label>
+        <input id="sd-lat" type="text" inputmode="decimal" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm mono"></div>
+      <div><label class="block text-[11px] uppercase font-bold text-slate-400 mb-1">Bujur</label>
+        <input id="sd-lng" type="text" inputmode="decimal" class="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm mono"></div>
+    </div>
+    <p class="text-[11px] text-slate-400 mt-1.5 mb-3">Boleh dikosongkan. Kantor dealer boleh di luar wilayah peta.</p>
+
+    <div id="sd-pesan" class="text-xs mb-3"></div>
+    <button onclick="saveDealerEditor()" id="sd-simpan" class="w-full px-4 py-2.5 rounded-xl text-white text-sm font-bold" style="background:var(--astra-navy)">Simpan</button>
   </div>
 </div>
 

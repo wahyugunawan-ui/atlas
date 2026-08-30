@@ -43,6 +43,7 @@ export const S = {
   // --- dari server ---
   villages: [],            // [{code, name, district, cityCode, cityName, provinceCode, lat, lng}]
   outlets: [],             // [{code, name, dealerCode, dealerName, address, lat, lng}]
+  dealers: [],             // [{code, name, address, lat, lng, outletCount}]
   sales: [],               // [{period, village, outlet, dealer, units}]
   periods: [],
   lastImport: null,
@@ -53,6 +54,7 @@ export const S = {
   // --- indeks, dibangun sekali saat muat ---
   villageByCode: {},
   outletByCode: {},
+  dealerByCode: {},
   dealerNames: {},
   cityNames: {},
   registry: null,          // warna dealer
@@ -96,6 +98,7 @@ export const S = {
   // --- mode dan suntingan ---
   fullscreen: false,
   editing: null,           // kode outlet yang sedang disunting
+  editingDealer: null,     // kode dealer yang sedang disunting
   pickingOnMap: false,     // menunggu klik di peta untuk mengambil koordinat
 
   // --- konsumen kelurahan yang sedang dibuka; diambil per permintaan ---

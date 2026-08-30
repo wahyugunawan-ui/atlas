@@ -2,8 +2,8 @@
  * Panel rincian kelurahan, tabel master, dan perpindahan tab.
  */
 import {
-  browseCustomers, createOutlet, deleteAlias, fetchAliases, fetchCustomers,
-  resetOutlets, saveAlias, saveOutlet,
+  browseCustomers, createDealer, createOutlet, deleteAlias, deleteDealer, fetchAliases,
+  fetchCustomers, resetOutlets, saveAlias, saveDealer, saveOutlet,
 } from './api.js';
 import { dealerColor } from './colors.js';
 import {
@@ -445,11 +445,8 @@ export function openOutletEditor(code) {
   $('sp-lat').value = outlet.lat == null ? '' : outlet.lat;
   $('sp-lng').value = outlet.lng == null ? '' : outlet.lng;
 
-  // Daftar dealer dibangun dari outlet yang ada, bukan dari daftar terpisah — dealer
-  // memang cuma "kumpulan pos dengan kode yang sama", jadi tidak ada tabel dealer yang
-  // bisa menyimpang dari kenyataan.
-  const namaDealer = [...new Set(S.outlets.map((o) => o.dealerName).filter(Boolean))]
-    .sort((a, b2) => a.localeCompare(b2));
+  // Dari Master Dealer, termasuk dealer yang belum punya pos sama sekali.
+  const namaDealer = S.dealers.map((d) => d.name).sort((a, b2) => a.localeCompare(b2));
   $('sp-dealer').innerHTML = namaDealer
     .map((nama) => `<option value="${esc(nama)}">${esc(nama)}</option>`).join('') +
     `<option value="${DEALER_BARU}">+ tambahkan dealer induk</option>`;
@@ -734,10 +731,9 @@ function pesanModal(id, teks, jenis) {
     (jenis === 'error' ? 'text-red-600' : 'text-emerald-600');
 }
 
-/** Isi dropdown dealer dengan yang sudah ada, plus pilihan membuat baru. */
+/** Isi dropdown dealer dengan yang sudah ada di Master Dealer, plus pilihan membuat baru. */
 function isiDealer(selectId, inputId) {
-  const nama = [...new Set(S.outlets.map((o) => o.dealerName).filter(Boolean))]
-    .sort((a, b) => a.localeCompare(b));
+  const nama = S.dealers.map((d) => d.name).sort((a, b) => a.localeCompare(b));
   $(selectId).innerHTML = nama
     .map((x) => `<option value="${esc(x)}">${esc(x)}</option>`).join('') +
     `<option value="${DEALER_BARU}">+ tambahkan dealer induk</option>`;
@@ -804,6 +800,149 @@ export async function saveNewOutlet() {
   } finally {
     tombol.disabled = false;
     tombol.textContent = 'Tambah';
+  }
+}
+
+/* ==========================================================================
+   MASTER DEALER
+   ==========================================================================
+   Terpisah dari Master Pos sejak dealers jadi tabel sendiri di server. Kode dealer
+   tidak pernah diketik di sini — selalu turunan nama, ditentukan server.
+   ========================================================================== */
+
+export function renderDealerTable() {
+  const query = ($('mdeal-search').value || '').toLowerCase();
+  const list = S.dealers
+    .filter((d) => !query || d.name.toLowerCase().includes(query) || d.code.toLowerCase().includes(query))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  $('dealer-count').textContent = formatNumber(list.length);
+
+  $('table-dealer-body').innerHTML = list.length ? list.map((d) =>
+    `<tr>` +
+    `<td class="px-3 py-2 mono text-xs text-slate-500">${esc(d.code)}</td>` +
+    `<td class="px-3 py-2"><div class="flex items-center gap-2">` +
+    `<span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${esc(dealerColor(S.registry, d.code))}"></span>` +
+    `<span class="font-semibold text-slate-800">${esc(d.name)}</span></div></td>` +
+    `<td class="px-3 py-2 text-slate-600 text-xs">${esc(d.address || '—')}</td>` +
+    `<td class="px-3 py-2 mono text-[10px] text-slate-400">` +
+    (d.lat == null ? '—' : `${esc(Number(d.lat).toFixed(5))}, ${esc(Number(d.lng).toFixed(5))}`) +
+    `</td>` +
+    `<td class="px-3 py-2 text-right font-bold mono text-slate-900">${esc(formatNumber(Number(d.outletCount)))}</td>` +
+    `<td class="px-3 py-2 text-center whitespace-nowrap">` +
+    `<button onclick="openDealerEditor('${esc(d.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-pencil-simple"></i> Edit</button> ` +
+    `<button onclick="deleteDealerConfirm('${esc(d.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-red-200 text-red-700 hover:bg-red-50"><i class="ph ph-trash"></i></button>` +
+    `</td></tr>`).join('')
+    : '<tr><td colspan="6" class="text-center py-8 text-slate-400 text-sm">Tidak ada dealer yang cocok.</td></tr>';
+}
+
+export function openNewDealer() {
+  ['nd-nama', 'nd-alamat', 'nd-lat', 'nd-lng'].forEach((id) => { $(id).value = ''; });
+  pesanModal('nd-pesan', '');
+  $('modal-dealer-baru').classList.remove('hidden');
+  $('nd-nama').focus();
+}
+
+export function closeNewDealer() {
+  $('modal-dealer-baru').classList.add('hidden');
+}
+
+export async function saveNewDealer() {
+  const name = $('nd-nama').value.trim();
+  const lat = $('nd-lat').value.trim();
+  const lng = $('nd-lng').value.trim();
+  if (!name) return pesanModal('nd-pesan', 'Nama dealer wajib diisi.', 'error');
+  if (Boolean(lat) !== Boolean(lng)) {
+    return pesanModal('nd-pesan', 'Isi lintang dan bujur dua-duanya, atau kosongkan dua-duanya.', 'error');
+  }
+
+  const tombol = $('nd-simpan');
+  tombol.disabled = true;
+  tombol.textContent = 'Menyimpan...';
+  pesanModal('nd-pesan', '');
+  try {
+    await createDealer({
+      dealerName: name,
+      address: $('nd-alamat').value.trim(),
+      lat: lat || null,
+      lng: lng || null,
+    });
+    closeNewDealer();
+    toast(`Dealer ${name} ditambahkan.`, 'ok');
+    await window.reloadSummary();
+    renderDealerTable();
+  } catch (error) {
+    pesanModal('nd-pesan', error.message, 'error');
+  } finally {
+    tombol.disabled = false;
+    tombol.textContent = 'Tambah';
+  }
+}
+
+export function openDealerEditor(code) {
+  const dealer = S.dealerByCode[code];
+  if (!dealer) return;
+  S.editingDealer = code;
+  $('sd-nama').textContent = dealer.name;
+  $('sd-kode').textContent = `${dealer.code} · ${formatNumber(Number(dealer.outletCount))} pos`;
+  $('sd-alamat').value = dealer.address || '';
+  $('sd-lat').value = dealer.lat == null ? '' : dealer.lat;
+  $('sd-lng').value = dealer.lng == null ? '' : dealer.lng;
+  pesanModal('sd-pesan', '');
+  $('modal-dealer').classList.remove('hidden');
+}
+
+export function closeDealerEditor() {
+  $('modal-dealer').classList.add('hidden');
+  S.editingDealer = null;
+}
+
+export async function saveDealerEditor() {
+  const code = S.editingDealer;
+  if (!code) return;
+  const lat = $('sd-lat').value.trim();
+  const lng = $('sd-lng').value.trim();
+  if (Boolean(lat) !== Boolean(lng)) {
+    return pesanModal('sd-pesan', 'Isi lintang dan bujur dua-duanya, atau kosongkan dua-duanya.', 'error');
+  }
+
+  const tombol = $('sd-simpan');
+  tombol.disabled = true;
+  tombol.textContent = 'Menyimpan...';
+  pesanModal('sd-pesan', '');
+  try {
+    const { dealer } = await saveDealer(code, {
+      address: $('sd-alamat').value.trim(),
+      lat: lat || null,
+      lng: lng || null,
+    });
+    closeDealerEditor();
+    toast('Tersimpan', 'ok');
+    // Nama dealer dipakai di banyak tempat (warna, dropdown pos, treemap) — ambil
+    // ulang seluruh ringkasan daripada menambal setengah keadaan.
+    await window.reloadSummary();
+    renderDealerTable();
+    void dealer;
+  } catch (error) {
+    pesanModal('sd-pesan', error.message, 'error');
+  } finally {
+    tombol.disabled = false;
+    tombol.textContent = 'Simpan';
+  }
+}
+
+/** Server sendiri yang menolak kalau masih ada pos — dialog ini cuma jaga dari klik tidak sengaja. */
+export async function deleteDealerConfirm(code) {
+  const dealer = S.dealerByCode[code];
+  if (!dealer) return;
+  if (!confirm(`Hapus dealer "${dealer.name}"?`)) return;
+  try {
+    await deleteDealer(code);
+    toast(`Dealer ${dealer.name} dihapus.`, 'ok');
+    await window.reloadSummary();
+    renderDealerTable();
+  } catch (error) {
+    toast('Gagal menghapus: ' + error.message, 'error');
   }
 }
 
@@ -1051,7 +1190,7 @@ export async function renderCustomerTable(keepOffset) {
 }
 
 export function switchTab(name) {
-  ['peta', 'import', 'pos', 'konsumen', 'kelurahan'].forEach((tab) => {
+  ['peta', 'import', 'pos', 'dealer', 'konsumen', 'kelurahan'].forEach((tab) => {
     const section = $('tab-' + tab);
     const nav = $('nav-' + tab);
     if (section) section.classList.toggle('hidden', tab !== name);
@@ -1061,15 +1200,18 @@ export function switchTab(name) {
   // Urutannya penting: halaman aktif ditetapkan SEBELUM tabelnya digambar, kalau tidak
   // tabelnya membaca filter halaman sebelumnya. Halaman impor tidak punya filter, dan
   // S.filterPage sengaja tidak diubah waktu masuk ke sana — begitu keluar, halaman
-  // yang tadi ditinggalkan masih ingat filternya.
-  if (name !== 'import') {
+  // yang tadi ditinggalkan masih ingat filternya. Master Dealer sama: dealer tidak
+  // punya periode maupun kelurahan untuk disaring bilah filter.
+  const TANPA_FILTER = ['import', 'dealer'];
+  if (!TANPA_FILTER.includes(name)) {
     S.filterPage = name;
     syncFilterBar();
   }
-  $('filter-bar').classList.toggle('hidden', name === 'import');
+  $('filter-bar').classList.toggle('hidden', TANPA_FILTER.includes(name));
 
   if (name === 'peta' && S.map) setTimeout(() => S.map.resize(), 60);
   if (name === 'pos') renderOutletTable();
+  if (name === 'dealer') renderDealerTable();
   if (name === 'konsumen') renderCustomerTable();
   if (name === 'kelurahan') renderVillageTable();
   if (name === 'import') window.refreshImportTab();

@@ -44,6 +44,8 @@ import {
   renderCustomerTable,
   renderOutletTable, renderVillageTable, saveOutletEditor, searchCustomers, showOnMap,
   switchTab,
+  renderDealerTable, openNewDealer, closeNewDealer, saveNewDealer,
+  openDealerEditor, closeDealerEditor, saveDealerEditor, deleteDealerConfirm,
 } from './tables.js';
 import {
   askDeletePeriod, closeDeletePeriod, confirmDeletePeriod, deletePeriodTyped,
@@ -72,6 +74,8 @@ const HANDLERS = {
   renderCustomerTable, searchCustomers, customerPage, editRingFromTable,
   openNewOutlet, closeNewOutlet, newOutletDealerChanged, saveNewOutlet,
   askResetOutlets, closeResetOutlets, resetOutletsTyped, confirmResetOutlets,
+  renderDealerTable, openNewDealer, closeNewDealer, saveNewDealer,
+  openDealerEditor, closeDealerEditor, saveDealerEditor, deleteDealerConfirm,
   openMatchNames, closeMatchNames, confirmMatch, undoMatch,
   // impor
   importStep, importPeriodChanged, pickFile, fileChosen, dropFile, dragOver, dragLeave,
@@ -156,6 +160,7 @@ export function renderAll() {
 function buildIndexes(data) {
   S.villages = data.villages;
   S.outlets = data.outlets;
+  S.dealers = data.dealers || [];
   S.sales = data.sales;
   S.periods = data.periods;
   S.lastImport = data.lastImport;
@@ -179,10 +184,15 @@ function buildIndexes(data) {
   });
 
   S.outletByCode = {};
+  data.outlets.forEach((o) => { S.outletByCode[o.code] = o; });
+
+  // Dari dealers, bukan diturunkan dari outlets — dealer yang belum punya pos sama
+  // sekali (baru dibuat di Master Dealer) harus tetap muncul di dropdown pos.
+  S.dealerByCode = {};
   S.dealerNames = {};
-  data.outlets.forEach((o) => {
-    S.outletByCode[o.code] = o;
-    S.dealerNames[o.dealerCode] = o.dealerName;
+  S.dealers.forEach((d) => {
+    S.dealerByCode[d.code] = d;
+    S.dealerNames[d.code] = d.name;
   });
 
   // Registry dibangun SEKALI dari seluruh penjualan, bukan dari hasil filter — kalau

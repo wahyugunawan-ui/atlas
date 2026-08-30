@@ -157,6 +157,28 @@ export function saveOutlet(code, patch) {
   });
 }
 
+/** Tambah dealer baru. Kodenya diturunkan server dari nama, tidak dikirim dari sini. */
+export function createDealer(data) {
+  return request(`${API}dealers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}
+
+export function saveDealer(code, patch) {
+  return request(`${API}dealers/${encodeURIComponent(code)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+}
+
+/** Ditolak server (400) kalau dealer masih punya pos. */
+export function deleteDealer(code) {
+  return request(`${API}dealers/${encodeURIComponent(code)}`, { method: 'DELETE' });
+}
+
 /**
  * Unggah berkas bulanan.
  *
