@@ -1200,3 +1200,66 @@ sedikit (`padding-top`) supaya tidak terlalu mepet ke alas segitiga.
 dipakai di template literal JS yang belum pernah muncul di file lain — ini bug KEDUA
 sesi ini yang disebabkan lupa langkah ini (yang pertama: `grid-cols-5` di board
 performa, Bagian B). Dicatat di sini supaya sesi berikutnya tidak mengulanginya lagi.
+
+## [2026-08-31] Ringkasan "Dalam radius" diganti ringkasan kontekstual per filter
+
+**Konteks:** Permintaan Pakbos putaran keempat: ringkasan di atas daftar Performa Pos
+Dealer (sebelumnya selalu "Dalam radius X km", radius-based) diminta berganti isi
+menurut filter yang sedang aktif — Kota/Semua (jumlah desa, total sales, AVG
+kontribusi, AVG posisi relatif), Dealer (+jumlah pos dealer, +AVG acuan bisnis), Pos
+(total penjualan pos + jumlah desa & %kontribusi per ring 1/2/3).
+**Keputusan:** `coverageSummary()` (radius-based) DIHAPUS, diganti `scopeSummary()`
+yang bercabang tiga (`baseScopeSummary`/`dealerScopeSummary`/`posScopeSummary`) atas
+`scopeValue('pos')`/`scopeValue('dealer')`. Kota dan Semua SENGAJA lewat fungsi yang
+SAMA (`baseScopeSummary`) — `activeRows()` sudah otomatis mempersempit isi `rows`
+tanpa perlu kode bercabang terpisah. `villageSalesRows()` (Bagian H2) diubah
+mengembalikan `{list, breaks}` (bukan cuma array) supaya "AVG Posisi Relatif" bisa
+diklasifikasikan pakai `breaks` yang PERSIS SAMA dipakai tiap baris di blok
+Penjualan Wilayah — dikonfirmasi user: AVG posisi relatif = klasifikasikan RATA-RATA
+%kontribusi, bukan rata-rata dari lima label kategorikal (yang tidak bermakna
+matematis). AVG Acuan Bisnis = rata-rata SELISIH (`referenceGap`, poin persentase,
+bisa plus/minus) — dikonfirmasi user, bukan rata-rata rasio.
+**Alasan:** Permintaan eksplisit Pakbos; basis perhitungan (klasifikasi rata-rata,
+bentuk AVG Acuan Bisnis) dikonfirmasi langsung sebelum dikerjakan karena "AVG posisi
+relatif" atas data kategorikal tidak punya definisi tunggal yang jelas.
+**Alternatif yang ditolak:** Ringkasan disembunyikan sama sekali waktu filter
+"Semua" — ditawarkan, ditolak pengguna (dipilih tampil dengan bentuk sama seperti
+Kota, cuma cakupan datanya seluruh project).
+**Konsekuensi:** `splitByCoverage`/`S.radiusM`/`coverage.js` TIDAK dihapus — masih
+dipakai `dealerCardHtml()` dan tooltip kelurahan (`outlets.js`), SEKARANG diam-diam
+terkunci ke default 5000 m karena pemilih radiusnya sendiri dihapus (lihat entri
+berikutnya) — pengguna tidak lagi bisa mengubahnya dari UI. Kalau dua tempat itu
+ternyata juga perlu ikut berubah, itu permintaan terpisah, bukan diasumsikan di sini.
+
+## [2026-08-31] Radius jangkauan (3/5/7/10 km) dan Lingkaran Radius dihapus total, diganti Tampilkan Ring
+
+**Konteks:** Permintaan Pakbos: pemilih radius jangkauan di Opsi Peta ("radius full
+hilang") diganti pilihan tampilan Ring 1/2/3 — menyorot desa yang termasuk ring itu
+milik pos yang sedang dipilih di peta, bukan lagi lingkaran geometris di sekitarnya.
+**Keputusan:** Toggle "Lingkaran Radius" (`opt-radius`), blok pemilih "Radius
+jangkauan" (`pilihan-radius`/`label-radius`), lapisan `radius-isi`/`radius-garis`,
+fungsi `setRadius()`, dan pemanggilan `circle()` di `redrawMap()` DIHAPUS BERSIH dari
+`map.js`/`app.js`/`index.html` (bukan cuma disembunyikan) — dikonfirmasi lewat
+`test/page.test.js` yang secara eksplisit menegaskan ketiadaannya. Diganti
+`setRingView(ring)`/`paintRingView()` (`map.js`) — berbagi lapisan `kel-ring-*` yang
+SAMA dengan mode edit ring (Bagian D3), lazy-load sekali dipakai dua mode. Klik ring
+yang sudah aktif mematikannya (pola sama seperti `setScope()`).
+**Alasan:** Permintaan eksplisit Pakbos, dengan perilaku tampilan (menyorot desa milik
+pos terpilih, bukan sekadar mengganti nama tombol) dikonfirmasi langsung.
+**Konflik yang harus dijaga:** `paintRingView()` (lihat-saja) dan `setRingPaint(draft)`
+(edit, Bagian D3) berbagi layer `kel-ring-isi`/`kel-ring-garis` yang SAMA — kalau
+dua-duanya menulis di layer itu dalam satu saat, salah satu bisa menimpa yang lain
+tanpa peringatan (draft yang sedang disunting bisa "hilang" secara visual). Dijaga
+dua arah: `paintRingView()` diam total selagi `window.ringEditing()` true (dicek di
+awal fungsi), dan `startRingEditFor()` mematikan `S.ringView` begitu masuk mode edit.
+`redrawMap()` (jalan tiap `renderAll()`) memanggil `paintRingView()` supaya ganti pos
+otomatis memperbarui sorotan — INI JUGA berarti kalau proteksi di atas lupa
+dipasang, sorotan lihat-saja akan menimpa draft edit berkali-kali per detik, bukan
+kejadian langka yang gampang terlewat waktu menguji.
+**Konsekuensi:** `S.radiusM`/`S.coverageAll`/`S.radiiM` TETAP ADA di state.js (dipakai
+`dealerCardHtml()`/tooltip, lihat entri di atas) tapi TIDAK LAGI ada UI yang
+mengubahnya — nilainya diam-diam tetap di default 5000 m selamanya kecuali kode lain
+mengubahnya secara terprogram. `circle()` di `geo.js` TIDAK dihapus (fungsi geometri
+generik, diuji terpisah di `test/geo.test.js`, dan CLAUDE.md tidak melarang
+menyimpan utilitas murni yang sedang tidak dipakai) — cuma pemanggilnya di `map.js`
+yang hilang.

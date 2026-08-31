@@ -117,6 +117,9 @@ export const S = {
   radiusM: 5000,
   radiiM: [5000],
   coverageReady: false,
+  // Mode Tampilkan Ring (Bagian I, pengganti pilihan Radius jangkauan yang lama):
+  // 1|2|3 kalau sedang menyorot ring itu untuk pos yang dipilih, null kalau mati.
+  ringView: null,
 
   // --- mode dan suntingan ---
   fullscreen: false,

@@ -97,6 +97,11 @@ async function startRingEditFor(outletCode) {
   posEdit = outletCode;
   draft = Object.assign({}, S.rings[outletCode] || {});
 
+  // Mode Tampilkan Ring (Bagian I) dan mode edit berbagi layer kel-ring-* yang sama
+  // — matikan sorotan lihat-saja begitu masuk mode edit, supaya dua-duanya tidak
+  // berebut mewarnai layer yang sama (lihat paintRingView() di map.js).
+  S.ringView = null;
+
   $('ring-nama').textContent = outlet.name;
   $('ring-bar').classList.remove('hidden');
   renderRingBar();

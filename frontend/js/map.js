@@ -8,7 +8,7 @@ import { classOf, dealerColor, percentileBreaks, RAMP, COLOR_EMPTY } from './col
 import { $, bbox, sumBy, toast } from './dom.js';
 import { fetchGeo } from './api.js';
 import { activeRows, pageFilters, scopeValue } from './filters.js';
-import { circle, EMPTY_COLLECTION } from './geo.js';
+import { EMPTY_COLLECTION } from './geo.js';
 import { contributionsForRows, fixedContributionClass } from './sales-stats.js';
 import { S } from './state.js';
 
@@ -150,16 +150,6 @@ export function addLayers() {
       'text-size': 13, 'text-allow-overlap': false,
     },
     paint: { 'text-color': '#e2231a', 'text-halo-color': '#ffffff', 'text-halo-width': 1.6 },
-  });
-
-  S.map.addSource('radius', { type: 'geojson', data: EMPTY_COLLECTION });
-  S.map.addLayer({
-    id: 'radius-isi', type: 'fill', source: 'radius',
-    paint: { 'fill-color': '#0b2f6b', 'fill-opacity': 0.05 },
-  });
-  S.map.addLayer({
-    id: 'radius-garis', type: 'line', source: 'radius',
-    paint: { 'line-color': '#0b2f6b', 'line-width': 1.6, 'line-dasharray': [2, 2] },
   });
 
   // Titik penjualan: lapisan circle, BUKAN marker DOM. Delapan belas ribu elemen DOM
@@ -340,6 +330,76 @@ export function setRingPaint(draft) {
     Object.keys(draft).length ? opasitas : 0.06);
 }
 
+/* ==========================================================================
+   TAMPILKAN RING — pengganti pilihan Radius jangkauan (Bagian I, 2026-08-31)
+   ==========================================================================
+   Beda dari setRingPaint() di atas (mode EDIT, mewarnai draft tiga ring sekaligus):
+   ini mode LIHAT SAJA, menyorot SATU ring pilihan milik pos yang sedang dipilih —
+   permintaan Pakbos menggantikan lingkaran radius yang sebelumnya di sini. Berbagi
+   layer kel-ring-* yang SAMA dengan mode edit (lazy-load sekali, dipakai dua mode)
+   — makanya startRingEdit() mematikan S.ringView, supaya dua mode tidak menimpa
+   pewarnaan satu sama lain di layer yang sama.
+   ========================================================================== */
+
+/**
+ * Sorotan ring mengikuti pos yang sedang dipilih dan S.ringView — dipanggil dari
+ * redrawMap(), yang jalan tiap renderAll(). WAJIB tidak berbuat apa-apa selagi mode
+ * edit ring aktif — setRingPaint(draft) yang berhak penuh atas layer kel-ring-*
+ * waktu itu; kalau paintRingView() ikut menulis di saat yang sama (mis. renderAll()
+ * kepicu sebab lain waktu orang sedang menyunting), draft yang sedang dikerjakan
+ * bisa tertimpa/hilang tanpa disimpan.
+ */
+export function paintRingView() {
+  if (!kelRingSiap || (window.ringEditing && window.ringEditing())) return;
+
+  const pos = scopeValue('pos');
+  const ringMap = (S.ringView && pos !== 'ALL') ? (S.rings[pos] || {}) : {};
+  const kodeCocok = S.ringView
+    ? Object.keys(ringMap).filter((k) => ringMap[k] === S.ringView)
+    : [];
+  const tampil = kodeCocok.length > 0;
+
+  ['kel-ring-isi', 'kel-ring-garis'].forEach((id) => {
+    if (S.map.getLayer(id)) S.map.setLayoutProperty(id, 'visibility', tampil ? 'visible' : 'none');
+  });
+  if (!tampil) return;
+
+  const warna = RING_WARNA[S.ringView] || '#94a3b8';
+  S.map.setPaintProperty('kel-ring-isi', 'fill-color', warna);
+  S.map.setPaintProperty('kel-ring-isi', 'fill-opacity',
+    ['match', ['get', 'kode'], kodeCocok, 0.55, 0]);
+  S.map.setPaintProperty('kel-ring-garis', 'line-color', warna);
+}
+
+/**
+ * Pilih/matikan ring yang disorot (klik yang sudah aktif mematikannya — pola sama
+ * seperti setScope()). Lazy-load kel-ring-* kalau belum pernah dimuat sama sekali
+ * (belum tentu sudah, kalau orang belum pernah membuka mode Edit Ring).
+ */
+export async function setRingView(ring) {
+  const nomor = Number(ring);
+  S.ringView = S.ringView === nomor ? null : nomor;
+
+  [1, 2, 3].forEach((r) => {
+    const tombol = $('rv-' + r);
+    if (tombol) {
+      tombol.className = 'flex-1 px-2 py-1.5 rounded-md text-[11px] font-bold ' +
+        (r === S.ringView ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500');
+    }
+  });
+
+  if (S.ringView && !kelRingSiap) {
+    try {
+      await addRingVillageLayers();
+    } catch (error) {
+      toast('Batas desa tidak bisa dimuat: ' + error.message, 'error');
+      S.ringView = null;
+      return;
+    }
+  }
+  paintRingView();
+}
+
 /**
  * Warnai kelurahan menurut Kontribusi Penjualan (% terhadap total KOTANYA SENDIRI),
  * bukan lagi unit mentah — sejak 2026-08-30. Kelurahan kecil yang justru dominan di
@@ -430,6 +490,10 @@ export function redrawMap() {
     });
   }
 
+  // Sorotan Tampilkan Ring ikut ruang lingkup (pos) — dipanggil di sini supaya
+  // ganti pos otomatis memperbarui sorotan tanpa perlu klik ulang tombol Ring.
+  paintRingView();
+
   const showPoints = on('opt-jual');
   if (showPoints) S.map.getSource('jual').setData(buildSalePoints());
   S.map.setLayoutProperty('jual-titik', 'visibility', showPoints ? 'visible' : 'none');
@@ -455,18 +519,6 @@ export function redrawMap() {
   S.markers.forEach((m) => { m.getElement().style.display = showPos ? '' : 'none'; });
   const showDealer = on('opt-titik-dealer');
   S.dealerMarkers.forEach((m) => { m.getElement().style.display = showDealer ? '' : 'none'; });
-
-  // Lingkarannya memakai S.radiusM — radius yang SEDANG DIPILIH — bukan konstanta.
-  //
-  // Sebelumnya di sini terpasang RADIUS_METERS yang selalu 5.000. Menekan 3 km atau
-  // 10 km mengubah seluruh persentase di layar, tapi lingkarannya diam di tempat.
-  // Tidak ada yang error; yang terjadi cuma peta dan angka menceritakan dua hal
-  // berbeda, dan lingkaran itu justru yang dipakai orang untuk mempercayai angkanya.
-  const selected = scopeValue('pos');
-  const outlet = selected === 'ALL' ? null : S.outletByCode[selected];
-  S.map.getSource('radius').setData(
-    outlet && outlet.lat != null && on('opt-radius')
-      ? circle(outlet.lng, outlet.lat, S.radiusM) : EMPTY_COLLECTION);
 }
 
 /* ==========================================================================
@@ -679,19 +731,3 @@ export function fitToScope() {
     { padding: S.fullscreen ? 90 : 50, duration: 700, maxZoom: 13 });
 }
 
-/** Ganti radius jangkauan. Hanya nilai yang benar-benar dihitung server. */
-export function setRadius(meters) {
-  const m = Number(meters);
-  if (!S.coverageAll[m]) return;
-  S.radiusM = m;
-  $('label-radius').textContent = (m / 1000).toFixed(0) + ' km';
-  S.coverage = S.coverageAll[m];
-  S.radiiM.forEach((r) => {
-    const button = $('radius-' + r);
-    if (button) {
-      button.className = 'flex-1 px-2 py-1.5 rounded-md text-[11px] font-bold ' +
-        (r === m ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500');
-    }
-  });
-  window.renderAll();
-}

@@ -822,20 +822,34 @@ function test() {
     'Pilihannya memang dibuang, tapi pengunggah tetap berhak tahu apa yang terjadi');
 
   /* ------------------------------------------------------------------------
-     11. lingkaran radius mengikuti radius yang DIPILIH
-     ------------------------------------------------------------------------
-     Pernah salah: lingkarannya digambar dengan konstanta RADIUS_METERS yang selalu
-     5.000, sementara tombol 3/5/7/10 km mengubah S.radiusM dan seluruh persentase di
-     layar. Tidak ada error — peta dan angka cuma menceritakan dua hal berbeda, dan
-     lingkaran itu justru yang dipakai orang untuk mempercayai angkanya.
+     11. Lingkaran Radius (3/5/7/10 km) BENAR-BENAR hilang — diganti "Tampilkan
+         Ring" (Bagian I, 2026-08-31, permintaan Pakbos). Kalau salah satu sisa ini
+         nongol lagi, berarti pengganti dan yang lama sama-sama aktif dan
+         membingungkan, bukan sekadar dua fitur berdampingan.
      ------------------------------------------------------------------------ */
+  ['id="opt-radius"', 'id="pilihan-radius"', 'id="label-radius"'].forEach((needle) => {
+    assert.ok(!html.includes(needle), `${needle} masih ada di markup — Lingkaran ` +
+      'Radius/pilihan radius seharusnya sudah diganti total oleh Tampilkan Ring');
+  });
+  assert.ok(!/radius-isi|radius-garis/.test(mapSource),
+    'lapisan lingkaran radius (radius-isi/radius-garis) masih ada di map.js — ' +
+    'seharusnya sudah dihapus bersih, bukan cuma tombolnya yang disembunyikan');
 
-  // Dicocokkan sebagai teks biasa, bukan regex: polanya penuh tanda kurung dan titik,
-  // dan regex yang escape-nya meleset akan cocok dengan apa saja — penjaga yang tidak
-  // pernah bisa merah.
-  assert.ok(source['map.js'].includes('circle(outlet.lng, outlet.lat, S.radiusM)'),
-    'lingkaran radius tidak digambar dari S.radiusM. Kalau memakai konstanta, ' +
-    'menekan 3 km atau 10 km mengubah angkanya tapi lingkarannya diam di 5 km');
+  // Penggantinya: Tampilkan Ring, menyorot desa milik pos yang dipilih (bukan
+  // lingkaran geometris), ikut redrawMap() supaya ganti pos otomatis memperbarui
+  // sorotan tanpa perlu klik ulang tombol Ring.
+  ['id="pilihan-ring-view"', 'id="rv-1"', 'id="rv-2"', 'id="rv-3"'].forEach((needle) => {
+    assert.ok(html.includes(needle), `${needle} hilang dari markup Tampilkan Ring`);
+  });
+  assert.match(source['app.js'], /setRingView/, 'setRingView tidak lagi diimpor/didaftarkan app.js');
+  assert.match(mapSource, /export function paintRingView/, 'paintRingView hilang dari map.js');
+  assert.match(mapSource, /paintRingView\(\);/, 'redrawMap tidak lagi memanggil paintRingView()');
+  // Konflik dengan mode edit ring: paintRingView() WAJIB diam waktu sedang menyunting
+  // — kalau tidak, draft yang sedang dikerjakan bisa tertimpa oleh sorotan lihat-saja.
+  const ringViewBody = mapSource.slice(mapSource.indexOf('export function paintRingView'));
+  assert.match(ringViewBody.slice(0, ringViewBody.indexOf('\n}')),
+    /window\.ringEditing && window\.ringEditing\(\)/,
+    'paintRingView tidak lagi mengalah ke mode edit ring yang sedang aktif');
 
   /* ------------------------------------------------------------------------
      12. tooltip peta menghitung dari sumber yang SAMA dengan petanya

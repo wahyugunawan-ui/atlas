@@ -18,8 +18,8 @@ import { fillFilterBar, onPeriodChange, resetFilters, syncFilterBar } from './fi
 import { activeRows, applyScope, scopeLabel, scopeValue } from './filters.js';
 import {
   addLayers, fitToScope, invalidateSalePoints, paintChoropleth, redrawMap, setBasemap,
-  setHeatmapMode, syncHeatmapModeButtons, toggleDistrictNames,
-  setRadius, setupMap, toggleFullscreen,
+  setHeatmapMode, setRingView, syncHeatmapModeButtons, toggleDistrictNames,
+  setupMap, toggleFullscreen,
 } from './map.js';
 import {
   closeSelectionInfo, drawDealerMarkers, drawMarkers, selectOutlet, showVillageTooltip,
@@ -64,7 +64,7 @@ const HANDLERS = {
   startRingEdit, cancelRingEdit, saveRingEdit, ringEditing,
   openRingChooser, closeRingChooser, assignRing,
   chooseRingOutlet, closeRingOutletChooser,
-  redrawMap, setBasemap, setRadius, setHeatmapMode, applyScope, toggleFullscreen, fitToScope,
+  redrawMap, setBasemap, setRingView, setHeatmapMode, applyScope, toggleFullscreen, fitToScope,
   toggleDistrictNames,
   // ringkasan
   setTreemapView, selectEntity, closeDealerCard, togglePerformanceSort,
@@ -230,13 +230,10 @@ function buildIndexes(data) {
 
 function fillFilters() {
   fillFilterBar();
-
-  $('pilihan-radius').innerHTML = S.radiiM.map((r) =>
-    `<button id="radius-${r}" onclick="setRadius(${r})" ` +
-    `class="flex-1 px-2 py-1.5 rounded-md text-[11px] font-bold ` +
-    `${r === S.radiusM ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}">` +
-    `${r / 1000} km</button>`).join('');
-  $('label-radius').textContent = (S.radiusM / 1000).toFixed(0) + ' km';
+  // Pemilih Radius jangkauan (#pilihan-radius/#label-radius) dihapus dari markup
+  // sejak 2026-08-31 — diganti "Tampilkan Ring" (Bagian I, permintaan Pakbos).
+  // S.radiusM tetap 5000 tetap (default), dipakai diam-diam oleh dealerCardHtml()
+  // dan tooltip kelurahan yang masih memakai splitByCoverage().
 }
 
 function updateStatus() {

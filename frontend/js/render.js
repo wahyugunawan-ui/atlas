@@ -343,41 +343,81 @@ function performanceRowCompact(item) {
     `</div>`;
 }
 
-function coverageSummary(rows) {
-  // Server yang baru dipasang belum punya tabel jangkauan. Bedanya "0%" dan "belum
-  // dihitung" harus kelihatan — angka nol di semua baris tampak seperti temuan.
-  if (!S.coverageReady) {
-    return `<div class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900">` +
-      `<b>Jangkauan belum dihitung.</b> Jalankan <code class="mono">npm run seed-coverage</code> ` +
-      `di server sekali, lalu muat ulang halaman ini.</div>`;
-  }
+/**
+ * Ringkasan kontekstual di atas daftar Performa Pos — sejak 2026-08-31 GANTI TOTAL
+ * (permintaan Pakbos, putaran keempat) dari "Dalam radius X km" (radius-based, satu
+ * bentuk untuk semua orang) jadi tiga bentuk berbeda menurut filter yang aktif.
+ * `splitByCoverage`/`coverage.js` TIDAK dihapus — masih dipakai `dealerCardHtml()`
+ * dan tooltip kelurahan (`outlets.js`), di luar cakupan perubahan ini.
+ */
+const average = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
 
-  const split = splitByCoverage(rows);
-  const percent = split.total ? (split.inside / split.total) * 100 : 0;
-
-  return `<div class="rounded-xl border border-slate-200 p-3">` +
-    `<div class="flex items-baseline justify-between">` +
-    `<span class="text-[11px] uppercase font-bold text-slate-400">Dalam radius ` +
-    `${esc((S.radiusM / 1000).toFixed(0))} km</span>` +
-    `<span class="text-2xl font-extrabold text-emerald-600">${esc(percent.toFixed(1))}%</span></div>` +
-    `<div class="bar-jangkauan mt-2"><span style="width:${percent.toFixed(1)}%"></span></div>` +
-    `<div class="flex justify-between text-[11px] mt-1.5">` +
-    `<span class="text-emerald-700 font-bold">${esc(formatNumber(Math.round(split.inside)))} unit</span>` +
-    `<span class="font-bold" style="color:var(--astra-red)">${esc(formatNumber(Math.round(split.outside)))} unit di luar</span>` +
-    `</div>` +
-    // Yang belum punya batas wilayah disebut TERPISAH, bukan disembunyikan dan bukan
-    // dicampur jadi "di luar jangkauan". Angka persennya di atas dihitung tanpa
-    // mereka — jadi kalimat ini yang menjelaskan kenapa jumlahnya tidak genap.
-    (split.noBoundary
-      ? `<p class="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 ` +
-        `rounded-lg px-2 py-1 mt-2 leading-snug">` +
-        `${esc(formatNumber(Math.round(split.noBoundary)))} unit di kelurahan yang ` +
-        `belum punya batas wilayah — tidak ikut dihitung di persentase atas.</p>`
-      : '') +
-    (S.radiusM === 5000 ? ''
-      : `<p class="text-[10px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 mt-2 leading-snug">` +
-        `Radius acuan proyek ini 5 km.</p>`) +
+/**
+ * grid-template-columns lewat inline style, SENGAJA bukan Tailwind grid-cols-N:
+ * jumlah kolomnya beda tiap mode (4/6/4), dan proyek ini sudah DUA KALI lupa
+ * `npm run css` sesudah kelas Tailwind baru dipakai di template literal JS
+ * (grid-cols-5 di Bagian B, .marker-outlet.dealer di Bagian H) — inline style
+ * tidak butuh build step sama sekali, jadi kelas bug itu mustahil terulang di sini.
+ */
+function summaryGridHtml(cells) {
+  return `<div class="grid gap-2" style="grid-template-columns:repeat(${cells.length},minmax(0,1fr))">` +
+    cells.map((c) => `<div class="rounded-xl border border-slate-200 p-2.5 text-center">` +
+      `<div class="text-sm font-extrabold text-slate-800 mono">${esc(c.value)}</div>` +
+      `<div class="text-[9px] uppercase font-bold text-slate-400 tracking-wide mt-0.5">${esc(c.label)}</div></div>`).join('') +
     `</div>`;
+}
+
+/** Filter Kota ATAU tidak ada filter kota/dealer/pos sama sekali (Semua) — sama-sama lewat sini. */
+function baseScopeSummary(rows) {
+  const { list, breaks } = villageSalesRows(rows);
+  const totalSales = rows.reduce((sum, r) => sum + r.units, 0);
+  const kontribusi = list.map((v) => v.contribution).filter((v) => v != null);
+  const avg = average(kontribusi);
+  return summaryGridHtml([
+    { label: 'Jumlah Desa', value: formatNumber(list.length) },
+    { label: 'Total Sales', value: formatNumber(totalSales) },
+    { label: 'AVG Kontribusi', value: avg == null ? '—' : avg.toFixed(2) + '%' },
+    { label: 'AVG Posisi Relatif', value: avg == null ? '—' : (relativePosition(avg, breaks) || '—') },
+  ]);
+}
+
+function dealerScopeSummary(rows) {
+  const { list, breaks } = villageSalesRows(rows);
+  const totalSales = rows.reduce((sum, r) => sum + r.units, 0);
+  const kontribusi = list.map((v) => v.contribution).filter((v) => v != null);
+  const avg = average(kontribusi);
+  const gaps = list.map((v) => referenceGap(v.contribution, S.businessReferencePercent)).filter((g) => g != null);
+  const avgGap = average(gaps);
+  const outletCount = (S.dealerByCode[scopeValue('dealer')] || {}).outletCount || 0;
+  return summaryGridHtml([
+    { label: 'Jumlah Desa', value: formatNumber(list.length) },
+    { label: 'Jumlah Pos Dealer', value: formatNumber(outletCount) },
+    { label: 'Total Sales', value: formatNumber(totalSales) },
+    { label: 'AVG Kontribusi', value: avg == null ? '—' : avg.toFixed(2) + '%' },
+    { label: 'AVG Posisi Relatif', value: avg == null ? '—' : (relativePosition(avg, breaks) || '—') },
+    { label: 'AVG Acuan Bisnis', value: avgGap == null ? '—' : (avgGap > 0 ? '+' : '') + avgGap.toFixed(2) },
+  ]);
+}
+
+function posScopeSummary(rows) {
+  const pos = scopeValue('pos');
+  const total = rows.reduce((sum, r) => sum + r.units, 0);
+  const ringMap = S.rings[pos] || {};
+  const counts = { 1: 0, 2: 0, 3: 0 };
+  Object.values(ringMap).forEach((r) => { if (counts[r] !== undefined) counts[r]++; });
+  const split = outletRingSplit(rows, ringMap); // SUDAH ADA (Bagian B1) — reuse apa adanya
+  return summaryGridHtml([
+    { label: 'Total Penjualan Pos', value: formatNumber(total) },
+    { label: 'Ring 1', value: `${formatNumber(counts[1])} desa · ${split.percent1.toFixed(1)}%` },
+    { label: 'Ring 2', value: `${formatNumber(counts[2])} desa · ${split.percent2.toFixed(1)}%` },
+    { label: 'Ring 3', value: `${formatNumber(counts[3])} desa · ${split.percent3.toFixed(1)}%` },
+  ]);
+}
+
+function scopeSummary(rows) {
+  if (scopeValue('pos') !== 'ALL') return posScopeSummary(rows);
+  if (scopeValue('dealer') !== 'ALL') return dealerScopeSummary(rows);
+  return baseScopeSummary(rows); // Kota ATAU Semua — activeRows() yang sudah menentukan isi `rows`
 }
 
 export function renderPerformance(rows) {
@@ -400,7 +440,7 @@ export function renderPerformance(rows) {
   const bodyWide = controls + performanceGroupBoard(counts) +
     (list.length ? list.map(performanceRowWide).join('') : kosong);
   const bodyCompact = controls + (list.length ? list.map(performanceRowCompact).join('') : kosong);
-  const summary = coverageSummary(rows);
+  const summary = scopeSummary(rows);
 
   $('panel-performa').innerHTML = bodyWide;
   $('ringkas-jangkauan').innerHTML = summary;
@@ -496,6 +536,12 @@ export function toggleLivePerforma() {
    Pause, dan begitu isinya ada dia langsung bergulir tanpa diklik dulu.
    ========================================================================== */
 
+/**
+ * @return {{list: Array, breaks: number[]}} `breaks` diekspos (bukan cuma dipakai
+ *   internal) supaya scopeSummary() (Bagian I) bisa mengklasifikasikan AVG kontribusi
+ *   dengan breaks yang SAMA PERSIS dipakai tiap baris — kalau dihitung ulang
+ *   terpisah, bisa menyimpang tipis dari sebaran yang sesungguhnya ditampilkan.
+ */
 function villageSalesRows(rows) {
   const byVillage = {};
   rows.forEach((r) => { byVillage[r.village] = (byVillage[r.village] || 0) + r.units; });
@@ -503,7 +549,7 @@ function villageSalesRows(rows) {
   const kontribusi = contributionsByVillage(rows);
   const breaks = percentileBreaks([...kontribusi.values()]);
 
-  return Object.keys(byVillage).map((code) => {
+  const list = Object.keys(byVillage).map((code) => {
     const village = S.villageByCode[code] || {};
     const contribution = kontribusi.has(code) ? kontribusi.get(code) : null;
     return {
@@ -519,6 +565,8 @@ function villageSalesRows(rows) {
     // arah seperti blok Performa Pos (beda tujuan: ini untuk memantau berjalan,
     // bukan mencari yang paling bermasalah dulu).
   }).sort((a, b) => a.units - b.units);
+
+  return { list, breaks };
 }
 
 function wilayahLokasi(item) {
@@ -555,7 +603,7 @@ function wilayahRowCompact(item) {
 }
 
 export function renderWilayah(rows) {
-  const list = villageSalesRows(rows);
+  const { list } = villageSalesRows(rows);
   const kosong = '<p class="text-center text-slate-400 text-sm py-8">Tidak ada desa pada filter ini.</p>';
   const bodyWide = list.length ? list.map(wilayahRowWide).join('') : kosong;
   const bodyCompact = list.length ? list.map(wilayahRowCompact).join('') : kosong;

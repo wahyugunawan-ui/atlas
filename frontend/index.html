@@ -394,16 +394,18 @@
       <label class="toggle-row"><span class="text-xs font-semibold text-slate-600">Titik Dealer</span><span class="switch"><input type="checkbox" id="opt-titik-dealer" checked onchange="redrawMap()"><span class="track"></span></span></label>
       <label class="toggle-row"><span class="text-xs font-semibold text-slate-600">Titik Pos</span><span class="switch"><input type="checkbox" id="opt-titik-pos" checked onchange="redrawMap()"><span class="track"></span></span></label>
       <label class="toggle-row"><span class="text-xs font-semibold text-slate-600">Titik Penjualan</span><span class="switch"><input type="checkbox" id="opt-jual" checked onchange="redrawMap()"><span class="track"></span></span></label>
-      <label class="toggle-row"><span class="text-xs font-semibold text-slate-600">Lingkaran Radius</span><span class="switch"><input type="checkbox" id="opt-radius" onchange="redrawMap()"><span class="track"></span></span></label>
 
+      <!-- Pengganti Radius jangkauan (3/5/7/10 km) + Lingkaran Radius sejak
+           2026-08-31 — permintaan Pakbos. Menyorot desa ring itu MILIK POS YANG
+           SEDANG DIPILIH, bukan lagi lingkaran geometris di sekitarnya. -->
       <div class="mt-2 pt-2 border-t border-slate-200">
-        <div class="flex items-center justify-between text-[11px] font-semibold text-slate-600 mb-1">
-          <span>Radius jangkauan</span><span id="label-radius" class="mono text-slate-800">5 km</span>
+        <div class="text-[10px] font-bold text-slate-400 uppercase mb-1">Tampilkan Ring</div>
+        <div class="flex bg-slate-100 rounded-lg p-0.5 text-[11px] font-bold" id="pilihan-ring-view">
+          <button onclick="setRingView(1)" id="rv-1" class="flex-1 px-2 py-1.5 rounded-md text-slate-500">Ring 1</button>
+          <button onclick="setRingView(2)" id="rv-2" class="flex-1 px-2 py-1.5 rounded-md text-slate-500">Ring 2</button>
+          <button onclick="setRingView(3)" id="rv-3" class="flex-1 px-2 py-1.5 rounded-md text-slate-500">Ring 3</button>
         </div>
-        <!-- Pilihan, bukan slider bebas: tiap angka di sini dihitung sungguhan oleh
-             server. Slider bebas berarti menskalakan, dan penskalaan memberi angka yang
-             terlalu rendah untuk radius besar. -->
-        <div id="pilihan-radius" class="flex bg-slate-100 rounded-lg p-0.5"></div>
+        <p class="text-[10px] text-slate-400 mt-1 leading-snug">Menyorot desa ring itu milik pos yang sedang dipilih. Klik lagi untuk mematikan.</p>
       </div>
 
       <div class="mt-3 pt-3 border-t border-slate-200">
@@ -483,9 +485,10 @@
     <div id="ringkas-jangkauan" class="mb-3"></div>
     <div id="panel-performa" class="overflow-y-auto space-y-2 pr-1" style="max-height:460px"></div>
     <p class="text-[10px] text-slate-400 leading-snug mt-3 pt-2 border-t border-slate-100">
-      Ringkasan "Dalam radius" di atas diperkirakan dari luas kelurahan yang masuk
-      radius (anggapan konsumen tersebar merata) — beda dari %ring per baris di bawah,
-      yang berasal dari penetapan ring manual per desa.
+      Ringkasan di atas berganti isi mengikuti filter yang aktif: Kota/Semua
+      menampilkan jumlah desa dan rata-rata kontribusi/posisi relatif, Dealer
+      menambahkan jumlah pos dan rata-rata acuan bisnis, Pos menampilkan bagian
+      penjualan per ring layanan (ditetapkan manual, lihat Edit ring).
     </p>
   </div>
 

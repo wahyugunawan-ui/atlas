@@ -194,6 +194,30 @@ dijalankan ulang; (2) `S.performanceCriteria` default salah ketik `'percent'`
 ke units di `sortPerformance`), tapi tombol kriterianya tidak ada yang menyala di
 tampilan awal.
 
+### Ringkasan kontekstual per filter, Radius diganti Tampilkan Ring (2026-08-31, putaran keempat Pakbos)
+
+Datang lagi mid-sesi lewat pesan baru. Detail keputusan di `DECISIONS.md` (dua entri
+baru). Kali ini SEMPAT di-`git commit` dulu sebelum dikerjakan (checkpoint atas
+permintaan user) — commit `08ba74d` menandai akhir putaran ketiga.
+
+- Ringkasan "Dalam radius X km" di atas daftar Performa Pos Dealer GANTI TOTAL jadi
+  tiga bentuk menurut filter aktif: Kota/Semua (jumlah desa, total sales, AVG
+  kontribusi, AVG posisi relatif), Dealer (+jumlah pos dealer, +AVG acuan bisnis),
+  Pos (total penjualan + jumlah desa & %kontribusi per ring 1/2/3). Diverifikasi
+  langsung di browser untuk ketiga mode + mode Semua.
+- "Radius jangkauan" (3/5/7/10 km) dan "Lingkaran Radius" di Opsi Peta DIHAPUS BERSIH
+  (bukan disembunyikan) — diganti "Tampilkan Ring 1/2/3" yang menyorot desa milik pos
+  terpilih, berbagi lapisan peta dengan mode edit ring. Diverifikasi: penetapan ring
+  sungguhan (dicoba isi manual satu desa lewat `openRingChooser`/`assignRing`/
+  `saveRingEdit`, tersimpan ke database, lalu dihapus lagi sesudah diverifikasi supaya
+  data ring tetap kosong sesuai keputusan Bagian D) langsung muncul di ringkasan Pos
+  DAN di tombol Ring yang bisa disorot — jalur ujung-ke-ujung (assign -> simpan ->
+  baca lewat scopeSummary DAN paintRingView) sudah terbukti nyambung.
+- `S.radiusM`/`splitByCoverage`/`coverage.js` SENGAJA tidak disentuh (masih dipakai
+  kartu rekap dealer & tooltip kelurahan) — sekarang diam-diam terkunci 5 km karena
+  pemilihnya sudah tidak ada. Kalau dua tempat itu nanti juga perlu ganti ke ring,
+  itu permintaan baru, bukan bagian dari yang dikerjakan di sini.
+
 ### Blok baru Analisis Penjualan Wilayah, ikon dealer segitiga (2026-08-31, putaran ketiga Pakbos)
 
 Datang mid-sesi lewat pesan baru waktu verifikasi putaran kedua sedang berjalan.
