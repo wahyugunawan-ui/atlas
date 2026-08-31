@@ -46,6 +46,32 @@ export const CUSTOMER_PANEL_LIMIT = 60;
 
 export const PROVINCE_NAMES = { '33': 'Jawa Tengah', '34': 'DI Yogyakarta' };
 
+/**
+ * Karesidenan (Kares) — pengganti filter Provinsi, diminta Pakbos 2026-08-30.
+ *
+ * Tiga pilihan TETAP, bukan diturunkan dari data. Kota di luar daftar ini disembunyikan
+ * dari pilihan filter Kota (bukan dihapus dari data — lihat filter-bar.js).
+ */
+export const KARESIDENAN = {
+  yogyakarta: {
+    label: 'Karesidenan Yogyakarta',
+    cities: ['34.04', '34.71', '34.02', '34.01', '34.03'],
+  },
+  banyumas: {
+    label: 'Karesidenan Banyumas',
+    cities: ['33.01', '33.02', '33.03', '33.04'],
+  },
+  kedu: {
+    label: 'Karesidenan Kedu',
+    cities: ['33.08', '33.23', '33.06', '33.05', '33.07'],
+  },
+};
+
+/** Kota yang boleh muncul di pilihan filter — gabungan seluruh Kares di atas. */
+export const ALLOWED_CITY_CODES = new Set(
+  Object.values(KARESIDENAN).flatMap((k) => k.cities),
+);
+
 export const MONTHS = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli',
   'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 

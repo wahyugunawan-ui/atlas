@@ -1016,3 +1016,187 @@ mentahnya kecil dibanding kelurahan di kota besar lain. Mode kedua ("Per Nilai
 Kontribusi", interval tetap dari spek) ditambahkan sebagai alternatif eksplisit lewat
 toggle, bukan pengganti — defaultnya tetap "Per Peringkat Relatif" (persentil, mesin
 yang sama dengan sebelumnya, cuma input berbeda).
+
+## [2026-08-31] Filter Provinsi diganti Kares, dibatasi 14 kab/kota tetap
+
+**Konteks:** Permintaan langsung Pakbos: filter Provinsi (34 = DIY, 33 = Jateng)
+diganti "Kares" (Karesidenan) — 3 pilihan tetap (Yogyakarta, Banyumas, Kedu), masing-
+masing memetakan ke daftar kabupaten/kota tetap. Kota di luar 14 kab/kota gabungan
+ketiganya diminta "dihapus" dari sistem.
+**Keputusan:** `KARESIDENAN`/`ALLOWED_CITY_CODES` jadi konstanta statis di
+`frontend/js/config.js` (bukan diturunkan dari data). Field filter `province` di
+`makeFilter()` diganti `kares`. "Dihapus" diartikan SEMPIT: kota di luar daftar cuma
+disembunyikan dari pilihan dropdown Kota (`isiComboKota()` di `filter-bar.js`), bukan
+dibuang dari `S.villages`/`S.sales`/peta/tabel — dikonfirmasi eksplisit ke pengguna
+sebelum dikerjakan, dua opsi (dropdown saja vs seluruh aplikasi) ditawarkan langsung.
+**Alasan:** Menghapus kota dari SELURUH aplikasi (peta, tabel, KPI, treemap) berarti
+menyaring ulang hampir setiap modul frontend dan mengubah total yang sudah dipercaya
+tim — perubahan besar untuk permintaan yang niatnya cuma mempersempit PILIHAN filter,
+bukan mendefinisikan ulang cakupan data proyek.
+**Alternatif yang ditolak:** Mengecualikan kota di luar daftar dari seluruh
+aplikasi — ditolak eksplisit oleh pengguna saat ditanya, demi risiko lebih rendah.
+**Konsekuensi:** Data kota di luar 14 kab/kota TETAP ada dan tetap bisa muncul lewat
+jalur lain (klik marker/poligon di peta, dsb) — cuma tidak ditawarkan sebagai pilihan
+filter. `PROVINCE_NAMES` dan param `province` di `/api/customers/browse` TIDAK
+disentuh (tetap provinsi asli, tidak terkait Kares) — keduanya independen sejak awal.
+
+## [2026-08-31] Ring pindah dari kecamatan ke desa/kelurahan, data lama dihapus total
+
+**Konteks:** Ring layanan pos (1/2/3, ditentukan manusia) sejak awal disimpan per
+KECAMATAN (`outlet_rings.district_code`) — granularitas dipilih karena kecamatan jauh
+lebih sedikit (654) daripada desa (~9.000) dan lebih mudah diklik di peta. Pakbos
+minta granularitasnya turun ke DESA/KELURAHAN, dengan alasan kecamatan terlalu kasar
+untuk menandai wilayah yang benar-benar tergarap.
+**Keputusan:** `outlet_rings.district_code` → `village_code` (FK ke
+`villages.village_code`). Data ring versi kecamatan yang sudah ada DIHAPUS TOTAL
+(`DROP TABLE outlet_rings CASCADE` dijalankan manual di database yang sudah ada —
+proyek ini belum punya migration runner bernomor, lihat `backend/server/db.js`
+baris ~22) — bukan diturunkan otomatis (mis. semua desa di kecamatan X ikut ring
+kecamatan itu). Poligon desa untuk mode edit ring diekspor ke berkas TERPISAH,
+`kelurahan-ring.geojson` (`scripts/export-geo.js`, fungsi `tulisKelurahanRing`) —
+BUKAN `kelurahan.geojson` yang sudah ada, karena berkas itu SENGAJA hanya berisi
+~4.000 dari ~9.000 desa (yang sudah punya penjualan/jangkauan); memakainya untuk
+edit ring akan membuat ~5.000 desa tanpa penjualan (justru yang paling perlu ditandai
+manusia) tidak bisa diklik.
+**Alasan:** Permintaan eksplisit Pakbos. Opsi "turunkan otomatis" (desa mewarisi ring
+kecamatannya) dipertimbangkan tapi TIDAK dipilih pengguna waktu ditanya — dia memilih
+mulai dari kosong dan isi ulang manual, kemungkinan karena batas kecamatan/desa tidak
+selalu selaras dan warisan otomatis bisa memberi kesan akurasi yang sebenarnya belum
+diverifikasi manusia.
+**Alternatif yang ditolak:** Migrasi otomatis kecamatan→desa (desa mewarisi ring
+kecamatannya) — ditolak eksplisit oleh pengguna, pilih mulai kosong.
+**Konsekuensi:** SEMUA ring yang sudah pernah diisi tim hilang; harus diisi ulang
+manual per desa lewat mode edit ring yang baru. Ukuran berkas ternyata TIDAK jadi
+masalah seperti dikhawatirkan di rencana awal — `kelurahan-ring.geojson` (8.999 desa,
+simplify 250 m) keluar ~3,2 MB, sebanding dengan `kecamatan.geojson` (654 kecamatan)
+~3,0 MB, karena toleransi simplifikasi mendominasi ukuran berkas jauh lebih besar
+daripada jumlah fitur. `S.districtNames`/`districts()` TIDAK dihapus — tetap dipakai
+kolom "Kecamatan" di Master Kelurahan, sama sekali lepas dari perubahan ini.
+
+## [2026-08-31] Kota/dealer/pos dibalik jadi eksklusif — membatalkan keputusan 2026-08-30
+
+**Konteks:** Entri 2026-08-30 di atas ("kota/dealer/pos jadi tiga slot independen")
+baru saja membuat ketiga filter lingkup bisa aktif bersamaan (di-AND-kan), atas
+permintaan tim waktu itu untuk panel ringkasan gabungan kota+dealer. Sehari kemudian,
+Pakbos secara eksplisit meminta SEBALIKNYA: dari empat filter (periode, kota, dealer,
+pos), cuma periode yang selalu bisa diubah bebas — kota/dealer/pos wajib cuma SATU
+yang aktif, dan berpindah di antara ketiganya wajib mereset yang sebelumnya.
+**Keputusan:** `setScope(kind, code, force)` di `frontend/js/filters.js` membuang
+kedua slot lain begitu satu slot diisi (`value !== 'ALL'`). `clearScope()` TIDAK
+berubah (tetap bisa target satu slot atau semuanya). Kares (entri di atas) TIDAK
+termasuk kelompok eksklusif ini — Pakbos cuma menyebut kota/dealer/pos sebagai trio
+yang eksklusif, Kares tetap mandiri seperti Provinsi sebelumnya.
+**Alasan:** Permintaan langsung, eksplisit, dan berulang dari Pakbos — bukan
+interpretasi atau asumsi. CLAUDE.md: "Baca ROADMAP... DECISIONS waktu hendak mengubah
+keputusan arsitektur" — entri ini SENGAJA menyebut pembalikannya secara eksplisit,
+bukan diam-diam menimpa entri 2026-08-30 (yang dibiarkan utuh di atas sebagai jejak
+kenapa arahnya sempat berbeda).
+**Alternatif yang ditolak:** Tidak ada — permintaan Pakbos tidak memberi ruang
+alternatif (bukan pertanyaan desain, tapi aturan bisnis yang diminta tegas).
+**Konsekuensi:** Panel ringkasan gabungan kota+dealer yang jadi alasan entri
+2026-08-30 (kalau ada UI yang bergantung padanya) TIDAK lagi bisa menampilkan kedua
+filter aktif bersamaan. `test/filters.test.js` dibalik LAGI: yang sejak 2026-08-30
+menguji KEDUANYA TETAP AKTIF sekarang menguji SALING MENGOSONGKAN.
+
+## [2026-08-31] Blok Performa Pos Dealer: metrik ring gantikan radius, field baru ditambah
+
+**Konteks:** Blok "Analisis Performa Pos Dealer" sejak awal menampilkan %dalam/luar
+RADIUS jangkauan per pos (dihitung server dari irisan luas kelurahan dengan lingkaran
+radius, `backend/core/coverage.js`). Pakbos minta blok ini dirombak: metrik radius
+diganti %ring 1/2/3/luar-ring (dari penetapan manual, lihat entri ring di atas), dan
+ditambah %Sales Contribution, Kelompok Relative Position, dan Kelompok Business
+Reference per pos.
+**Keputusan:** `performanceByOutlet()` di `render.js` diganti total untuk metrik
+per-baris (ring, bukan radius) dan ditambah tiga field baru — dihitung lewat fungsi
+BARU tapi murni di `sales-stats.js` (`contributionsByOutlet`, `businessReferenceGroup`,
+`outletRingSplit`), me-reuse mesin klasifikasi yang SAMA dengan kelurahan
+(`percentileBreaks`/`classOf`/`relativePosition`/`referenceGap`) — bukan mesin baru,
+cuma input per-outlet. Basis kontribusi: relatif terhadap TOTAL SELURUH POS yang
+tampil di filter aktif (dikonfirmasi eksplisit ke pengguna), bukan sesama dealer saja.
+`coverageSummary()` (ringkasan "Dalam radius X km" di atas daftar) SENGAJA TIDAK
+diubah — radius/`coverage.js` tetap ada dan tetap dipakai di situ; cuma metrik PER
+BARIS pos yang berganti ke ring.
+**Alasan:** Permintaan eksplisit Pakbos, dengan klarifikasi basis kontribusi
+dikonfirmasi langsung (bukan diasumsikan) sebelum dikerjakan.
+**Alternatif yang ditolak:** Basis kontribusi relatif terhadap dealer induk saja —
+ditawarkan sebagai opsi, ditolak pengguna demi konsistensi dengan treemap "Per Pos".
+**Konsekuensi:** `splitByCoverage`/radius TIDAK lagi dipakai di baris performa pos
+(tetap dipakai `coverageSummary()` dan kartu rekap dealer, TIDAK dihapus — lihat
+CLAUDE.md soal `coverage.js`). Blok dipindah lokasinya di halaman (baris penuh di
+bawah Proporsi Penjualan, bukan lagi kartu di sisi treemap) supaya field baru yang
+lebih banyak muat tanpa terpotong.
+
+## [2026-08-31] Legenda peta: istilah Inggris HANYA di legenda, mode heatmap otomatis ikut filter Kota
+
+**Konteks:** Legenda heatmap (persentil "Terbawah...Teratas" + interval tetap 6 kelas)
+diminta Pakbos berganti istilah ("No Sales", "bottom"..."top", judul "Dynamic/Static
+Relative Tiering..."), dan mode "Per Nilai Kontribusi" (kini "Static") diminta
+otomatis aktif waktu filter Kota dipilih.
+**Keputusan:** Label baru (`MAP_TIER_LABEL` di `render.js`) HANYA dipakai di legenda
+peta — TIDAK menimpa `POSISI_LABEL` (Terbawah/Bawah/Tengah/Atas/Teratas) yang dipakai
+di badge kelurahan, ringkasan kota, dan blok Performa Pos Dealer (dikonfirmasi
+eksplisit: dua istilah berbeda untuk konsep yang sama, disengaja). Mode Static
+sekaligus disederhanakan dari 6 jadi 5 kelas (kelas "0,081–1%" dan "Lebih dari 1%"
+lama digabung jadi satu "top" di atas 0,08%) supaya jumlah baris legenda (5+no-sales=6)
+sama dengan mode Dynamic. Auto-switch mode (`S.heatmapMode`) ditaruh di
+`setScope()`/`clearScope()` di `filters.js` — BUKAN di `renderAll()` — supaya toggle
+manual pengguna tidak ketiban reset di setiap render biasa, cuma waktu filter KOTA-nya
+sendiri yang berubah.
+**Alasan:** Permintaan eksplisit Pakbos untuk istilah dan perilaku otomatis; cakupan
+istilah baru (cuma legenda, bukan global) dikonfirmasi langsung ke pengguna sebelum
+dikerjakan untuk menghindari dua rombakan (istilah lalu dibalik lagi).
+**Alternatif yang ditolak:** Mengganti `POSISI_LABEL` di semua tempat jadi istilah
+Inggris — ditawarkan, ditolak pengguna. Mode Static dikunci (tidak bisa diganti manual
+selagi filter Kota aktif) — ditawarkan, ditolak pengguna, override manual tetap jalan.
+**Konsekuensi:** Ada DUA istilah berbeda untuk hal yang sama (persentil kontribusi)
+di dashboard yang sama — legenda peta bilang "bottom", panel kelurahan bilang
+"Terbawah" — disengaja, bukan inkonsistensi yang terlewat.
+
+## [2026-08-31] Blok baru "Analisis Penjualan Wilayah": basis kontribusi generik atas activeRows()
+
+**Konteks:** Permintaan Pakbos putaran ketiga: blok baru per DESA (nama desa,
+kecamatan/kota, total sales, %kontribusi, posisi relatif), auto-looping sendiri,
+menggantikan blok Performa Pos Dealer di panel kiri layar penuh peta KHUSUS waktu
+filter dealer/pos aktif (default/filter kota tetap Performa Pos Dealer), dan SELALU
+tampil sebagai blok tambahan di halaman biasa.
+**Keputusan:** `contributionsByOutlet` (Bagian B1) diekstrak jadi pemanggil helper
+generik `contributionsByField(rows, field)`, dipakai juga oleh `contributionsByVillage`
+yang baru. %Kontribusi dan Posisi Relatif desa dihitung relatif terhadap
+`activeRows()` APA ADANYA — BUKAN relatif terhadap kotanya sendiri seperti
+`villageStats()` yang sudah ada untuk panel kelurahan. Panel kiri layar penuh peta
+(satu slot) dibagi dua grup HTML yang saling toggle `hidden`
+(`syncFullscreenPanels()` di `render.js`) berdasar `scopeValue('dealer')`/`scopeValue('pos')`.
+Auto-loop dijaga DUA state terpisah (`S.liveWilayah`, `S.liveWilayahPaused`) supaya
+render ulang yang sering (`renderAll()`) tidak menyalakan lagi interval yang sengaja
+dihentikan orang lewat tombol Pause.
+**Alasan:** Basis "relatif terhadap activeRows()" dipilih (bukan per-kota seperti
+villageStats) karena `activeRows()` SUDAH otomatis sempit ke dealer/pos yang
+difilter waktu itu yang aktif — jadi "kontribusi desa terhadap dealer/pos yang
+dipilih" didapat gratis dari satu fungsi generik, tanpa percabangan kota/dealer/pos
+yang terpisah. Dikonfirmasi eksplisit ke pengguna sebelum dikerjakan (dua opsi basis
+ditawarkan langsung).
+**Alternatif yang ditolak:** Basis kontribusi per-kota sendiri (pola `villageStats()`
+yang sudah ada) — ditawarkan, ditolak pengguna. Auto-loop manual (pola tombol Live
+yang sama seperti blok Performa Pos) — tidak ditawarkan sebagai alternatif karena
+permintaan Pakbos eksplisit menyebut "auto looping", tapi arah tombolnya (Pause vs
+Live sebagai titik mulai) tetap dikonfirmasi terpisah.
+**Konsekuensi:** Blok ini TIDAK punya versi "tampilan besar" (modal) seperti Performa
+Pos Dealer — cuma normal (`bodyWide`) dan layar-penuh-peta (`bodyCompact`). Sort-nya
+TETAP (terendah→tertinggi, tanpa tombol balik arah) — beda dari blok Performa Pos
+yang punya tombol urut, karena tujuannya beda (memantau berjalan, bukan mencari yang
+paling bermasalah dulu).
+
+## [2026-08-31] Titik dealer di peta jadi segitiga, bukan lingkaran
+
+**Konteks:** Setelah titik dealer baru (entri Bagian D di atas) dipakai sungguhan,
+Pakbos minta bentuknya diubah jadi segitiga supaya lebih mudah dibedakan dari titik
+pos sekilas pandang, tanpa perlu membaca ukuran/warnanya dulu.
+**Keputusan:** `.marker-outlet.dealer` (frontend/styles/app.css) dipotong `clip-path:
+polygon(50% 0%, 0% 100%, 100% 100%)` dan `border-radius:0`, menimpa bentuk bulat dari
+`.marker-outlet` dasar. Ikon di dalamnya (`ph-buildings`) dibiarkan, cuma digeser
+sedikit (`padding-top`) supaya tidak terlalu mepet ke alas segitiga.
+**Alasan:** Permintaan eksplisit Pakbos.
+**Konsekuensi:** `npm run css` WAJIB dijalankan ulang tiap kali kelas Tailwind baru
+dipakai di template literal JS yang belum pernah muncul di file lain — ini bug KEDUA
+sesi ini yang disebabkan lupa langkah ini (yang pertama: `grid-cols-5` di board
+performa, Bagian B). Dicatat di sini supaya sesi berikutnya tidak mengulanginya lagi.

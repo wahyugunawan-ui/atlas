@@ -1,15 +1,19 @@
 /**
- * Mode edit ring: pilih satu kecamatan di peta, lalu tentukan ringnya.
+ * Mode edit ring: pilih satu desa/kelurahan di peta, lalu tentukan ringnya.
  *
  * Ring menggantikan cara lama "dalam radius X km". Radius tidak tahu jalan, sungai,
  * maupun gunung; tim yang tahu — jadi ringnya ditentukan manusia, dan tempat paling
- * masuk akal menentukannya adalah di atas peta, bukan dari daftar 654 nama kecamatan.
+ * masuk akal menentukannya adalah di atas peta, bukan dari daftar ribuan nama desa.
  *
- * Urutannya SATU KECAMATAN DULU, baru ringnya. Versi pertama kebalikannya — pilih ring
- * sebagai "kuas", lalu sapu banyak kecamatan sekaligus. Itu lebih cepat untuk mengisi
- * borongan, tapi tim memintanya per satu kecamatan: yang dipikirkan orang waktu melihat
- * peta adalah "kecamatan ini masuk ring berapa", bukan "ring 2 isinya kecamatan mana
- * saja". Urutan kendalinya sekarang mengikuti urutan pikirannya.
+ * Sejak 2026-08-31 per DESA/KELURAHAN, bukan lagi kecamatan — permintaan Pakbos,
+ * granularitas kecamatan dianggap terlalu kasar. Data ring versi kecamatan lama
+ * dihapus total waktu migrasi (lihat docs/DECISIONS.md).
+ *
+ * Urutannya SATU DESA DULU, baru ringnya. Versi pertama (kecamatan) kebalikannya —
+ * pilih ring sebagai "kuas", lalu sapu banyak kecamatan sekaligus. Itu lebih cepat
+ * untuk mengisi borongan, tapi tim memintanya per satu unit: yang dipikirkan orang
+ * waktu melihat peta adalah "desa ini masuk ring berapa", bukan "ring 2 isinya desa
+ * mana saja". Urutan kendalinya sekarang mengikuti urutan pikirannya.
  *
  * Perubahannya ditahan di sini sampai Simpan ditekan. Tanpa itu, tiap klik jadi satu
  * permintaan ke server dan membatalkan berarti membalikkan puluhan klik satu per satu.
@@ -17,19 +21,19 @@
 import { saveRings } from './api.js';
 import { $, esc, toast } from './dom.js';
 import { scopeValue } from './filters.js';
-import { addDistrictLayers, districtsLoaded, setRingPaint } from './map.js';
+import { addRingVillageLayers, ringVillagesLoaded, setRingPaint } from './map.js';
 import { S } from './state.js';
 
 /** Warna tiap ring. Satu keluarga, makin jauh makin pudar — jaraknya terbaca. */
 export const RING_COLORS = { 1: '#0b2f6b', 2: '#3b6fc4', 3: '#93b4e6' };
 
-/** Salinan kerja: {districtCode: ring}. Null berarti mode edit sedang mati. */
+/** Salinan kerja: {villageCode: ring}. Null berarti mode edit sedang mati. */
 let draft = null;
 
 /** Pos yang ringnya sedang disunting. */
 let posEdit = null;
 
-/** Kecamatan yang pemilih ringnya sedang terbuka. */
+/** Desa yang pemilih ringnya sedang terbuka. */
 let dipilih = null;
 
 export const ringEditing = () => draft !== null;
@@ -38,29 +42,71 @@ export const ringDraft = () => draft;
 /**
  * Masuk mode edit untuk satu pos.
  *
- * Batas kecamatan dimuat DI SINI, bukan saat halaman dibuka: berkasnya 3 MB dan
- * sebagian besar sesi tidak pernah menyunting ring sama sekali.
+ * Tanpa argumen: pakai pos yang sedang dipilih; kalau tidak ada pos tapi ada DEALER
+ * yang dipilih (klik titik dealer di peta — permintaan Pakbos), pilih pos-nya dulu:
+ * langsung kalau dealernya cuma punya satu pos, tampilkan pemilih kalau lebih dari satu.
  */
-export async function startRingEdit(outletCode) {
-  // Tanpa argumen berarti "pos yang sedang dipilih" — itu cara tombol di bilah ruang
-  // lingkup memanggilnya, dan tombolnya memang cuma muncul waktu ada pos terpilih.
-  const kode = outletCode || scopeValue('pos');
-  const outlet = S.outletByCode[kode];
+export function startRingEdit(outletCode) {
+  if (outletCode) return startRingEditFor(outletCode);
+
+  const pos = scopeValue('pos');
+  if (pos !== 'ALL') return startRingEditFor(pos);
+
+  const dealer = scopeValue('dealer');
+  if (dealer === 'ALL') return undefined;
+  const outlets = Object.values(S.outletByCode).filter((o) => o.dealerCode === dealer);
+  if (!outlets.length) {
+    toast('Dealer ini belum punya pos untuk disunting ring-nya.', 'error');
+    return undefined;
+  }
+  if (outlets.length === 1) return startRingEditFor(outlets[0].code);
+  return openRingOutletChooser(outlets);
+}
+
+/**
+ * Daftar pos satu dealer, dipilih salah satu sebelum masuk mode edit ring —
+ * dealer dengan lebih dari satu pos tidak bisa langsung ditebak yang mana.
+ */
+function openRingOutletChooser(outlets) {
+  $('rp-pos-daftar').innerHTML = outlets
+    .slice().sort((a, b) => a.name.localeCompare(b.name))
+    .map((o) => `<button type="button" onclick="chooseRingOutlet('${esc(o.code)}')" ` +
+      `class="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50">` +
+      `${esc(o.name)}</button>`).join('');
+  $('ring-pilih-pos').classList.remove('hidden');
+}
+
+export function closeRingOutletChooser() {
+  const el = $('ring-pilih-pos');
+  if (el) el.classList.add('hidden');
+}
+
+export function chooseRingOutlet(code) {
+  closeRingOutletChooser();
+  startRingEditFor(code);
+}
+
+/**
+ * Batas desa dimuat DI SINI, bukan saat halaman dibuka: berkasnya besar (semua desa,
+ * tanpa disaring) dan sebagian besar sesi tidak pernah menyunting ring sama sekali.
+ */
+async function startRingEditFor(outletCode) {
+  const outlet = S.outletByCode[outletCode];
   if (!outlet) return;
 
-  posEdit = kode;
-  draft = Object.assign({}, S.rings[kode] || {});
+  posEdit = outletCode;
+  draft = Object.assign({}, S.rings[outletCode] || {});
 
   $('ring-nama').textContent = outlet.name;
   $('ring-bar').classList.remove('hidden');
   renderRingBar();
 
-  if (!districtsLoaded()) {
-    $('ring-pesan').textContent = 'Memuat batas kecamatan...';
+  if (!ringVillagesLoaded()) {
+    $('ring-pesan').textContent = 'Memuat batas desa...';
     try {
-      await addDistrictLayers();
+      await addRingVillageLayers();
     } catch (error) {
-      $('ring-pesan').textContent = 'Batas kecamatan tidak bisa dimuat: ' + error.message;
+      $('ring-pesan').textContent = 'Batas desa tidak bisa dimuat: ' + error.message;
       return;
     }
   }
@@ -72,25 +118,31 @@ export function cancelRingEdit() {
   draft = null;
   posEdit = null;
   closeRingChooser();
+  closeRingOutletChooser();
   $('ring-bar').classList.add('hidden');
   setRingPaint(null);
 }
 
 /* ==========================================================================
-   PEMILIH RING SATU KECAMATAN
+   PEMILIH RING SATU DESA/KELURAHAN
    ========================================================================== */
 
 /**
- * Satu kecamatan diklik di peta: buka pemilih ringnya di titik klik.
+ * Satu desa/kelurahan diklik di peta: buka pemilih ringnya di titik klik.
  *
- * @param {string} code   kode kecamatan bertitik
+ * @param {string} code   kode desa bertitik
+ * @param {string} name   nama desa dari properti fitur yang diklik (kelurahan-ring.
+ *   geojson membawa nama SEMUA desa, termasuk yang belum ada di S.villageByCode
+ *   karena belum pernah punya penjualan) — dipakai LEBIH DULU sebelum jatuh ke
+ *   S.villageByCode, supaya desa yang justru paling perlu ditandai (belum tergarap)
+ *   tidak tampil sebagai kode mentah tanpa nama.
  * @param {Object} event  MouseEvent asli, untuk menaruh pemilihnya di dekat kursor
  */
-export function openRingChooser(code, event) {
+export function openRingChooser(code, name, event) {
   if (!draft) return;
   dipilih = code;
 
-  const nama = S.districtNames[code] || code;
+  const nama = name || (S.villageByCode[code] || {}).name || code;
   const sekarang = draft[code] || 0;
   $('rp-kec-nama').textContent = nama;
   $('rp-kec-kode').textContent = code;
@@ -153,7 +205,7 @@ export async function saveRingEdit() {
     S.rings[posEdit] = Object.assign({}, draft);
     const jumlah = Object.keys(draft).length;
     cancelRingEdit();
-    toast(`Ring tersimpan: ${jumlah} kecamatan.`, 'ok');
+    toast(`Ring tersimpan: ${jumlah} desa.`, 'ok');
     window.renderAll();
   } catch (error) {
     $('ring-pesan').textContent = error.message;
@@ -162,7 +214,7 @@ export async function saveRingEdit() {
 }
 
 /**
- * Bilah alat: berapa kecamatan di tiap ring, dan nama-namanya.
+ * Bilah alat: berapa desa di tiap ring, dan nama-namanya.
  *
  * Cuma penanda, bukan kendali — yang mengendalikan adalah klik di peta. Namanya ikut
  * ditulis (dipotong) supaya orang tidak perlu menutup mode edit dulu untuk memeriksa
@@ -172,7 +224,7 @@ function renderRingBar() {
   const isi = draft || {};
   [1, 2, 3].forEach((ring) => {
     const kode = Object.keys(isi).filter((c) => isi[c] === ring);
-    const nama = kode.map((c) => S.districtNames[c] || c)
+    const nama = kode.map((c) => (S.villageByCode[c] || {}).name || c)
       .sort((a, b) => a.localeCompare(b));
     $('ring-jml-' + ring).textContent = nama.length;
     const daftar = $('ring-isi-' + ring);

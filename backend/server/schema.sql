@@ -213,26 +213,31 @@ CREATE TABLE IF NOT EXISTS coverage (
 
 CREATE INDEX IF NOT EXISTS idx_coverage_outlet ON coverage (outlet_code);
 
--- Ring layanan tiap pos: kecamatan mana yang masuk ring 1, 2, atau 3.
+-- Ring layanan tiap pos: desa/kelurahan mana yang masuk ring 1, 2, atau 3.
 --
 -- Menggantikan cara lama "dalam radius X km" yang menganggap jangkauan itu lingkaran.
 -- Radius tidak tahu jalan, sungai, maupun gunung; tim yang tahu. Jadi ringnya
 -- DITENTUKAN MANUSIA, bukan dihitung — dan itu satu-satunya alasan tabel ini ada.
 --
--- Dikunci ke district_code, TIDAK PERNAH ke nama. Ada 654 kecamatan di cakupan tapi
--- cuma 624 nama berbeda: 30 nama dipakai lebih dari satu kabupaten. Menyimpan nama
--- berarti ring satu pos diam-diam ikut menarik kecamatan di kabupaten lain.
+-- Sejak 2026-08-31 per village_code, BUKAN LAGI district_code — permintaan Pakbos,
+-- granularitas kecamatan dianggap terlalu kasar. Data ring versi kecamatan lama
+-- DIHAPUS TOTAL waktu migrasi (lihat docs/DECISIONS.md), bukan diturunkan otomatis.
 --
--- Satu kecamatan cuma boleh ada di SATU ring per pos — itu yang dijaga primary key.
--- Ring yang tumpang tindih membuat satu penjualan terhitung dua kali, dan totalnya
--- tetap terlihat masuk akal.
+-- Dikunci ke village_code, TIDAK PERNAH ke nama — sama seperti alasan district_code
+-- dulu: nama kelurahan berulang lintas kabupaten, kode BPS tidak.
+--
+-- Satu desa cuma boleh ada di SATU ring per pos — itu yang dijaga primary key. Ring
+-- yang tumpang tindih membuat satu penjualan terhitung dua kali, dan totalnya tetap
+-- terlihat masuk akal.
 CREATE TABLE IF NOT EXISTS outlet_rings (
-  outlet_code   VARCHAR(32) NOT NULL,
-  district_code VARCHAR(16) NOT NULL,
-  ring          SMALLINT NOT NULL CHECK (ring BETWEEN 1 AND 3),
-  PRIMARY KEY (outlet_code, district_code),
+  outlet_code  VARCHAR(32) NOT NULL,
+  village_code VARCHAR(16) NOT NULL,
+  ring         SMALLINT NOT NULL CHECK (ring BETWEEN 1 AND 3),
+  PRIMARY KEY (outlet_code, village_code),
   CONSTRAINT fk_rings_outlet FOREIGN KEY (outlet_code)
-    REFERENCES outlets(outlet_code) ON DELETE CASCADE
+    REFERENCES outlets(outlet_code) ON DELETE CASCADE,
+  CONSTRAINT fk_rings_village FOREIGN KEY (village_code)
+    REFERENCES villages(village_code) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_rings_outlet ON outlet_rings (outlet_code);

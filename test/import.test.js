@@ -703,58 +703,59 @@ async function test() {
     /* --------------------------------------------------------------------
        RING LAYANAN PER POS
        --------------------------------------------------------------------
-       Ring menggantikan "dalam radius X km". Yang dijaga di sini bukan "simpannya
-       jalan", tapi empat hal yang gagalnya diam: satu kecamatan masuk dua ring
-       sekaligus (satu penjualan terhitung dua kali, totalnya tetap terlihat wajar),
-       kecamatan asing yang dilewati diam-diam, susunan lama yang tertinggal sesudah
-       ditimpa, dan ring yang tetap menempel pada pos yang sudah dihapus.
+       Ring menggantikan "dalam radius X km", dan sejak 2026-08-31 per DESA/KELURAHAN
+       (bukan lagi kecamatan). Yang dijaga di sini bukan "simpannya jalan", tapi empat
+       hal yang gagalnya diam: satu desa masuk dua ring sekaligus (satu penjualan
+       terhitung dua kali, totalnya tetap terlihat wajar), desa asing yang dilewati
+       diam-diam, susunan lama yang tertinggal sesudah ditimpa, dan ring yang tetap
+       menempel pada pos yang sudah dihapus.
        -------------------------------------------------------------------- */
 
     const posRing = (await store.all(db, 'SELECT outlet_code FROM outlets LIMIT 1'))[0]
       .outlet_code;
-    const kecUji = (await store.all(db,
-      'SELECT DISTINCT district_code AS kode FROM villages ORDER BY district_code LIMIT 3'))
+    const desaUji = (await store.all(db,
+      'SELECT village_code AS kode FROM villages ORDER BY village_code LIMIT 3'))
       .map((r) => r.kode);
-    assert.strictEqual(kecUji.length, 3, 'prasyarat tes: butuh tiga kecamatan');
+    assert.strictEqual(desaUji.length, 3, 'prasyarat tes: butuh tiga desa');
 
     await repo.saveOutletRings(posRing,
-      { [kecUji[0]]: 1, [kecUji[1]]: 2, [kecUji[2]]: 3 });
+      { [desaUji[0]]: 1, [desaUji[1]]: 2, [desaUji[2]]: 3 });
     let ring = (await repo.allRings())[posRing];
     assert.deepStrictEqual(ring,
-      { [kecUji[0]]: 1, [kecUji[1]]: 2, [kecUji[2]]: 3 },
+      { [desaUji[0]]: 1, [desaUji[1]]: 2, [desaUji[2]]: 3 },
       'ring tidak tersimpan apa adanya');
 
-    // Menyimpan lagi MENGGANTI seluruhnya, bukan menambal. Kalau menambal, kecamatan
+    // Menyimpan lagi MENGGANTI seluruhnya, bukan menambal. Kalau menambal, desa
     // yang dibuang orang di layar tetap tinggal di database dan ikut dihitung.
-    await repo.saveOutletRings(posRing, { [kecUji[0]]: 3 });
+    await repo.saveOutletRings(posRing, { [desaUji[0]]: 3 });
     ring = (await repo.allRings())[posRing];
-    assert.deepStrictEqual(ring, { [kecUji[0]]: 3 },
+    assert.deepStrictEqual(ring, { [desaUji[0]]: 3 },
       'menyimpan ring menambal, bukan mengganti — susunan lama tertinggal');
 
-    // Satu kecamatan tidak bisa ada di dua ring sekaligus. Objek JS sudah mencegahnya
-    // di sisi halaman, tapi yang menjaganya di database adalah primary key — dan itu
+    // Satu desa tidak bisa ada di dua ring sekaligus. Objek JS sudah mencegahnya di
+    // sisi halaman, tapi yang menjaganya di database adalah primary key — dan itu
     // yang harus tetap benar kalau suatu hari ada pemanggil lain.
     await assert.rejects(
       () => store.run(db,
-        'INSERT INTO outlet_rings (outlet_code, district_code, ring) VALUES (?, ?, ?)',
-        [posRing, kecUji[0], 1]),
+        'INSERT INTO outlet_rings (outlet_code, village_code, ring) VALUES (?, ?, ?)',
+        [posRing, desaUji[0], 1]),
       /duplicate key|unique/i,
-      'satu kecamatan bisa masuk dua ring sekaligus — penjualannya terhitung dua kali');
+      'satu desa bisa masuk dua ring sekaligus — penjualannya terhitung dua kali');
 
-    // Kecamatan asing DITOLAK, bukan dilewati. Ring yang diam-diam kehilangan satu
-    // kecamatan tetap terlihat masuk akal di layar.
+    // Desa asing DITOLAK, bukan dilewati. Ring yang diam-diam kehilangan satu desa
+    // tetap terlihat masuk akal di layar.
     await assert.rejects(
-      () => repo.saveOutletRings(posRing, { '99.99.99': 1 }),
-      /tidak dikenal/i, 'kecamatan asing tidak ditolak');
+      () => repo.saveOutletRings(posRing, { '99.99.99.9999': 1 }),
+      /tidak dikenal/i, 'desa asing tidak ditolak');
     await assert.rejects(
-      () => repo.saveOutletRings(posRing, { [kecUji[0]]: 4 }),
+      () => repo.saveOutletRings(posRing, { [desaUji[0]]: 4 }),
       /Ring harus/i, 'nomor ring di luar 1-3 tidak ditolak');
     await assert.rejects(
-      () => repo.saveOutletRings('POS-TIDAK-ADA', { [kecUji[0]]: 1 }),
+      () => repo.saveOutletRings('POS-TIDAK-ADA', { [desaUji[0]]: 1 }),
       /tidak ada/i, 'ring bisa disimpan untuk pos yang tidak ada');
 
     // Penolakan TIDAK boleh merusak yang sudah tersimpan.
-    assert.deepStrictEqual((await repo.allRings())[posRing], { [kecUji[0]]: 3 },
+    assert.deepStrictEqual((await repo.allRings())[posRing], { [desaUji[0]]: 3 },
       'ring yang sudah benar ikut hilang waktu simpan berikutnya ditolak');
 
     // Ring tidak boleh menempel pada pos yang sudah tidak ada. Dijaga foreign key

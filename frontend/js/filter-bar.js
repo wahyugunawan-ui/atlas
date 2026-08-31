@@ -11,10 +11,10 @@
  * ini tidak bisa.
  */
 import { closeCombo, fillCombo, setComboValue } from './combobox.js';
-import { MONTHS, PROVINCE_NAMES } from './config.js';
+import { ALLOWED_CITY_CODES, KARESIDENAN, MONTHS } from './config.js';
 import { $, esc } from './dom.js';
 import {
-  clearScope, pageFilters, scopeValue, setPeriod, setProvince, setScope,
+  clearScope, pageFilters, scopeValue, setKares, setPeriod, setScope,
 } from './filters.js';
 import { invalidateSalePoints } from './map.js';
 import { S } from './state.js';
@@ -110,6 +110,31 @@ function bacaKotakPeriode(which, el) {
 }
 
 /**
+ * Isi ulang combo Kota — dipanggil sekali di fillFilterBar() DAN tiap kali Kares
+ * berganti (cascading). Opsinya disaring dua lapis: (1) cuma kode yang diizinkan
+ * (ALLOWED_CITY_CODES, 14 kab/kota di 3 Kares), (2) kalau Kares aktif, dipersempit
+ * lagi ke kota anggota Kares itu saja.
+ */
+function isiComboKota() {
+  const f = pageFilters();
+  const allowed = f.kares !== 'ALL' ? new Set(KARESIDENAN[f.kares].cities) : ALLOWED_CITY_CODES;
+
+  fillCombo('kota', 'Kabupaten', Object.keys(S.cityNames)
+    .filter((c) => allowed.has(c))
+    .sort((a, b) => S.cityNames[a].localeCompare(S.cityNames[b]))
+    .map((c) => [c, S.cityNames[c]]), 'Semua', (value) => {
+      setScope('kota', value, true);
+      repaint(false);
+      // Kota dipilih TANPA kelurahan spesifik yang sedang aktif -> buka ringkasan
+      // kota langsung. Lewat window: tables.js sudah meng-import berkas ini untuk
+      // switchTab(), meng-import baliknya akan membuat lingkaran.
+      if (value !== 'ALL' && !S.selectedVillage && window.openCitySummary) {
+        window.openCitySummary(value);
+      }
+    });
+}
+
+/**
  * Isi opsi semua kendali di bilah. Dipanggil sekali setelah data server masuk.
  */
 export function fillFilterBar() {
@@ -124,22 +149,11 @@ export function fillFilterBar() {
     repaint(false);
   };
 
-  const provinces = [...new Set(S.villages.map((v) => v.provinceCode))].sort();
-  fillCombo('provinsi', 'Provinsi',
-    provinces.map((p) => [p, PROVINCE_NAMES[p] || 'Provinsi ' + p]), 'Semua',
-    (value) => { setProvince(value); repaint(false); });
+  fillCombo('kares', 'Kares',
+    Object.keys(KARESIDENAN).map((k) => [k, KARESIDENAN[k].label]), 'Semua',
+    (value) => { setKares(value); isiComboKota(); repaint(false); });
 
-  fillCombo('kota', 'Kabupaten', Object.keys(S.cityNames)
-    .sort((a, b) => S.cityNames[a].localeCompare(S.cityNames[b]))
-    .map((c) => [c, S.cityNames[c]]), 'Semua', (value) => {
-      pilihLingkup('kota')(value);
-      // Kota dipilih TANPA kelurahan spesifik yang sedang aktif -> buka ringkasan
-      // kota langsung. Lewat window: tables.js sudah meng-import berkas ini untuk
-      // switchTab(), meng-import baliknya akan membuat lingkaran.
-      if (value !== 'ALL' && !S.selectedVillage && window.openCitySummary) {
-        window.openCitySummary(value);
-      }
-    });
+  isiComboKota();
 
   fillCombo('dealer', 'Dealer', S.registry.order
     .filter((code) => S.dealerNames[code])
@@ -164,9 +178,9 @@ export function fillFilterBar() {
 /**
  * Tulis nilai halaman yang sedang aktif ke bilah.
  *
- * Satu arah saja: objek -> DOM. Ketiga dropdown lingkup (kota/dealer/pos) independen
- * sejak 2026-08-30 — semuanya bisa menunjukkan pilihan aktif sekaligus, bukan cuma
- * satu yang tidak "Semua ...".
+ * Satu arah saja: objek -> DOM. Ketiga dropdown lingkup (kota/dealer/pos) SALING
+ * EKSKLUSIF sejak [tanggal eksekusi] — cuma satu yang pernah menunjukkan selain
+ * "Semua ..." di saat yang sama (lihat setScope() di filters.js).
  */
 export function syncFilterBar() {
   const f = pageFilters();
@@ -178,7 +192,7 @@ export function syncFilterBar() {
     setValue(ujung + '-tahun', tahun);
   });
 
-  setComboValue('provinsi', f.province);
+  setComboValue('kares', f.kares);
   SCOPE_KINDS.forEach((kind) => setComboValue(kind, scopeValue(kind, f)));
 }
 
@@ -206,7 +220,8 @@ export function onPeriodChange(which, el) {
 /** Kembali ke seluruh penjualan. Periodenya sengaja TIDAK ikut direset. */
 export function resetFilters() {
   closeCombo();
-  setProvince('ALL');
+  setKares('ALL');
+  isiComboKota();
   clearScope();
   if (window.closeVillageDetail) window.closeVillageDetail();
   repaint(false);

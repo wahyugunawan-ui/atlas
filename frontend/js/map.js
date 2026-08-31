@@ -2,9 +2,9 @@
  * Peta: basemap, lapisan choropleth, batas kabupaten, radius, dan titik penjualan.
  */
 import {
-  ATTRIBUTION, ATTRIBUTION_SATELLITE, BASEMAP_PMTILES, BASEMAP_SATELLITE,
+  ATTRIBUTION, ATTRIBUTION_SATELLITE, BASEMAP_PMTILES, BASEMAP_SATELLITE, KARESIDENAN,
 } from './config.js';
-import { classOf, dealerColor, percentileBreaks, RAMP, RAMP6, COLOR_EMPTY } from './colors.js';
+import { classOf, dealerColor, percentileBreaks, RAMP, COLOR_EMPTY } from './colors.js';
 import { $, bbox, sumBy, toast } from './dom.js';
 import { fetchGeo } from './api.js';
 import { activeRows, pageFilters, scopeValue } from './filters.js';
@@ -143,6 +143,14 @@ export function addLayers() {
     id: 'kota-garis', type: 'line', source: 'kota',
     paint: { 'line-color': '#e2231a', 'line-width': 1.6, 'line-opacity': 0.85 },
   });
+  S.map.addLayer({
+    id: 'kota-nama', type: 'symbol', source: 'kota', minzoom: 8,
+    layout: {
+      'text-field': ['get', 'nama_kota'], 'text-font': ['Noto Sans Bold'],
+      'text-size': 13, 'text-allow-overlap': false,
+    },
+    paint: { 'text-color': '#e2231a', 'text-halo-color': '#ffffff', 'text-halo-width': 1.6 },
+  });
 
   S.map.addSource('radius', { type: 'geojson', data: EMPTY_COLLECTION });
   S.map.addLayer({
@@ -171,7 +179,11 @@ export function addLayers() {
 }
 
 /* ==========================================================================
-   BATAS KECAMATAN — hanya untuk memilih ring
+   BATAS KECAMATAN — referensi visual murni ("Batas dan Nama Kecamatan")
+   ==========================================================================
+   Sejak 2026-08-31 TIDAK lagi dipakai untuk ring (lihat blok BATAS DESA — EDIT RING
+   di bawah) — kecamatan sekarang cuma lapisan referensi yang bisa dinyalakan/dimatikan
+   lewat Opsi Peta, warnanya pink supaya tidak tertukar dengan batas lain.
    ========================================================================== */
 
 let kecamatanSiap = false;
@@ -181,8 +193,8 @@ export const districtsLoaded = () => kecamatanSiap;
 /**
  * Muat dan pasang lapisan batas kecamatan.
  *
- * Dipanggil saat mode edit ring dinyalakan, BUKAN saat halaman dibuka. Berkasnya 3 MB
- * untuk 654 kecamatan, dan sebagian besar sesi tidak pernah menyunting ring sama
+ * Dipanggil saat togglenya dinyalakan, BUKAN saat halaman dibuka. Berkasnya 3 MB
+ * untuk 654 kecamatan, dan sebagian besar sesi tidak pernah menyalakannya sama
  * sekali — memuatnya di awal berarti semua orang membayar untuk yang dipakai sedikit.
  */
 export async function addDistrictLayers() {
@@ -190,16 +202,9 @@ export async function addDistrictLayers() {
   const geo = await fetchGeo('kecamatan.geojson');
   S.map.addSource('kec', { type: 'geojson', data: geo, promoteId: 'kode' });
 
-  // Isi transparan dulu; setRingPaint() yang mewarnainya menurut ring. Lapisan isi
-  // tetap ada walau semuanya bening supaya kliknya punya sasaran — garis saja terlalu
-  // tipis untuk diklik orang yang sedang buru-buru.
-  S.map.addLayer({
-    id: 'kec-isi', type: 'fill', source: 'kec',
-    paint: { 'fill-color': '#0b2f6b', 'fill-opacity': 0 },
-  });
   S.map.addLayer({
     id: 'kec-garis', type: 'line', source: 'kec',
-    paint: { 'line-color': '#334155', 'line-width': 1, 'line-opacity': 0.55 },
+    paint: { 'line-color': '#db2777', 'line-width': 1.2, 'line-opacity': 0.7 },
   });
   S.map.addLayer({
     id: 'kec-nama', type: 'symbol', source: 'kec', minzoom: 8.5,
@@ -207,30 +212,17 @@ export async function addDistrictLayers() {
       'text-field': ['get', 'nama'], 'text-font': ['Noto Sans Regular'],
       'text-size': 11, 'text-allow-overlap': false,
     },
-    paint: { 'text-color': '#0f172a', 'text-halo-color': '#ffffff', 'text-halo-width': 1.6 },
+    paint: { 'text-color': '#db2777', 'text-halo-color': '#ffffff', 'text-halo-width': 1.6 },
   });
-
-  S.map.on('click', 'kec-isi', (e) => {
-    if (!window.ringEditing || !window.ringEditing()) return;
-    const f = e.features && e.features[0];
-    // Pemilih ringnya dibuka di titik klik. Urutannya sengaja "kecamatan dulu, baru
-    // ringnya" — itu urutan yang dipikirkan orang waktu melihat peta.
-    if (f) window.openRingChooser(f.properties.kode, e.originalEvent);
-  });
-  S.map.on('mouseenter', 'kec-isi', () => {
-    if (window.ringEditing && window.ringEditing()) S.map.getCanvas().style.cursor = 'pointer';
-  });
-  S.map.on('mouseleave', 'kec-isi', () => { S.map.getCanvas().style.cursor = ''; });
 
   kecamatanSiap = true;
 }
 
 /**
- * Nyalakan atau matikan nama kecamatan sebagai lapisan biasa.
+ * Nyalakan atau matikan batas dan nama kecamatan.
  *
- * Terpisah dari mode edit ring: orang perlu tahu nama kecamatan waktu MEMBACA peta,
- * bukan cuma waktu menyuntingnya. Berkas batasnya tetap dimuat saat diminta, jadi
- * yang tidak pernah menyalakannya tidak membayar 3 MB.
+ * Berkas batasnya tetap dimuat saat diminta, jadi yang tidak pernah menyalakannya
+ * tidak membayar 3 MB.
  */
 export async function toggleDistrictNames() {
   const nyala = $('opt-kecamatan') && $('opt-kecamatan').checked;
@@ -246,25 +238,95 @@ export async function toggleDistrictNames() {
   redrawMap();
 }
 
+/* ==========================================================================
+   BATAS DESA/KELURAHAN — EDIT RING
+   ==========================================================================
+   Sejak 2026-08-31, menggantikan pemilihan lewat kecamatan (permintaan Pakbos:
+   granularitas kecamatan terlalu kasar). SENGAJA berkas terpisah dari
+   kelurahan.geojson yang dipakai choropleth: yang itu hanya berisi desa yang sudah
+   punya penjualan/jangkauan, dan mode edit ring justru paling butuh menandai desa yang
+   BELUM tersentuh. Lihat scripts/export-geo.js (tulisKelurahanRing) untuk alasan
+   lengkap dan risiko ukuran berkasnya.
+   ========================================================================== */
+
+let kelRingSiap = false;
+
+export const ringVillagesLoaded = () => kelRingSiap;
+
+/** Warna ring per unit, satu keluarga — sama dengan RING_COLORS di rings.js. */
+const RING_WARNA = { 1: '#0b2f6b', 2: '#3b6fc4', 3: '#93b4e6' };
+
+export async function addRingVillageLayers() {
+  if (kelRingSiap) return;
+  const geo = await fetchGeo('kelurahan-ring.geojson');
+  S.map.addSource('kel-ring', { type: 'geojson', data: geo, promoteId: 'kode' });
+
+  // Isi transparan dulu; setRingPaint() yang mewarnainya menurut ring. Lapisan isi
+  // tetap ada walau semuanya bening supaya kliknya punya sasaran — garis saja terlalu
+  // tipis untuk diklik orang yang sedang buru-buru. Disembunyikan (visibility none)
+  // sampai mode edit benar-benar dinyalakan — lihat setRingPaint().
+  S.map.addLayer({
+    id: 'kel-ring-isi', type: 'fill', source: 'kel-ring',
+    layout: { visibility: 'none' },
+    paint: { 'fill-color': '#0b2f6b', 'fill-opacity': 0 },
+  });
+  // Kuning tebal — permintaan Pakbos, supaya batas mode edit tidak tertukar dengan
+  // batas kelurahan biasa (putih) maupun batas kecamatan referensi (pink).
+  S.map.addLayer({
+    id: 'kel-ring-garis', type: 'line', source: 'kel-ring',
+    layout: { visibility: 'none' },
+    paint: { 'line-color': '#eab308', 'line-width': 3, 'line-opacity': 0.9 },
+  });
+  S.map.addLayer({
+    id: 'kel-ring-nama', type: 'symbol', source: 'kel-ring', minzoom: 11,
+    layout: {
+      visibility: 'none',
+      'text-field': ['get', 'nama'], 'text-font': ['Noto Sans Regular'],
+      'text-size': 10, 'text-allow-overlap': false,
+    },
+    paint: { 'text-color': '#713f12', 'text-halo-color': '#ffffff', 'text-halo-width': 1.4 },
+  });
+
+  S.map.on('click', 'kel-ring-isi', (e) => {
+    if (!window.ringEditing || !window.ringEditing()) return;
+    const f = e.features && e.features[0];
+    // Pemilih ringnya dibuka di titik klik. Urutannya sengaja "desa dulu, baru
+    // ringnya" — itu urutan yang dipikirkan orang waktu melihat peta.
+    //
+    // Nama diambil dari properti FITUR INI (kelurahan-ring.geojson, SEMUA desa),
+    // bukan dari S.villageByCode (cuma ~4.000 desa yang sudah punya penjualan/
+    // jangkauan) — desa yang justru paling perlu ditandai manusia (belum tergarap)
+    // adalah yang PALING SERING tidak ada di S.villageByCode sama sekali.
+    if (f) window.openRingChooser(f.properties.kode, f.properties.nama, e.originalEvent);
+  });
+  S.map.on('mouseenter', 'kel-ring-isi', () => {
+    if (window.ringEditing && window.ringEditing()) S.map.getCanvas().style.cursor = 'pointer';
+  });
+  S.map.on('mouseleave', 'kel-ring-isi', () => { S.map.getCanvas().style.cursor = ''; });
+
+  kelRingSiap = true;
+}
+
 /**
- * Warnai kecamatan menurut ring, atau matikan lapisannya sama sekali.
+ * Warnai desa menurut ring dan nyalakan lapisannya, atau matikan sama sekali.
  *
- * @param {Object|null} draft  {districtCode: 1|2|3}, atau null untuk keluar mode edit
+ * @param {Object|null} draft  {villageCode: 1|2|3}, atau null untuk keluar mode edit
  */
 export function setRingPaint(draft) {
-  if (!kecamatanSiap) return;
-  // Keluar dari mode edit TIDAK otomatis mematikan lapisannya: kalau orang menyalakan
-  // "Nama Kecamatan" sendiri di opsi peta, mematikannya di sini akan terasa seperti
-  // sakelarnya rusak. redrawMap() yang memutuskan, dari sakelar dan mode edit sekaligus.
-  redrawMap();
+  if (!kelRingSiap) return;
+
+  ['kel-ring-isi', 'kel-ring-garis', 'kel-ring-nama'].forEach((id) => {
+    if (S.map.getLayer(id)) {
+      S.map.setLayoutProperty(id, 'visibility', draft ? 'visible' : 'none');
+    }
+  });
   if (!draft) return;
 
   // Ekspresi match dibangun dari daftar kode, bukan feature-state satu per satu:
-  // 654 panggilan setFeatureState tiap klik terasa tersendat, dan yang berubah cuma
-  // satu kecamatan.
+  // ribuan panggilan setFeatureState tiap klik terasa tersendat, dan yang berubah
+  // cuma satu desa.
   const warna = ['match', ['get', 'kode']];
   const opasitas = ['match', ['get', 'kode']];
-  const RING_WARNA = { 1: '#0b2f6b', 2: '#3b6fc4', 3: '#93b4e6' };
   Object.entries(draft).forEach(([kode, ring]) => {
     warna.push(kode, RING_WARNA[ring] || '#94a3b8');
     opasitas.push(kode, 0.55);
@@ -272,9 +334,9 @@ export function setRingPaint(draft) {
   warna.push('#94a3b8');
   opasitas.push(0.06);
 
-  S.map.setPaintProperty('kec-isi', 'fill-color',
+  S.map.setPaintProperty('kel-ring-isi', 'fill-color',
     Object.keys(draft).length ? warna : '#94a3b8');
-  S.map.setPaintProperty('kec-isi', 'fill-opacity',
+  S.map.setPaintProperty('kel-ring-isi', 'fill-opacity',
     Object.keys(draft).length ? opasitas : 0.06);
 }
 
@@ -304,7 +366,7 @@ export function paintChoropleth(rows) {
     if (value != null) {
       if (fixed) {
         const cls = fixedContributionClass(value);
-        warna = cls < 0 ? COLOR_EMPTY : RAMP6[Math.min(cls, RAMP6.length - 1)];
+        warna = cls < 0 ? COLOR_EMPTY : RAMP[Math.min(cls, RAMP.length - 1)];
       } else {
         const cls = classOf(value, breaks);
         warna = cls < 0 ? COLOR_EMPTY : RAMP[cls];
@@ -316,17 +378,28 @@ export function paintChoropleth(rows) {
   return { perVillage, breaks };
 }
 
-/** @param {'relative'|'fixed'} mode */
-export function setHeatmapMode(mode) {
-  if (mode !== 'relative' && mode !== 'fixed') return;
-  S.heatmapMode = mode;
+/**
+ * Sinkronkan tampilan tombol Dynamic/Static dengan S.heatmapMode.
+ *
+ * Terpisah dari setHeatmapMode() supaya titik auto-switch di filters.js (waktu filter
+ * Kota berganti) bisa memakainya lewat window TANPA memicu window.renderAll() kedua —
+ * setScope()/clearScope() di filters.js sudah berakhir di renderAll() sendiri.
+ */
+export function syncHeatmapModeButtons() {
   ['relative', 'fixed'].forEach((m) => {
     const button = $('hm-' + m);
     if (button) {
       button.className = 'flex-1 px-2 py-1.5 rounded-md text-[10px] font-bold ' +
-        (m === mode ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500');
+        (m === S.heatmapMode ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500');
     }
   });
+}
+
+/** @param {'relative'|'fixed'} mode */
+export function setHeatmapMode(mode) {
+  if (mode !== 'relative' && mode !== 'fixed') return;
+  S.heatmapMode = mode;
+  syncHeatmapModeButtons();
   window.renderAll();
 }
 
@@ -334,27 +407,27 @@ export function redrawMap() {
   if (!S.layersReady) return;
   const on = (id) => ($(id) ? $(id).checked : false);
 
-  S.map.setLayoutProperty('kel-garis', 'visibility', on('opt-batas') ? 'visible' : 'none');
-  S.map.setLayoutProperty('kel-nama', 'visibility', on('opt-nama') ? 'visible' : 'none');
-  S.map.setLayoutProperty('kota-garis', 'visibility', on('opt-kota') ? 'visible' : 'none');
+  // "Batas dan Nama Kelurahan/Desa" — satu toggle, dua lapisan (permintaan Pakbos,
+  // sebelumnya dua sakelar terpisah).
+  const tampilKel = on('opt-kelurahan');
+  S.map.setLayoutProperty('kel-garis', 'visibility', tampilKel ? 'visible' : 'none');
+  S.map.setLayoutProperty('kel-nama', 'visibility', tampilKel ? 'visible' : 'none');
 
-  // Kecamatan tampil kalau sakelarnya dinyalakan ATAU sedang menyunting ring. Dua
-  // sebab, satu tempat yang memutuskan — kalau masing-masing menyetel visibility
-  // sendiri, keluar dari mode edit akan mematikan lapisan yang sengaja dinyalakan
-  // orang lewat opsi peta.
+  // "Batas dan Nama Kota" — satu toggle, batas + label kota sekaligus.
+  const tampilKota = on('opt-kota');
+  S.map.setLayoutProperty('kota-garis', 'visibility', tampilKota ? 'visible' : 'none');
+  S.map.setLayoutProperty('kota-nama', 'visibility', tampilKota ? 'visible' : 'none');
+
+  // "Batas dan Nama Kecamatan" — murni referensi visual sejak 2026-08-31, TIDAK lagi
+  // terikat mode edit ring (itu sekarang lapisan sendiri, kel-ring-*, dikendalikan
+  // setRingPaint()).
   if (kecamatanSiap) {
-    const sedangEdit = window.ringEditing && window.ringEditing();
-    const tampilKec = on('opt-kecamatan') || sedangEdit;
-    ['kec-isi', 'kec-garis', 'kec-nama'].forEach((id) => {
+    const tampilKec = on('opt-kecamatan');
+    ['kec-garis', 'kec-nama'].forEach((id) => {
       if (S.map.getLayer(id)) {
         S.map.setLayoutProperty(id, 'visibility', tampilKec ? 'visible' : 'none');
       }
     });
-    // Di luar mode edit, isinya tidak diwarnai sama sekali — yang diminta cuma nama
-    // dan batasnya, dan isian abu di seluruh peta menutupi heatmap di bawahnya.
-    if (!sedangEdit && S.map.getLayer('kec-isi')) {
-      S.map.setPaintProperty('kec-isi', 'fill-opacity', 0);
-    }
   }
 
   const showPoints = on('opt-jual');
@@ -376,8 +449,12 @@ export function redrawMap() {
   S.map.setPaintProperty('kel-nama', 'text-color', satellite ? '#ffffff' : '#1e293b');
   S.map.setPaintProperty('kel-nama', 'text-halo-color', satellite ? '#000000' : '#ffffff');
 
-  const showMarkers = on('opt-titik');
-  S.markers.forEach((m) => { m.getElement().style.display = showMarkers ? '' : 'none'; });
+  // "Titik Dealer" dan "Titik Pos" — dua sakelar terpisah sejak 2026-08-31 (permintaan
+  // Pakbos; sebelumnya satu sakelar untuk keduanya).
+  const showPos = on('opt-titik-pos');
+  S.markers.forEach((m) => { m.getElement().style.display = showPos ? '' : 'none'; });
+  const showDealer = on('opt-titik-dealer');
+  S.dealerMarkers.forEach((m) => { m.getElement().style.display = showDealer ? '' : 'none'; });
 
   // Lingkarannya memakai S.radiusM — radius yang SEDANG DIPILIH — bukan konstanta.
   //
@@ -477,7 +554,7 @@ export function buildSalePoints() {
           properties: {
             warna: dealerColor(S.registry, row.dealer), dealer: row.dealer,
             outlet: row.outlet, village: code,
-            kota: village.cityCode || '', prov: village.provinceCode || '',
+            kota: village.cityCode || '',
           },
           geometry: { type: 'Point', coordinates: [lng, lat] },
         });
@@ -503,7 +580,9 @@ function salePointFilter() {
   if (f.dealerCode !== 'ALL') clauses.push(['==', ['get', 'dealer'], f.dealerCode]);
   if (f.cityCode !== 'ALL') clauses.push(['==', ['get', 'kota'], f.cityCode]);
 
-  if (f.province !== 'ALL') clauses.push(['==', ['get', 'prov'], f.province]);
+  if (f.kares !== 'ALL') {
+    clauses.push(['in', ['get', 'kota'], ['literal', KARESIDENAN[f.kares].cities]]);
+  }
 
   return clauses.length === 1 ? null : clauses;
 }

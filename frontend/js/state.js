@@ -14,15 +14,16 @@
  * mengubah angka yang dilihat orang di Master Pos Dealer. Sebelumnya nilainya tinggal
  * di <select> — dan satu set <select> tidak bisa menyimpan empat halaman sekaligus.
  *
- * cityCode/dealerCode/outletCode masing-masing slot sendiri, di-AND-kan — sama seperti
- * province. Sebelum 2026-08-30 ketiganya berbagi satu slot (scopeKind/scopeCode);
- * alasan dipecah ada di filters.js.
+ * cityCode/dealerCode/outletCode SALING EKSKLUSIF sejak [tanggal eksekusi] — permintaan
+ * langsung Pakbos, membalikkan keputusan 2026-08-30 yang sempat membuat ketiganya
+ * independen. Menyetel satu membuang dua lainnya — lihat setScope() di filters.js.
+ * `kares` MANDIRI dari ketiganya, cuma mempersempit pilihan kota (lihat filter-bar.js).
  */
 export function makeFilter() {
   return {
     from: 'ALL',        // batas bawah periode 'YYYY-MM', 'ALL' = sejak awal
     to: 'ALL',          // batas atas periode 'YYYY-MM', 'ALL' = sampai terbaru
-    province: 'ALL',    // MANDIRI — selalu boleh dipakai bersama tiga field di bawah
+    kares: 'ALL',       // MANDIRI — selalu boleh dipakai bersama tiga field di bawah
     cityCode: 'ALL',
     dealerCode: 'ALL',
     outletCode: 'ALL',
@@ -71,6 +72,7 @@ export const S = {
   layersReady: false,
   basemap: 'lokal',
   markers: [],
+  dealerMarkers: [],       // titik HQ dealer, terpisah dari titik pos (S.markers)
   salePoints: null,        // dibangkitkan sekali, dipakai ulang
 
   // --- pilihan ---
@@ -82,9 +84,20 @@ export const S = {
   // Bawaannya yang terkecil, karena yang dicari orang di panel ini adalah pos yang
   // paling bermasalah — bukan yang paling baik.
   performanceSort: 'asc',
+  // Kriteria sort blok Performa: 'percent' (dalam/luar ring, bawaan) | 'units' (total
+  // sales) | 'ring' (peringkat %ring tertentu, lihat performanceRingFocus).
+  performanceCriteria: 'units',
+  performanceRingFocus: 1, // 1|2|3 — ring yang dipakai waktu performanceCriteria==='ring'
+  performanceGroupFilter: null, // salah satu POSISI_LABEL, atau null = semua kelompok
   livePerforma: null,      // id interval gulir otomatis; null berarti mati
+  // Blok Analisis Penjualan Wilayah (Bagian H): auto-loop SENDIRI begitu ada isinya,
+  // beda dari livePerforma yang manual — liveWilayahPaused membedakan "belum pernah
+  // mulai" (biarkan auto-start jalan) dari "user menekan Pause" (jangan auto-mulai lagi).
+  liveWilayah: null,
+  liveWilayahPaused: false,
   treemapView: 'dealer',
   treemapChart: null,
+  treemapChartBesar: null, // popup treemap (Bagian C), null waktu modalnya tertutup
   treemapCodes: [],
   villageTrendChart: null, // grafik tren bulanan di panel Blok 2 (Sales)
   // 'relative' (persentil, bawaan) | 'fixed' (interval tetap). Ditulis di sini dari
@@ -92,9 +105,11 @@ export const S = {
   // mengubah warna peta sungguhan sampai togglenya dipasang di bagian berikutnya.
   heatmapMode: 'relative',
 
-  // --- ring layanan: rings[outletCode][districtCode] = 1|2|3 ---
+  // --- ring layanan: rings[outletCode][villageCode] = 1|2|3 ---
+  // Sejak [tanggal eksekusi] per DESA/KELURAHAN, bukan lagi per kecamatan — permintaan
+  // Pakbos. Data ring versi kecamatan lama dihapus total, mulai dari kosong.
   rings: {},
-  districtNames: {},       // kode kecamatan -> nama, untuk menyebutnya di layar
+  districtNames: {},       // kode kecamatan -> nama, untuk menyebutnya di layar (Master Kelurahan)
 
   // --- jangkauan ---
   coverage: {},            // coverage[outletCode][villageCode] = rasio, radius aktif

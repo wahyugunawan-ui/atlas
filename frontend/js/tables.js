@@ -7,7 +7,7 @@ import {
 } from './api.js';
 import { dealerColor, percentileBreaks } from './colors.js';
 import {
-  CUSTOMER_PANEL_LIMIT, PROVINCE_NAMES, SHOW_ENGINE_NUMBER, SHOW_HOUSE_PHOTO,
+  CUSTOMER_PANEL_LIMIT, KARESIDENAN, PROVINCE_NAMES, SHOW_ENGINE_NUMBER, SHOW_HOUSE_PHOTO,
   TABLE_ROW_LIMIT,
 } from './config.js';
 import { $, esc, formatNumber, formatPercent, monthLabel, sumBy, toast } from './dom.js';
@@ -97,7 +97,7 @@ export function openDealerDetail(dealerCode) {
   // akan bersambung dan tidak ada yang tahu mana yang benar.
   const f = pageFilters();
   const city = f.cityCode;
-  const province = f.province;
+  const kares = f.kares;
   const rows = S.sales.filter((r) => {
     if (r.dealer !== dealerCode) return false;
     if (f.from !== 'ALL' && r.period < f.from) return false;
@@ -105,7 +105,7 @@ export function openDealerDetail(dealerCode) {
     const village = S.villageByCode[r.village];
     if (!village) return false;
     if (city !== 'ALL' && village.cityCode !== city) return false;
-    if (province !== 'ALL' && village.provinceCode !== province) return false;
+    if (kares !== 'ALL' && !KARESIDENAN[kares].cities.includes(village.cityCode)) return false;
     return true;
   });
 
@@ -288,7 +288,7 @@ export function jumpFromDealer(villageCode, dealerCode) {
  * Badge kecil berwarna untuk Posisi Relatif. `null` berarti kota belum punya
  * penjualan sama sekali pada filter aktif — "Data belum tersedia", bukan "Terbawah".
  */
-function posisiBadgeHtml(label) {
+export function posisiBadgeHtml(label) {
   if (!label) return '<span class="text-xs text-slate-400">Data belum tersedia</span>';
   const WARNA = {
     Terbawah: 'bg-red-50 text-red-700 border-red-200',
@@ -573,10 +573,11 @@ function ringCell(outletCode, ring) {
     return '<td class="px-3 py-2 text-center mono text-xs text-slate-300">&mdash;</td>';
   }
 
-  // Kode yang tidak dikenal tetap ditampilkan sebagai kode, bukan dilewati: kecamatan
+  // Kode yang tidak dikenal tetap ditampilkan sebagai kode, bukan dilewati: desa
   // yang hilang dari daftar tapi masih tersimpan di ring adalah hal yang harus
   // terlihat, bukan disembunyikan.
-  const nama = kode.map((c) => S.districtNames[c] || c).sort((a, b) => a.localeCompare(b));
+  const nama = kode.map((c) => (S.villageByCode[c] || {}).name || c)
+    .sort((a, b) => a.localeCompare(b));
   const tampil = nama.slice(0, RING_NAMA_TAMPIL);
   const sisa = nama.length - tampil.length;
 
@@ -906,7 +907,7 @@ export function renderVillageTable() {
   // kelurahan dari kabupaten berbeda berselang-seling dan tidak bisa ditelusuri.
   const list = S.villages.filter((v) =>
     (f.cityCode === 'ALL' || v.cityCode === f.cityCode) &&
-    (f.province === 'ALL' || v.provinceCode === f.province) &&
+    (f.kares === 'ALL' || KARESIDENAN[f.kares].cities.includes(v.cityCode)) &&
     (!disentuh || disentuh.has(v.code)) &&
     (!query || v.name.toLowerCase().includes(query) || v.code.includes(query)));
 
@@ -1369,7 +1370,6 @@ export async function renderCustomerTable(keepOffset) {
   const filters = {
     periodFrom: f.from,
     periodTo: f.to,
-    province: f.province,
     city: f.cityCode,
     outlet: f.outletCode !== 'ALL' ? f.outletCode : null,
     query: ($('mkon-search').value || '').trim(),

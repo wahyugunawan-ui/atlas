@@ -19,11 +19,11 @@
  * Murni: tidak menyentuh DOM. Diuji oleh test/colors.test.js.
  */
 
-/** Ramp volume, terang -> gelap. Lima langkah, satu untuk tiap kelas persentil. */
+/**
+ * Ramp volume, terang -> gelap. Lima langkah — dipakai KEDUA mode heatmap (relative
+ * DAN fixed) sejak 2026-08-31, keduanya lima kelas (lihat sales-stats.js KONTRIBUSI_TETAP).
+ */
 export const RAMP = ['#cde2fb', '#9ec5f4', '#5598e7', '#256abf', '#104281'];
-
-/** Ramp enam langkah untuk mode heatmap "Per Nilai Kontribusi" (interval tetap). */
-export const RAMP6 = ['#e8f0fc', '#cde2fb', '#9ec5f4', '#5598e7', '#256abf', '#104281'];
 
 /**
  * Kelurahan tanpa penjualan. Bukan langkah paling terang dari ramp — "nol" dan

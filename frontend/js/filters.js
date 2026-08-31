@@ -9,7 +9,7 @@
  * <select> di bilah cuma cerminnya. Itu dua hal sekaligus: tiap halaman bisa punya
  * filter sendiri tanpa trik simpan-muat, dan aturannya bisa diuji tanpa browser.
  */
-import { PROVINCE_NAMES } from './config.js';
+import { KARESIDENAN } from './config.js';
 import { S } from './state.js';
 
 /** Nilai filter halaman yang sedang aktif, atau halaman yang disebut. */
@@ -20,14 +20,14 @@ const FIELD = { kota: 'cityCode', dealer: 'dealerCode', pos: 'outletCode' };
 const KINDS = Object.keys(FIELD);
 
 /**
- * Kota, dealer, dan pos masing-masing SLOT SENDIRI, di-AND-kan — sama seperti provinsi
- * yang sudah begitu sejak awal.
+ * Kota, dealer, dan pos SALING EKSKLUSIF sejak [tanggal eksekusi] — permintaan
+ * langsung Pakbos. Cuma satu dari ketiganya boleh aktif; menyalakan satu membuang dua
+ * lainnya (lihat setScope()).
  *
- * Sebelum 2026-08-30 ketiganya berbagi satu slot (`scopeKind`/`scopeCode`): tim minta
- * kota DAN dealer bisa aktif bersamaan untuk panel ringkasan gabungan, dan begitu dua
- * dari tiga jadi independen, mengecualikan pos sendirian justru menambah percabangan
- * dibanding memperlakukan ketiganya seragam. Lihat DECISIONS.md untuk pertimbangan
- * lengkapnya.
+ * Ini MEMBALIKKAN keputusan 2026-08-30 yang sempat membuat ketiganya independen
+ * (kota DAN dealer aktif bersamaan untuk panel ringkasan gabungan). Lihat
+ * docs/DECISIONS.md untuk kedua entri — yang lama tidak dihapus, entri baru menjelaskan
+ * kenapa arahnya berbalik.
  */
 export function scopeValue(kind, f) {
   const filters = f || pageFilters();
@@ -44,16 +44,39 @@ export function setScope(kind, code, force) {
   const f = pageFilters();
   const field = FIELD[kind];
   const same = !force && f[field] === code;
-  f[field] = (same || !code || code === 'ALL') ? 'ALL' : code;
+  const value = (same || !code || code === 'ALL') ? 'ALL' : code;
+  f[field] = value;
+
+  // Eksklusif: menyalakan satu membuang dua lainnya (permintaan Pakbos, lihat komentar
+  // di atas scopeValue()).
+  if (value !== 'ALL') {
+    KINDS.filter((k) => k !== kind).forEach((k) => { f[FIELD[k]] = 'ALL'; });
+  }
+
+  // Mode heatmap otomatis ikut filter Kota: Static waktu satu kota dipilih, Dynamic
+  // waktu "Semua". Ditulis di sini (bukan di renderAll()) supaya toggle manual orang
+  // di antara dua render tidak ketiban reset setiap kali — cuma waktu KOTA-nya sendiri
+  // yang berubah. window.syncHeatmapModeButtons ada di map.js; lewat window supaya
+  // filters.js tidak perlu mengimpor map.js (menghindari impor melingkar).
+  if (kind === 'kota') {
+    S.heatmapMode = value !== 'ALL' ? 'fixed' : 'relative';
+    if (window.syncHeatmapModeButtons) window.syncHeatmapModeButtons();
+  }
 }
 
 /** @param {string} [kind] tanpa argumen, kosongkan KETIGANYA (dipakai tombol Reset). */
 export function clearScope(kind) {
   const f = pageFilters();
-  (kind ? [kind] : KINDS).forEach((k) => { f[FIELD[k]] = 'ALL'; });
+  const kinds = kind ? [kind] : KINDS;
+  kinds.forEach((k) => { f[FIELD[k]] = 'ALL'; });
+
+  if (kinds.includes('kota')) {
+    S.heatmapMode = 'relative';
+    if (window.syncHeatmapModeButtons) window.syncHeatmapModeButtons();
+  }
 }
 
-export function setProvince(code) { pageFilters().province = code || 'ALL'; }
+export function setKares(code) { pageFilters().kares = (code && KARESIDENAN[code]) ? code : 'ALL'; }
 
 /**
  * Ujung rentang yang menyilang DISERET, bukan ditolak.
@@ -88,7 +111,7 @@ export function activeRows(page) {
     const village = S.villageByCode[row.village];
     if (!village) return false;
     if (f.cityCode !== 'ALL' && village.cityCode !== f.cityCode) return false;
-    if (f.province !== 'ALL' && village.provinceCode !== f.province) return false;
+    if (f.kares !== 'ALL' && !KARESIDENAN[f.kares].cities.includes(village.cityCode)) return false;
     return true;
   });
 }
@@ -247,8 +270,8 @@ export function scopeLabel() {
   if (f.outletCode !== 'ALL') {
     parts.push('Pos ' + ((S.outletByCode[f.outletCode] || {}).name || f.outletCode));
   }
-  if (f.province !== 'ALL') {
-    parts.push(PROVINCE_NAMES[f.province] || 'Provinsi ' + f.province);
+  if (f.kares !== 'ALL') {
+    parts.push(KARESIDENAN[f.kares].label);
   }
   return parts.length ? parts.join(' · ') : 'seluruh penjualan';
 }

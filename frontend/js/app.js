@@ -8,27 +8,28 @@
  */
 import { fetchGeo, fetchSummary } from './api.js';
 import { buildColorRegistry } from './colors.js';
-import { PROVINCE_NAMES } from './config.js';
 import { $, bbox, esc, formatNumber, monthLabel, toast } from './dom.js';
 import { chooseCombo, comboSearch, toggleCombo } from './combobox.js';
 import {
-  assignRing, cancelRingEdit, closeRingChooser, openRingChooser, ringEditing,
-  saveRingEdit, startRingEdit,
+  assignRing, cancelRingEdit, chooseRingOutlet, closeRingChooser, closeRingOutletChooser,
+  openRingChooser, ringEditing, saveRingEdit, startRingEdit,
 } from './rings.js';
 import { fillFilterBar, onPeriodChange, resetFilters, syncFilterBar } from './filter-bar.js';
 import { activeRows, applyScope, scopeLabel, scopeValue } from './filters.js';
 import {
   addLayers, fitToScope, invalidateSalePoints, paintChoropleth, redrawMap, setBasemap,
-  setHeatmapMode, toggleDistrictNames,
+  setHeatmapMode, syncHeatmapModeButtons, toggleDistrictNames,
   setRadius, setupMap, toggleFullscreen,
 } from './map.js';
 import {
-  closeSelectionInfo, drawMarkers, selectOutlet, showVillageTooltip,
+  closeSelectionInfo, drawDealerMarkers, drawMarkers, selectOutlet, showVillageTooltip,
 } from './outlets.js';
 import {
-  closeDealerCard, renderDealerCard, renderDealerLegend, renderKpi, renderLegend,
-  closePerformaFull, openPerformaFull, renderPerformance, renderTreemap, selectEntity,
-  setTreemapView, togglePerformanceSort, toggleLivePerforma,
+  closeDealerCard, closeTreemapFull, renderDealerCard, renderDealerLegend, renderKpi,
+  renderLegend, closePerformaFull, filterPerformanceGroup, openPerformaFull,
+  openTreemapFull, renderPerformance, renderTreemap, renderWilayah, selectEntity,
+  setPerformanceCriteria, setPerformanceRingFocus, setTreemapView, syncFullscreenPanels,
+  togglePerformanceSort, toggleLivePerforma, toggleLiveWilayah,
 } from './render.js';
 import { S } from './state.js';
 import {
@@ -62,11 +63,14 @@ const HANDLERS = {
   onPeriodChange, toggleCombo, comboSearch, chooseCombo, resetFilters,
   startRingEdit, cancelRingEdit, saveRingEdit, ringEditing,
   openRingChooser, closeRingChooser, assignRing,
+  chooseRingOutlet, closeRingOutletChooser,
   redrawMap, setBasemap, setRadius, setHeatmapMode, applyScope, toggleFullscreen, fitToScope,
   toggleDistrictNames,
   // ringkasan
   setTreemapView, selectEntity, closeDealerCard, togglePerformanceSort,
   toggleLivePerforma, openPerformaFull, closePerformaFull,
+  setPerformanceCriteria, setPerformanceRingFocus, filterPerformanceGroup,
+  openTreemapFull, closeTreemapFull, toggleLiveWilayah,
   // sunting pos
   openOutletEditor, closeOutletEditor, pickFromMap, saveOutletEditor, dealerChoiceChanged,
   // peta dan outlet
@@ -86,7 +90,7 @@ const HANDLERS = {
   runUpload, reviewImport, finishImport, reimportPeriod, refreshImportTab,
   askDeletePeriod, closeDeletePeriod, deletePeriodTyped, confirmDeletePeriod,
   // dipanggil antar modul lewat window supaya tidak ada lingkaran import
-  renderAll, reloadSummary,
+  renderAll, reloadSummary, syncHeatmapModeButtons,
 };
 Object.assign(window, HANDLERS);
 
@@ -127,6 +131,8 @@ export function renderAll() {
   renderKpi(rows, perVillage);
   renderTreemap(rows);
   renderPerformance(rows);
+  renderWilayah(rows);
+  syncFullscreenPanels();
   renderDealerCard();
   renderDealerLegend(rows);
 
@@ -134,11 +140,12 @@ export function renderAll() {
   $('scope-label').textContent = scope;
   $('scope-clear').classList.toggle('hidden', scope === 'seluruh penjualan');
 
-  // Ring melekat pada POS, jadi tombolnya cuma masuk akal waktu satu pos yang dipilih.
-  // Muncul untuk dealer akan menyesatkan: yang tersimpan bukan ring dealer.
-  const adaPos = scopeValue('pos') !== 'ALL';
-  $('btn-edit-ring').classList.toggle('hidden', !adaPos);
-  $('btn-ring-peta').classList.toggle('hidden', !adaPos);
+  // Ring melekat pada POS, tapi tombolnya SEKARANG juga muncul waktu scope DEALER
+  // aktif (permintaan Pakbos, titik dealer punya tombol Edit Ring sendiri) —
+  // startRingEdit() di rings.js yang memutuskan pos mana kalau dealernya py >1 pos.
+  const bisaEditRing = scopeValue('pos') !== 'ALL' || scopeValue('dealer') !== 'ALL';
+  $('btn-edit-ring').classList.toggle('hidden', !bisaEditRing);
+  $('btn-ring-peta').classList.toggle('hidden', !bisaEditRing);
 
   // Jumlah nama yang menunggu dicocokkan, di tombolnya sendiri. Pekerjaan yang
   // menunggu harus terlihat tanpa ada yang membuka modalnya dulu.
@@ -147,6 +154,7 @@ export function renderAll() {
 
   if (S.layersReady) {
     drawMarkers();
+    drawDealerMarkers();
     redrawMap();
   }
   // Panel geser digambar ulang mengikuti ISINYA, bukan selalu dianggap kelurahan.

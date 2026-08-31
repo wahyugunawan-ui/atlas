@@ -299,8 +299,8 @@ function test() {
   // Namanya ditulis, bukan cuma jumlahnya — diminta tim. Tapi daftarnya DIBATASI:
   // satu ring bisa memuat belasan kecamatan, dan tanpa batas itu satu baris tabel bisa
   // setinggi sepuluh baris lain sampai tabelnya berhenti bisa dipindai.
-  assert.match(ringPotong, /S\.districtNames\[c\] \|\| c/,
-    'sel ring tidak lagi menyebut nama kecamatannya');
+  assert.match(ringPotong, /S\.villageByCode\[c\] \|\| \{\}\)\.name \|\| c/,
+    'sel ring tidak lagi menyebut nama desanya');
   assert.match(ringPotong, /slice\(0, RING_NAMA_TAMPIL\)/,
     'daftar nama kecamatan tidak lagi dibatasi — barisnya bisa jadi sangat tinggi');
   assert.match(ringPotong, /title="\$\{esc\(nama\.join\(', '\)\)\}"/,
@@ -318,36 +318,46 @@ function test() {
     `colspan baris kosong (${colspanPos[1]}) tidak sama dengan jumlah kolom (${kepalaPos})`);
 
   /* --------------------------------------------------------------------
-     EDIT RING (KF-POS-18, KF-POS-19)
+     EDIT RING (KF-POS-18, KF-POS-19) — per DESA/KELURAHAN sejak 2026-08-31
      -------------------------------------------------------------------- */
   const ringSource = source['rings.js'];
   const mapSource = source['map.js'];
 
-  // Batas kecamatan dimuat SAAT MODE EDIT, bukan saat halaman dibuka. Berkasnya 3 MB
-  // dan sebagian besar sesi tidak pernah menyunting ring; memuatnya di awal berarti
-  // semua orang membayar untuk yang dipakai sedikit. Gagalnya diam: halaman tetap
-  // jalan, cuma lebih lambat 3 MB tiap kali dibuka, dan tidak ada yang error.
+  // Batas desa (edit ring) dan batas kecamatan (referensi visual) DUA-DUANYA dimuat
+  // SAAT DIMINTA, bukan saat halaman dibuka — berkasnya beberapa MB dan sebagian
+  // besar sesi tidak pernah membukanya sama sekali. Gagalnya diam: halaman tetap
+  // jalan, cuma lebih lambat tiap kali dibuka, dan tidak ada yang error.
   assert.ok(!/kecamatan\.geojson/.test(source['app.js']),
-    'batas kecamatan ikut dimuat saat halaman dibuka — tempatnya di mode edit ring');
-  assert.match(ringSource, /addDistrictLayers\(\)/,
-    'mode edit ring tidak lagi memuat batas kecamatannya sendiri');
+    'batas kecamatan ikut dimuat saat halaman dibuka — tempatnya di toggle Opsi Peta');
+  assert.ok(!/kelurahan-ring\.geojson/.test(source['app.js']),
+    'batas desa untuk edit ring ikut dimuat saat halaman dibuka — tempatnya di mode edit ring');
+  assert.match(ringSource, /addRingVillageLayers\(\)/,
+    'mode edit ring tidak lagi memuat batas desanya sendiri');
+  assert.match(mapSource, /fetchGeo\('kelurahan-ring\.geojson'\)/,
+    'batas desa untuk edit ring tidak lagi diambil dari berkas geo terpisah');
   assert.match(mapSource, /fetchGeo\('kecamatan\.geojson'\)/,
-    'batas kecamatan tidak lagi diambil dari berkas geo');
+    'batas kecamatan referensi tidak lagi diambil dari berkas geo');
 
   /* --------------------------------------------------------------------
      PANEL ANALISIS PERFORMA POS
      -------------------------------------------------------------------- */
   const renderSource = source['render.js'];
 
-  // Tiga salinan daftar yang sama (panel biasa, layar penuh peta, tampilan besar)
-  // digambar dari SATU variabel. Kalau masing-masing menghitung sendiri, tiga angka
+  // Satu sumber data (performanceByOutlet, dipanggil SEKALI). panel-performa dan
+  // fp-performa (tampilan besar) berbagi `bodyWide` yang SATU; fs-performa (layar
+  // penuh peta, w-80) pakai `bodyCompact` — field yang SAMA dari `list` yang SAMA,
+  // cuma kemasannya lebih ringkas. Kalau salah satu menghitung ulang sendiri, angka
   // berbeda bisa tampil bersamaan dan tidak ada yang tahu mana yang benar.
   const perfBody = renderSource.slice(renderSource.indexOf('export function renderPerformance'));
   const perfPotong = perfBody.slice(0, perfBody.indexOf('\n}'));
-  ['panel-performa', 'fs-performa', 'fp-performa'].forEach((id) => {
-    assert.match(perfPotong, new RegExp(`\\$\\('${id}'\\)[^=]*= body`),
-      `${id} tidak lagi digambar dari daftar yang sama — tiga angka berbeda bisa tampil`);
+  assert.match(perfPotong, /const \{ list, counts \} = performanceByOutlet\(rows\);/,
+    'daftar performa tidak lagi dihitung sekali dari performanceByOutlet');
+  ['panel-performa', 'fp-performa'].forEach((id) => {
+    assert.match(perfPotong, new RegExp(`\\$\\('${id}'\\)[^=]*= bodyWide`),
+      `${id} tidak lagi digambar dari daftar wide yang sama`);
   });
+  assert.match(perfPotong, /\$\('fs-performa'\)[^=]*= bodyCompact/,
+    'fs-performa tidak lagi digambar dari daftar compact yang sama');
 
   // Gulir otomatis WAJIB dihentikan waktu tampilan besarnya ditutup. Interval yang
   // tertinggal terus berjalan di panel yang tidak terlihat, dan tombolnya tetap
@@ -357,6 +367,35 @@ function test() {
     'menutup tampilan besar tidak menghentikan gulir otomatis — intervalnya bocor');
   assert.match(renderSource, /clearInterval\(S\.livePerforma\)/,
     'gulir otomatis tidak pernah dihentikan dengan clearInterval');
+
+  /* --------------------------------------------------------------------
+     BLOK ANALISIS PENJUALAN WILAYAH (putaran ketiga, 2026-08-31)
+     -------------------------------------------------------------------- */
+  ['panel-wilayah', 'fs-wilayah', 'fs-performa-grup', 'fs-wilayah-grup',
+    'btn-live-wilayah', 'btn-live-wilayah-fs'].forEach((id) => {
+    assert.ok(html.includes(`id="${id}"`), `elemen ${id} hilang dari markup`);
+  });
+
+  // Auto-loop SENDIRI — beda dari blok Performa Pos yang manual (Live). Dijaga oleh
+  // DUA state: liveWilayah (sedang jalan atau tidak) dan liveWilayahPaused (user
+  // pernah menekan Pause) — tanpa yang kedua, render ulang akan menyalakan lagi
+  // interval yang sengaja dihentikan orang.
+  assert.match(renderSource, /if \(S\.liveWilayah \|\| S\.liveWilayahPaused\) return;/,
+    'auto-start Wilayah tidak lagi menghormati Pause yang sudah ditekan orang');
+  assert.match(renderSource, /S\.liveWilayahPaused = true;/,
+    'toggleLiveWilayah tidak lagi mencatat bahwa orang menekan Pause');
+
+  // Panel kiri layar penuh peta: satu slot, dua grup — Wilayah tampil waktu dealer
+  // ATAU pos difilter, Performa tampil sisanya. Kalau tidak pernah ditoggle
+  // bersyarat, dua-duanya bisa tampil sekaligus dan menumpuk di satu slot sempit.
+  const fsPanelBody = renderSource.slice(renderSource.indexOf('export function syncFullscreenPanels'));
+  const syncPotong = fsPanelBody.slice(0, fsPanelBody.indexOf('\n}'));
+  assert.match(syncPotong, /scopeValue\('dealer'\) !== 'ALL' \|\| scopeValue\('pos'\) !== 'ALL'/,
+    'syncFullscreenPanels tidak lagi menimbang scope dealer ATAU pos');
+  assert.match(syncPotong, /fs-performa-grup[^;]*hidden['"], wilayah\)/,
+    'grup Performa tidak lagi disembunyikan waktu Wilayah tampil');
+  assert.match(syncPotong, /fs-wilayah-grup[^;]*hidden['"], !wilayah\)/,
+    'grup Wilayah tidak lagi disembunyikan waktu Performa tampil');
 
   // Tombol urut membalik urutan, tidak cuma mengganti tulisannya.
   assert.ok(html.includes('id="btn-urut-performa"'), 'tombol urut hilang dari panel performa');
@@ -372,25 +411,29 @@ function test() {
     'tinggi tabel kembali dipatok angka ajaib (calc(100vh-...)) — sekali ada yang ' +
     'ditambah di atasnya, akan ada sisa ruang kosong di bawah tabel lagi');
 
-  // Nama kecamatan bisa dinyalakan sendiri lewat Opsi Peta (KF-PETA-17), tidak cuma
-  // ikut mode edit ring — orang perlu tahu nama kecamatan waktu MEMBACA peta juga.
+  // Nama kecamatan bisa dinyalakan sendiri lewat Opsi Peta (KF-PETA-17) — sejak
+  // 2026-08-31 ini toggle REFERENSI MURNI, sudah tidak ada hubungannya dengan mode
+  // edit ring (yang sekarang punya layer & warna sendiri, kel-ring-*).
   assert.ok(html.includes('id="opt-kecamatan"'), 'sakelar Nama Kecamatan hilang dari Opsi Peta');
+  const redrawBody = mapSource.slice(mapSource.indexOf('export function redrawMap'));
+  const redrawPotong = redrawBody.slice(0, redrawBody.indexOf('\nexport '));
+  assert.ok(!/sedangEdit/.test(redrawPotong),
+    'lapisan kecamatan masih menimbang mode edit ring — sejak dipisah ke kel-ring-*, ' +
+    'kecamatan seharusnya toggle murni tanpa cabang mode edit');
+  assert.match(redrawPotong, /on\('opt-kecamatan'\)/,
+    'lapisan kecamatan tidak lagi menimbang sakelar Opsi Peta-nya sendiri');
 
-  // Satu tempat yang memutuskan lapisan kecamatan tampil atau tidak, dari DUA sebab
-  // sekaligus. Kalau mode edit menyetel visibility sendiri, keluar dari mode edit akan
-  // mematikan lapisan yang sengaja dinyalakan orang lewat sakelar — dan sakelarnya
-  // terlihat menyala sementara petanya kosong.
-  assert.match(mapSource, /on\('opt-kecamatan'\) \|\| sedangEdit/,
-    'lapisan kecamatan tidak lagi menimbang sakelar dan mode edit di satu tempat');
+  // Lapisan edit ring (kel-ring-*) mengendalikan visibility-nya SENDIRI dari
+  // setRingPaint(), independen dari toggle Opsi Peta manapun — beda dari kecamatan
+  // di atas justru karena keduanya sekarang dua layer terpisah tanpa titik keputusan
+  // bersama.
   const paintBody = mapSource.slice(mapSource.indexOf('export function setRingPaint'));
   const paintPotong = paintBody.slice(0, paintBody.indexOf('\n}'));
-  assert.match(paintPotong, /redrawMap\(\)/,
-    'setRingPaint tidak lagi menyerahkan urusan tampil-tidaknya ke redrawMap');
-  // Sengaja mencari kata 'visibility' apa adanya, bukan nama lapisannya: mutasi yang
-  // memakai variabel untuk id lolos dari penjaga yang mencocokkan 'kec-'. Sudah dicoba.
-  assert.ok(!/visibility/.test(paintPotong),
-    'setRingPaint menyetel sendiri visibility lapisan kecamatan — keluar dari mode ' +
-    'edit akan mematikan lapisan yang dinyalakan lewat sakelar Opsi Peta');
+  assert.match(paintPotong, /setLayoutProperty\(id, 'visibility', draft \? 'visible' : 'none'\)/,
+    'setRingPaint tidak lagi menyalakan/mematikan lapisan kel-ring-* sendiri');
+  assert.ok(!/redrawMap\(\)/.test(paintPotong),
+    'setRingPaint memanggil redrawMap() lagi — lapisan ring sudah independen, tidak ' +
+    'perlu lagi menitipkan keputusan tampil/tidak ke fungsi lain');
 
   // Satu kecamatan tidak boleh berada di dua ring. Di database dijaga primary key; di
   // halaman dijaga bentuk datanya — satu kunci, satu nilai. Kalau draft-nya berubah
@@ -401,12 +444,18 @@ function test() {
     'kecamatan tidak lagi disimpan sebagai satu nilai per kode — dua ring bisa ' +
     'memiliki kecamatan yang sama, dan penjualannya terhitung dua kali');
 
-  // Urutannya SATU KECAMATAN DULU, baru ringnya — diminta tim. Versi pertama
+  // Urutannya SATU DESA DULU, baru ringnya — diminta tim. Versi pertama (kecamatan)
   // kebalikannya (pilih ring sebagai kuas, lalu sapu banyak kecamatan). Klik di peta
-  // karena itu harus membuka pemilih, bukan langsung menetapkan ring.
-  assert.match(mapSource, /window\.openRingChooser\(f\.properties\.kode, e\.originalEvent\)/,
-    'klik kecamatan tidak lagi membuka pemilih ring — kalau dia langsung menetapkan ' +
-    'ring, urutannya kembali jadi "pilih ring dulu" yang sudah ditolak tim');
+  // karena itu harus membuka pemilih, bukan langsung menetapkan ring. Nama desa
+  // dioper dari properti FITUR (kelurahan-ring.geojson), bukan S.villageByCode
+  // saja — desa tanpa penjualan sekalipun (tidak ada di S.villageByCode) tetap
+  // harus tampil namanya, bukan cuma kode mentah.
+  assert.match(mapSource,
+    /window\.openRingChooser\(f\.properties\.kode, f\.properties\.nama, e\.originalEvent\)/,
+    'klik desa tidak lagi membuka pemilih ring dengan nama dari fitur — desa tanpa ' +
+    'penjualan bisa tampil sebagai kode mentah tanpa nama');
+  assert.match(ringSource, /export function openRingChooser\(code, name, event\)/,
+    'openRingChooser tidak lagi menerima nama sebagai argumen terpisah dari S.villageByCode');
   assert.ok(html.includes('id="ring-pilih"'), 'pemilih ring hilang dari markup');
   [1, 2, 3].forEach((ring) => {
     assert.ok(html.includes(`onclick="assignRing(${ring})"`),
@@ -416,18 +465,21 @@ function test() {
     'tombol melepas kecamatan dari ring hilang — sekali salah pilih, tidak ada jalan ' +
     'membatalkannya selain menyimpan yang salah');
 
-  // Tombolnya cuma muncul waktu lingkupnya SATU POS. Ring melekat pada pos; tombol
-  // yang muncul untuk dealer akan menyimpan sesuatu yang bukan ring dealer.
-  assert.match(source['app.js'], /const adaPos = scopeValue\('pos'\) !== 'ALL';/,
-    'tombol edit ring tidak lagi dibatasi ke lingkup satu pos');
+  // Tombolnya muncul waktu lingkupnya SATU POS, ATAU satu DEALER (sejak 2026-08-31 —
+  // klik titik dealer di peta juga punya jalan pintas ke Edit Ring, lihat rings.js
+  // startRingEdit() yang memilihkan/menanyakan pos-nya).
+  assert.match(source['app.js'],
+    /const bisaEditRing = scopeValue\('pos'\) !== 'ALL' \|\| scopeValue\('dealer'\) !== 'ALL';/,
+    'tombol edit ring tidak lagi dibatasi ke lingkup satu pos ATAU satu dealer');
 
   // Ada DUA tombol dan dua-duanya harus ikut aturan itu. Yang di bilah ruang lingkup
   // saja tidak cukup: orang yang baru mengklik marker sedang melihat peta, dan bilah
   // ruang lingkup ada jauh di atas halaman — di luar layar sama dengan tidak ada.
   ['btn-edit-ring', 'btn-ring-peta'].forEach((id) => {
     assert.ok(html.includes(`id="${id}"`), `tombol ${id} hilang dari markup`);
-    assert.ok(new RegExp(`\\$\\('${id}'\\)\\.classList\\.toggle\\('hidden', !adaPos\\)`)
-      .test(source['app.js']), `tombol ${id} tidak ikut aturan "hanya waktu pos dipilih"`);
+    assert.ok(new RegExp(`\\$\\('${id}'\\)\\.classList\\.toggle\\('hidden', !bisaEditRing\\)`)
+      .test(source['app.js']),
+      `tombol ${id} tidak ikut aturan "hanya waktu pos atau dealer dipilih"`);
   });
 
   // Tombol Ring di tabel Master Pos mengantar ke peta, tidak membuka pemilih sendiri —
@@ -440,7 +492,7 @@ function test() {
     'tombol Ring di tabel tidak lagi mengantar ke peta');
 
   // Tiap dropdown lingkup punya rumahnya sendiri di bilah; isinya dibangun combobox.js.
-  ['provinsi', 'kota', 'dealer', 'pos'].forEach((nama) => {
+  ['kares', 'kota', 'dealer', 'pos'].forEach((nama) => {
     assert.ok(html.includes(`id="pilih-${nama}"`), `dropdown ${nama} hilang dari bilah`);
   });
 
@@ -496,11 +548,16 @@ function test() {
   // digulir. Diukur: dengan keduanya terbuka isinya 845 px, sementara yang muat 466 px.
   const opsiBlok = html.slice(html.indexOf('>Opsi Peta<') - 400,
     html.indexOf('id="legend-dealer"') + 200);
-  ['Legenda', 'Dealer'].forEach((judul) => {
-    assert.match(opsiBlok, new RegExp(`<details[^>]*>\\s*<summary[^>]*>${judul}</summary>`),
-      `bagian ${judul} tidak lagi dilipat — panel opsi peta jadi tidak muat dan ` +
-      'harus digulir untuk melihat sisanya');
-  });
+  // "Legenda" sejak 2026-08-31 judulnya dinamis (id="legend-title", diisi
+  // renderLegend() — "Dynamic..."/"Static Relative Tiering..." tergantung
+  // S.heatmapMode), jadi dicek longgar (boleh dibungkus <span>) — yang dijaga
+  // cuma bahwa dua-duanya TETAP terlipat di dalam <details>.
+  assert.match(opsiBlok, /<details[^>]*>\s*<summary[^>]*><span id="legend-title">/,
+    'bagian Legenda tidak lagi dilipat — panel opsi peta jadi tidak muat dan harus ' +
+    'digulir untuk melihat sisanya');
+  assert.match(opsiBlok, /<details[^>]*>\s*<summary[^>]*>Dealer<\/summary>/,
+    'bagian Dealer tidak lagi dilipat — panel opsi peta jadi tidak muat dan harus ' +
+    'digulir untuk melihat sisanya');
   assert.ok(!/<details open/.test(opsiBlok),
     'lipatan legenda terbuka secara bawaan — panelnya kembali tidak muat');
 

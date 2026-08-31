@@ -1,13 +1,17 @@
 /**
- * Kontribusi penjualan kelurahan terhadap kotanya, posisi relatif, dan acuan bisnis.
+ * Kontribusi penjualan kelurahan/pos terhadap basisnya, posisi relatif, dan acuan
+ * bisnis.
  *
  * Murni: tidak menyentuh DOM, tidak membaca S langsung — pemanggilnya yang menyaring
  * baris penjualan lewat activeRows() dan mengoper villageByCode. Diuji oleh
  * test/sales-stats.test.js.
  *
  * Posisi relatif memakai ULANG percentileBreaks()/classOf() dari colors.js — mesin
- * yang sama yang sudah dipakai heatmap sejak awal, cuma inputnya sekarang array
- * kontribusi % per kelurahan (relatif terhadap kotanya sendiri), bukan unit mentah.
+ * yang sama yang sudah dipakai heatmap sejak awal, cuma inputnya beda tergantung
+ * pemanggilnya: kontribusi % per kelurahan (relatif terhadap kotanya sendiri) untuk
+ * panel kelurahan, atau kontribusi % per outlet (relatif terhadap TOTAL SELURUH pos
+ * yang tampil) untuk blok Performa Pos Dealer — lihat bagian PERFORMA POS DEALER di
+ * bawah.
  */
 import { classOf } from './colors.js';
 
@@ -15,15 +19,19 @@ import { classOf } from './colors.js';
 export const POSISI_LABEL = ['Terbawah', 'Bawah', 'Tengah', 'Atas', 'Teratas'];
 
 /**
- * Batas kelas interval TETAP untuk mode "Per Nilai Kontribusi" — beda dari posisi
- * relatif (yang bergantung sebaran), kelas ini sama di mana pun dan kapan pun dipakai.
- * 6 kelas: <=0,02% / <=0,04% / <=0,06% / <=0,08% / <=1% / >1%.
+ * Batas kelas interval TETAP untuk mode Static ("Static Relative Tiering by Total
+ * Sales per City") — beda dari posisi relatif (yang bergantung sebaran), kelas ini
+ * sama di mana pun dan kapan pun dipakai.
+ *
+ * Sejak 2026-08-31: 5 kelas, bukan 6 — permintaan Pakbos. Ambang angkanya SAMA PERSIS
+ * (0,02/0,04/0,06/0,08), cuma kelas ke-5 dan ke-6 lama ("0,081–1%" dan "Lebih dari 1%")
+ * DIGABUNG jadi satu kelas "top" di atas 0,08%.
  */
-export const KONTRIBUSI_TETAP = [0.02, 0.04, 0.06, 0.08, 1];
+export const KONTRIBUSI_TETAP = [0.02, 0.04, 0.06, 0.08];
 
-/** Label tetap untuk legenda mode "Per Nilai Kontribusi" — SATU indeks dengan fixedContributionClass(). */
+/** Label tetap mode Static — SATU indeks dengan fixedContributionClass(). */
 export const KONTRIBUSI_LABEL = [
-  '0–0,02%', '0,021–0,04%', '0,041–0,06%', '0,061–0,08%', '0,081–1%', 'Lebih dari 1%',
+  '0–0,02%', '0,021–0,04%', '0,041–0,06%', '0,061–0,08%', 'Lebih dari 0,08%',
 ];
 
 /**
@@ -85,8 +93,8 @@ export function relativePosition(value, breaks) {
 }
 
 /**
- * Kelas interval tetap (mode "Per Nilai Kontribusi"). -1 kalau tidak ada data
- * (kontribusi `null`), 0..4 sesuai KONTRIBUSI_TETAP, 5 untuk "lebih dari 1%".
+ * Kelas interval tetap (mode Static). -1 kalau tidak ada data (kontribusi `null`),
+ * 0..3 sesuai KONTRIBUSI_TETAP, 4 untuk "lebih dari 0,08%".
  */
 export function fixedContributionClass(percent) {
   if (percent == null || !Number.isFinite(percent)) return -1;
@@ -106,4 +114,96 @@ export function referenceGap(contributionPct, benchmarkPct) {
 export function referenceRatio(contributionPct, benchmarkPct) {
   if (contributionPct == null || !benchmarkPct) return null;
   return (contributionPct / benchmarkPct) * 100;
+}
+
+/* ==========================================================================
+   PERFORMA POS DEALER — kontribusi, posisi relatif, dan acuan bisnis PER POS
+   ==========================================================================
+   Sejak 2026-08-31 (permintaan Pakbos). Basisnya beda dari kelurahan: kontribusi
+   kelurahan relatif terhadap KOTANYA SENDIRI (groupByCity), kontribusi pos relatif
+   terhadap TOTAL SELURUH POS yang tampil di filter aktif — dikonfirmasi user waktu
+   perencanaan. Posisi relatif dan acuan bisnis TETAP memakai mesin yang sama
+   (percentileBreaks/classOf lewat relativePosition(), referenceGap()) — tidak ada
+   mesin klasifikasi baru, cuma dipanggil dengan input per-outlet.
+   ========================================================================== */
+
+/**
+ * Kontribusi % tiap nilai `field` (mis. `outlet` atau `village`) yang muncul di
+ * `rows`, terhadap total SELURUH `rows` itu — bukan per kota seperti kelurahan biasa
+ * (groupByCity). Nilai dari total yang nol TIDAK ikut masuk.
+ *
+ * @param {Array<Object>} rows   baris penjualan yang SUDAH difilter
+ * @param {string} field         nama field pengelompok, mis. 'outlet' atau 'village'
+ * @return {Map<string, number>} nilai field -> kontribusi %
+ */
+function contributionsByField(rows, field) {
+  const totals = {};
+  let grand = 0;
+  (rows || []).forEach((r) => {
+    totals[r[field]] = (totals[r[field]] || 0) + r.units;
+    grand += r.units;
+  });
+  const result = new Map();
+  Object.keys(totals).forEach((code) => {
+    const pct = contributionPercent(totals[code], grand);
+    if (pct != null) result.set(code, pct);
+  });
+  return result;
+}
+
+/**
+ * Kontribusi % tiap outlet yang muncul di `rows`, terhadap total SELURUH outlet itu.
+ * @param {Array<{outlet, units}>} rows  baris penjualan yang SUDAH difilter
+ * @return {Map<string, number>} kode outlet -> kontribusi %
+ */
+export function contributionsByOutlet(rows) { return contributionsByField(rows, 'outlet'); }
+
+/**
+ * Kontribusi % tiap desa yang muncul di `rows`, terhadap total SELURUH `rows` itu —
+ * dipakai blok "Analisis Penjualan Wilayah". Basisnya SENGAJA bukan kotanya sendiri
+ * (beda dari contributionsForRows/villageStats yang sudah ada untuk panel
+ * kelurahan): `rows` di sini biasanya sudah dipersempit ke satu dealer/pos lewat
+ * activeRows(), jadi "relatif terhadap dealer/pos yang difilter" otomatis terjadi
+ * tanpa percabangan khusus — dikonfirmasi user waktu perencanaan.
+ * @param {Array<{village, units}>} rows  baris penjualan yang SUDAH difilter
+ * @return {Map<string, number>} kode desa -> kontribusi %
+ */
+export function contributionsByVillage(rows) { return contributionsByField(rows, 'village'); }
+
+/**
+ * Kelompok Business Reference dari selisih (referenceGap()) — cuma tandanya yang
+ * menentukan kelompok, bukan ambang baru. `null` kalau gap-nya tidak ada (salah satu
+ * dari kontribusi/acuan tidak tersedia).
+ */
+export function businessReferenceGroup(gap) {
+  if (gap == null) return null;
+  if (gap > 0) return 'Di Atas Acuan';
+  if (gap < 0) return 'Di Bawah Acuan';
+  return 'Sesuai Acuan';
+}
+
+/**
+ * Bagi penjualan satu outlet ke ring 1/2/3, dari penetapan manual (bukan radius) —
+ * lihat backend/server/schema.sql `outlet_rings`. Desa yang tidak masuk ring manapun
+ * TIDAK dihitung ke ring manapun, tapi TETAP masuk `total` — sisanya adalah
+ * "%di luar ketiga ring" (`100 - percent1 - percent2 - percent3`), dihitung
+ * pemanggilnya supaya totalnya selalu genap 100% di layar.
+ *
+ * @param {Array<{village, units}>} rows  baris SATU outlet, sudah difilter
+ * @param {Object} ringMap  S.rings[outletCode] — {villageCode: 1|2|3}, atau undefined
+ */
+export function outletRingSplit(rows, ringMap) {
+  const units = { 1: 0, 2: 0, 3: 0 };
+  let total = 0;
+  (rows || []).forEach((row) => {
+    total += row.units;
+    const ring = ringMap ? ringMap[row.village] : undefined;
+    if (ring === 1 || ring === 2 || ring === 3) units[ring] += row.units;
+  });
+  return {
+    total,
+    percent1: contributionPercent(units[1], total) || 0,
+    percent2: contributionPercent(units[2], total) || 0,
+    percent3: contributionPercent(units[3], total) || 0,
+  };
 }

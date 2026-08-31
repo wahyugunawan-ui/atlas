@@ -507,19 +507,20 @@ async function unmatchedWithSuggestions(period) {
  * dihapus, sama seperti pada penghapusan periode.
  */
 /**
- * Seluruh ring, dibentuk rings[outletCode][districtCode] = 1|2|3.
+ * Seluruh ring, dibentuk rings[outletCode][villageCode] = 1|2|3.
  *
- * Dikirim sekaligus di /api/summary, sama seperti jangkauan: bentuknya kecil (78 pos
- * dikali belasan kecamatan), dan halaman butuh semuanya untuk menghitung ring tiap
- * baris penjualan tanpa bolak-balik ke server.
+ * Sejak [tanggal eksekusi] per DESA/KELURAHAN, bukan lagi per kecamatan — permintaan
+ * Pakbos, lihat docs/DECISIONS.md. Dikirim sekaligus di /api/summary, sama seperti
+ * jangkauan: halaman butuh semuanya untuk menghitung %ring tiap baris penjualan tanpa
+ * bolak-balik ke server.
  */
 async function allRings() {
   const rows = await store.all(store.db(), `
-    SELECT outlet_code AS "outletCode", district_code AS "districtCode", ring
+    SELECT outlet_code AS "outletCode", village_code AS "villageCode", ring
     FROM outlet_rings`);
   const out = {};
   rows.forEach((r) => {
-    (out[r.outletCode] || (out[r.outletCode] = {}))[r.districtCode] = Number(r.ring);
+    (out[r.outletCode] || (out[r.outletCode] = {}))[r.villageCode] = Number(r.ring);
   });
   return out;
 }
@@ -541,11 +542,11 @@ async function districts() {
  * alasannya sama: menambal sebagian membuat sisa dari susunan lama tertinggal tanpa
  * ada yang tahu. Yang dikirim halaman adalah gambaran LENGKAP ring pos itu.
  *
- * Kode kecamatan yang tidak dikenal DITOLAK, bukan dilewati diam-diam. Ring yang
- * diam-diam kehilangan satu kecamatan tetap terlihat masuk akal di layar.
+ * Kode desa yang tidak dikenal DITOLAK, bukan dilewati diam-diam. Ring yang diam-diam
+ * kehilangan satu desa tetap terlihat masuk akal di layar.
  *
  * @param {string} outletCode
- * @param {Object} assignments  {districtCode: 1|2|3}
+ * @param {Object} assignments  {villageCode: 1|2|3}
  */
 async function saveOutletRings(outletCode, assignments) {
   const db = store.db();
@@ -563,11 +564,11 @@ async function saveOutletRings(outletCode, assignments) {
   if (entries.length) {
     const codes = entries.map(([code]) => code);
     const dikenal = new Set((await store.all(db, `
-      SELECT DISTINCT district_code AS code FROM villages
-      WHERE district_code = ANY(?)`, [codes])).map((r) => r.code));
+      SELECT DISTINCT village_code AS code FROM villages
+      WHERE village_code = ANY(?)`, [codes])).map((r) => r.code));
     const asing = codes.filter((c) => !dikenal.has(c));
     if (asing.length) {
-      throw new Error(`Kecamatan tidak dikenal: ${asing.slice(0, 5).join(', ')}` +
+      throw new Error(`Kelurahan/desa tidak dikenal: ${asing.slice(0, 5).join(', ')}` +
         (asing.length > 5 ? ` dan ${asing.length - 5} lagi.` : '.'));
     }
   }
@@ -578,12 +579,12 @@ async function saveOutletRings(outletCode, assignments) {
       const bulk = store.bulkValues(
         entries.map(([code, ring]) => [outletCode, code, Number(ring)]));
       await conn.query(
-        'INSERT INTO outlet_rings (outlet_code, district_code, ring) VALUES ' + bulk.text,
+        'INSERT INTO outlet_rings (outlet_code, village_code, ring) VALUES ' + bulk.text,
         bulk.params);
     }
   });
 
-  return { outlet: outletCode, districts: entries.length };
+  return { outlet: outletCode, villages: entries.length };
 }
 
 async function resetOutlets(ip) {

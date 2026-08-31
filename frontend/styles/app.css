@@ -102,7 +102,13 @@
       border-radius: 999px; color: #fff; border: 2px solid #fff;
       box-shadow: 0 2px 6px rgba(11,47,107,.35); transition: transform .15s ease; }
     .marker-outlet:hover { transform: scale(1.15); }
-    .marker-outlet.dealer { width: 30px; height: 30px; font-size: 16px; }
+    /* Segitiga, bukan bulat — permintaan Pakbos supaya jelas beda dari titik pos
+       tanpa perlu membaca ukurannya dulu. clip-path memotong KOTAK marker-outlet,
+       border putih & shadow dasar ikut terpotong mengikuti bentuk baru. */
+    .marker-outlet.dealer { width: 32px; height: 30px; font-size: 15px; border: none;
+      border-radius: 0; clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+      padding-top: 8px; box-sizing: border-box; }
+    .marker-outlet.pos { width: 22px; height: 22px; font-size: 12px; }
     .marker-outlet.pos { width: 22px; height: 22px; font-size: 12px; }
     .marker-outlet.redup { opacity: .35; }
     #kelurahanDetailPanel { transition: transform 0.3s cubic-bezier(0.16,1,0.3,1); }

@@ -45,7 +45,6 @@ const PERIOD = /^\d{4}-(0[1-9]|1[0-2])$/;
 const VILLAGE = /^\d{2}\.\d{2}\.\d{2}\.\d{4}$/;
 const CITY = /^\d{2}\.\d{2}$/;
 const PROVINCE = /^\d{2}$/;
-const DISTRICT = /^\d{2}\.\d{2}\.\d{2}$/;
 const OUTLET = /^[A-Za-z0-9._-]{1,32}$/;
 // Kode dealer selalu hasil toDealerCode(), tidak pernah diketik manusia — beda dari
 // OUTLET yang memang wajib diketik cocok Excel Astra.
@@ -203,15 +202,15 @@ function build(config) {
     const rings = (req.body || {}).rings;
     if (!rings || typeof rings !== 'object' || Array.isArray(rings)) {
       return res.status(400).json({
-        error: 'Kirim {rings: {"kode kecamatan": 1|2|3}}.',
+        error: 'Kirim {rings: {"kode desa": 1|2|3}}.',
       });
     }
     // Bentuk kodenya diperiksa di sini; keberadaannya diperiksa repositori terhadap
     // daftar kelurahan. Dua-duanya menolak, tidak ada yang dilewati diam-diam.
-    const salah = Object.keys(rings).filter((c) => !DISTRICT.test(c));
+    const salah = Object.keys(rings).filter((c) => !VILLAGE.test(c));
     if (salah.length) {
       return res.status(400).json({
-        error: `Kode kecamatan harus bertitik seperti 33.13.09. Yang salah: ` +
+        error: `Kode desa harus bertitik seperti 33.13.09.2001. Yang salah: ` +
           salah.slice(0, 5).join(', '),
       });
     }

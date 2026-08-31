@@ -5,10 +5,10 @@
  *
  * Yang dijaga di sini empat hal yang gagalnya diam:
  *
- * 1. **Independen, di-AND-kan.** Kota, dealer, dan pos masing-masing slot sendiri
- *    sejak 2026-08-30 (sebelumnya berbagi satu slot). Kalau salah satu diam-diam
- *    menghapus yang lain lagi, panel ringkasan gabungan kota+dealer akan pecah tanpa
- *    penjelasan.
+ * 1. **Eksklusif.** Kota, dealer, dan pos cuma boleh SATU yang aktif sejak 2026-08-31
+ *    (permintaan Pakbos, membalikkan independensi 2026-08-30). Kalau salah satu
+ *    diam-diam tidak membuang dua lainnya, filter "wajib cuma dua: periode + satu
+ *    lainnya" jadi bohong dan angka yang tampil adalah irisan yang tidak diminta.
  * 2. **Rentang periode.** Satu batas yang hilang berarti hasilnya melebar; pembanding
  *    yang bergeser satu langkah membuang bulan di ujung. Dua-duanya tetap terlihat
  *    "jalan" di layar.
@@ -16,7 +16,7 @@
  *    filter, memfilter di halaman Peta akan mengubah angka yang dilihat orang di
  *    Master Pos Dealer — persis kebocoran yang perombakan ini hendak menutup.
  * 4. **clearScope(kind) tertarget.** Menutup kartu dealer atau info pos tidak boleh
- *    ikut membuang filter kota yang sedang dipakai orang di halaman yang sama.
+ *    ikut membuang filter Kares yang sedang dipakai orang di halaman yang sama.
  */
 const assert = require('assert');
 const path = require('path');
@@ -25,11 +25,14 @@ const { pathToFileURL } = require('url');
 const url = (name) => pathToFileURL(
   path.join(__dirname, '..', 'frontend', 'js', name)).href;
 
-/** Kelurahan uji: dua kota di dua provinsi berbeda. */
+/**
+ * Kelurahan uji: dua kota di dua Kares berbeda — '34.04' (Sleman) masuk
+ * KARESIDENAN.yogyakarta, '33.01' (Cilacap) masuk KARESIDENAN.banyumas.
+ */
 const VILLAGES = {
-  '33.01.01.1001': { code: '33.01.01.1001', cityCode: '33.01', provinceCode: '33' },
-  '34.04.01.2001': { code: '34.04.01.2001', cityCode: '34.04', provinceCode: '34' },
-  '34.04.02.2002': { code: '34.04.02.2002', cityCode: '34.04', provinceCode: '34' },
+  '33.01.01.1001': { code: '33.01.01.1001', cityCode: '33.01' },
+  '34.04.01.2001': { code: '34.04.01.2001', cityCode: '34.04' },
+  '34.04.02.2002': { code: '34.04.02.2002', cityCode: '34.04' },
 };
 
 const SALES = [
@@ -45,7 +48,7 @@ const units = (rows) => rows.reduce((sum, r) => sum + r.units, 0);
 async function test() {
   const { S, makeFilter } = await import(url('state.js'));
   const {
-    activeRows, applyScope, clearScope, pageFilters, scopeValue, setPeriod, setProvince,
+    activeRows, applyScope, clearScope, pageFilters, scopeValue, setPeriod, setKares,
     setScope, scopeLabel,
   } = await import(url('filters.js'));
 
@@ -76,7 +79,9 @@ async function test() {
   global.window = { renderAll: () => { repaints++; } };
 
   /* ------------------------------------------------------------------
-     1. INDEPENDEN, DI-AND-KAN — tiga slot, bukan satu
+     1. EKSKLUSIF — cuma satu dari kota/dealer/pos yang boleh aktif
+     ------------------------------------------------------------------
+     Sejak 2026-08-31 (permintaan Pakbos), membalikkan independensi 2026-08-30.
      ------------------------------------------------------------------ */
   reset();
 
@@ -85,26 +90,22 @@ async function test() {
 
   setScope('dealer', 'D1');
   assert.strictEqual(scopeValue('dealer'), 'D1');
-  assert.strictEqual(scopeValue('kota'), '34.04',
-    'memilih dealer membuang kota — keduanya harus bisa aktif bersamaan untuk panel ' +
-    'ringkasan gabungan kota+dealer');
+  assert.strictEqual(scopeValue('kota'), 'ALL',
+    'memilih dealer TIDAK membuang kota — keduanya harus eksklusif, cuma satu boleh aktif');
 
   setScope('pos', 'O01');
   assert.strictEqual(scopeValue('pos'), 'O01');
-  assert.strictEqual(scopeValue('dealer'), 'D1', 'memilih pos membuang dealer');
-  assert.strictEqual(scopeValue('kota'), '34.04', 'memilih pos membuang kota');
+  assert.strictEqual(scopeValue('dealer'), 'ALL', 'memilih pos tidak membuang dealer lama');
+  assert.strictEqual(scopeValue('kota'), 'ALL', 'memilih pos tidak membuang kota lama');
 
-  // Hasilnya betul-betul IRISAN ketiganya, bukan cuma nilainya tersimpan berdampingan.
-  // O01/D1/34.04 muncul di dua baris (Juli=1, Agustus=2); baris O02/D2 dan O03/D2
-  // tidak cocok satu pun syarat dan harus tersaring habis.
+  // Hasilnya cuma disaring oleh SATU slot yang aktif (pos), bukan irisan ketiganya —
+  // O01 muncul di dua baris (Juli=1, Agustus=2).
   assert.strictEqual(units(activeRows()), 3,
-    'kota+dealer+pos aktif bersamaan tidak di-AND-kan di activeRows()');
+    'pos yang aktif sendirian seharusnya menyaring persis baris pos itu');
 
   // Klik yang sama dua kali mematikan SLOT ITU SAJA — kecuali dipaksa.
   setScope('pos', 'O01');
   assert.strictEqual(scopeValue('pos'), 'ALL', 'memilih lagi yang sama tidak mematikan');
-  assert.strictEqual(scopeValue('dealer'), 'D1',
-    'mematikan pos ikut mematikan dealer — slotnya harus lepas sendiri-sendiri');
   setScope('pos', 'O01', true);
   setScope('pos', 'O01', true);
   assert.strictEqual(scopeValue('pos'), 'O01',
@@ -115,60 +116,71 @@ async function test() {
   setScope('dealer', 'D2');
   applyScope('pos', 'O02');
   assert.strictEqual(scopeValue('pos'), 'O02', 'klik pos di peta tidak menyetel pos');
-  assert.strictEqual(scopeValue('dealer'), 'D2',
-    'klik pos di peta membuang dealer — jalur peta harus AND, sama seperti dropdown');
+  assert.strictEqual(scopeValue('dealer'), 'ALL',
+    'klik pos di peta tidak membuang dealer — jalur peta harus eksklusif, sama seperti dropdown');
   assert.ok(repaints > 0, 'applyScope tidak menggambar ulang apa pun');
 
   // Klik poligon kelurahan menyetel KOTA-nya, dan dipaksa: mengklik kelurahan kedua
-  // di kabupaten yang sama tidak boleh mematikan kabupatennya. Dealer yang sedang
-  // aktif (dari baris sebelumnya) tidak boleh ikut terbuang.
+  // di kabupaten yang sama tidak boleh mematikan kabupatennya. Dealer yang sempat
+  // aktif sebelumnya (baris di atas) harus ikut terbuang — eksklusif.
+  setScope('dealer', 'D2');
   applyScope('kelurahan', '34.04.01.2001');
   assert.strictEqual(scopeValue('kota'), '34.04');
-  assert.strictEqual(scopeValue('dealer'), 'D2', 'klik kelurahan membuang dealer aktif');
+  assert.strictEqual(scopeValue('dealer'), 'ALL', 'klik kelurahan tidak membuang dealer aktif');
   applyScope('kelurahan', '34.04.02.2002');
   assert.strictEqual(scopeValue('kota'), '34.04',
     'kelurahan kedua di kabupaten yang sama justru mematikan filter kabupatennya');
 
   /* ------------------------------------------------------------------
-     1b. clearScope(kind) TERTARGET
+     1b. clearScope(kind) TERTARGET, dan tidak menyentuh Kares
+     ------------------------------------------------------------------
+     Sejak eksklusivitas 2026-08-31, kota/dealer/pos tidak pernah aktif bertiga
+     sekaligus lewat setScope() lagi — yang masih perlu dijaga di sini adalah
+     clearScope(kind) tidak melebar ke Kares (slot mandiri, lihat bagian 2).
      ------------------------------------------------------------------ */
   reset();
-  setScope('kota', '34.04');
-  setScope('dealer', 'D1');
+  setKares('yogyakarta');
   setScope('pos', 'O01');
 
   clearScope('pos');
   assert.strictEqual(scopeValue('pos'), 'ALL');
-  assert.strictEqual(scopeValue('dealer'), 'D1', 'clearScope("pos") ikut membuang dealer');
-  assert.strictEqual(scopeValue('kota'), '34.04', 'clearScope("pos") ikut membuang kota');
+  assert.strictEqual(pageFilters().kares, 'yogyakarta', 'clearScope("pos") ikut membuang Kares');
 
+  setScope('dealer', 'D1');
   clearScope('dealer');
   assert.strictEqual(scopeValue('dealer'), 'ALL');
-  assert.strictEqual(scopeValue('kota'), '34.04', 'clearScope("dealer") ikut membuang kota');
+  assert.strictEqual(pageFilters().kares, 'yogyakarta', 'clearScope("dealer") ikut membuang Kares');
 
-  // Tanpa argumen: KETIGANYA kosong (dipakai tombol Reset).
-  setScope('dealer', 'D1');
-  setScope('pos', 'O01');
+  // Tanpa argumen: kota/dealer/pos kosong (dipakai tombol Reset), Kares TIDAK ikut —
+  // resetFilters() di filter-bar.js yang memanggil setKares('ALL') secara terpisah.
+  setScope('kota', '34.04');
   clearScope();
   assert.strictEqual(scopeValue('kota'), 'ALL');
   assert.strictEqual(scopeValue('dealer'), 'ALL');
   assert.strictEqual(scopeValue('pos'), 'ALL', 'clearScope() tanpa argumen tidak mengosongkan semuanya');
+  assert.strictEqual(pageFilters().kares, 'yogyakarta',
+    'clearScope() tanpa argumen ikut membuang Kares — padahal dia slot mandiri');
 
   /* ------------------------------------------------------------------
-     2. PROVINSI MANDIRI — di luar slot, boleh bersamaan
+     2. KARES MANDIRI — di luar slot kota/dealer/pos, boleh bersamaan
      ------------------------------------------------------------------ */
   reset();
-  setProvince('34');
+  setKares('yogyakarta'); // cities: 34.04, 34.71, 34.02, 34.01, 34.03
   setScope('dealer', 'D2');
   assert.strictEqual(scopeValue('dealer'), 'D2');
-  assert.strictEqual(pageFilters().province, '34',
-    'provinsi ikut dilebur ke slot — padahal dia sengaja tetap filter mandiri');
+  assert.strictEqual(pageFilters().kares, 'yogyakarta',
+    'Kares ikut dilebur ke slot kota/dealer/pos — padahal dia sengaja tetap filter mandiri');
   assert.strictEqual(units(activeRows()), 4,
-    'provinsi dan dealer tidak di-AND-kan: hasilnya harus irisan keduanya, bukan ' +
+    'Kares dan dealer tidak di-AND-kan: hasilnya harus irisan keduanya, bukan ' +
     'salah satu saja');
 
   assert.match(scopeLabel(), /Dealer Dua/);
-  assert.match(scopeLabel(), /Yogyakarta|Provinsi 34/);
+  assert.match(scopeLabel(), /Karesidenan Yogyakarta/);
+
+  // Kode Kares yang tidak dikenal ditolak jadi 'ALL', bukan disimpan mentah — combo
+  // Kota yang cascading (filter-bar.js) akan salah total kalau ini lolos.
+  setKares('kares-ngasal');
+  assert.strictEqual(pageFilters().kares, 'ALL', 'kode Kares asing seharusnya ditolak');
 
   /* ------------------------------------------------------------------
      3. RENTANG PERIODE
@@ -228,14 +240,14 @@ async function test() {
   reset();
   S.filterPage = 'peta';
   setScope('dealer', 'D1');
-  setProvince('34');
+  setKares('yogyakarta');
   setPeriod('from', '2026-08');
 
   assert.strictEqual(scopeValue('dealer', pageFilters('konsumen')), 'ALL',
     'memfilter di halaman Peta ikut mengubah filter halaman Data Konsumen — keempat ' +
     'halaman berbagi satu objek filter yang sama');
-  assert.strictEqual(pageFilters('pos').province, 'ALL',
-    'provinsi bocor ke halaman lain');
+  assert.strictEqual(pageFilters('pos').kares, 'ALL',
+    'Kares bocor ke halaman lain');
   assert.strictEqual(units(activeRows('konsumen')), 15,
     'activeRows halaman lain ikut terpengaruh filter halaman Peta');
   assert.strictEqual(units(activeRows()), 2, 'filter halaman Peta sendiri tidak berlaku');
@@ -251,8 +263,8 @@ async function test() {
     'clearScope mengosongkan lingkup halaman yang salah — S.filterPage sedang ' +
     "'konsumen', jadi clearScope() di sini tidak boleh menyentuh halaman 'peta'");
 
-  console.log('OK filters — kota/dealer/pos independen dan di-AND-kan, provinsi ' +
-    'mandiri, rentang periode berbatas dua sisi, filter terpisah per halaman');
+  console.log('OK filters — kota/dealer/pos eksklusif, Kares mandiri, rentang ' +
+    'periode berbatas dua sisi, filter terpisah per halaman');
 }
 
 test().catch((error) => {

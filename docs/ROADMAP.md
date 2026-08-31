@@ -52,22 +52,11 @@ Istilah wilayah memakai terjemahan resmi BPS supaya konsisten:
 
 ## Sedang dikerjakan
 
-### Revisi pra-present HO (mulai 2026-08-29)
-
-Daftar revisi dari tim channel sebelum presentasi ke Head Office, dikerjakan **satu
-bagian per satu bagian**. Bagian pertama (FILTER) sudah selesai — entrinya di bawah.
-
-**Belum dikerjakan, urut sesuai daftar:**
-
-1. ~~RING — fondasi dan editor di peta.~~ **Selesai** (lihat dua entri teratas di
-   Selesai). Yang tersisa dari ring ada di nomor 2.
-2. **Peta: agregasi ring menggantikan agregasi radius.** Persentase "dalam/luar
-   jangkauan" jadi "ring 1 / ring 2 / ring 3 / di luar ketiganya". **Ini yang paling
-   besar** — dia mengubah arti angka jangkauan di seluruh aplikasi, dan
-   `backend/core/coverage.js` + `coverage-store.js` ikut terdampak. Bergantung pada 1.
-3. ~~Blok Analisis Performa Pos, minor UI.~~ **Selesai** (lihat entri teratas).
-4. **Batas ring kuning tebal** — menunggu agregasi ring, karena yang digambar tebal
-   adalah batas terluar ring yang belum ada artinya sebelum agregasinya jadi.
+Kosong — "Revisi pra-present HO" (di bawah) selesai semua per 2026-08-31, plus
+permintaan tambahan Pakbos yang datang di tengah jalan (Kares, ring per desa, dst).
+Lihat entri terbaru di **Selesai**. **Belum diverifikasi visual di browser** — lihat
+catatan di entri itu, ini yang paling perlu dicek berikutnya sebelum dianggap benar-
+benar tuntas.
 
 ---
 
@@ -147,6 +136,91 @@ cuma perluasan ke Sulawesi ke timur.
 ---
 
 ## Selesai
+
+### Permintaan Pakbos: Kares, ring per desa, blok Performa dirombak, peta dirapikan (2026-08-31)
+
+Dua putaran permintaan langsung Pakbos, dikerjakan sekaligus karena saling terkait
+(ring pindah level mengubah blok Performa; filter Kares dan eksklusivitas kota/
+dealer/pos sama-sama menyentuh `filters.js`). Detail keputusan arsitekturnya ada di
+`DECISIONS.md` (lima entri baru 2026-08-31) — di sini cuma daftar apa yang berubah.
+
+**Selesai dan diuji otomatis (26/26 berkas tes, termasuk kasus baru):**
+- Filter Provinsi → **Kares** (3 pilihan tetap: Yogyakarta/Banyumas/Kedu), kota di
+  luar 14 kab/kota gabungan disembunyikan dari dropdown Kota (cascading).
+- Kota/dealer/pos **dibalik jadi eksklusif** (membatalkan keputusan 2026-08-30 —
+  lihat DECISIONS.md untuk kenapa).
+- Ring layanan pos pindah dari **kecamatan ke desa/kelurahan** (`outlet_rings.
+  village_code`), data lama dihapus total. Poligon edit ring baru
+  (`kelurahan-ring.geojson`, diekspor `scripts/export-geo.js`) — ~3,2 MB, TERNYATA
+  bukan masalah ukuran seperti dikhawatirkan sebelumnya.
+- Blok **Analisis Performa Pos Dealer** dirombak: pindah ke baris penuh di bawah
+  Proporsi Penjualan, satu baris satu pos, metrik radius diganti %ring 1/2/3/luar-
+  ring, ditambah %Sales Contribution + Kelompok Relative Position + Kelompok
+  Business Reference (semua relatif terhadap total seluruh pos yang tampil), board
+  ringkas 5-kelompok, dan dua kriteria sort (total sales / peringkat per ring) yang
+  jalan di panel biasa, layar penuh peta, dan tampilan besar.
+- Titik **dealer baru** di peta (koordinat dari `Dealer & POS (dgn koordinat
+  dealer).xlsx`, sekarang di 51/52 dealer lewat `scripts/import-dealer-coordinates.js`
+  — jalankan `node scripts/import-dealer-coordinates.js` lagi kalau Excel-nya
+  diperbarui), lengkap dengan jalan pintas Edit Ring dari titik dealer.
+- Legenda peta: istilah "Dynamic/Static Relative Tiering", "No Sales", "bottom...top"
+  (HANYA di legenda, badge Terbawah...Teratas di tempat lain tidak berubah), mode
+  Static disederhanakan 6→5 kelas, dan mode heatmap otomatis ikut filter Kota (masih
+  bisa diganti manual).
+- Popup treemap Proporsi Penjualan (tampilan lebih besar, edge-to-edge).
+- Opsi Peta: "Batas dan Nama Kelurahan/Desa" (gabung dua toggle lama), "Batas dan
+  Nama Kecamatan" (pink, lepas total dari mode edit ring), "Batas dan Nama Kota"
+  (baru, ada label kota sekarang), "Titik Dealer"/"Titik Pos" (dipisah), default
+  Titik Penjualan ON dan Lingkaran Radius OFF (dibalik dari sebelumnya). Batas mode
+  edit ring jadi kuning tebal, layer terpisah dari batas kecamatan referensi.
+
+**Sudah diverifikasi manual di browser** (user memberi sandi login, dites lewat
+Playwright sungguhan terhadap server yang sudah direstart dengan kode terbaru):
+Kares + cascading Kota, eksklusivitas kota/dealer/pos, board 5-kelompok, sort by
+ring + label peringkat, legenda Dynamic/Static + auto-switch + override manual,
+titik dealer (51) & pos (78) di peta, alur Edit Ring dari titik dealer (dealer 1-pos
+langsung masuk mode edit; dealer multi-pos — dicoba NUSANTARA SAKTI 8 pos —
+memunculkan pemilih), klik desa TANPA riwayat penjualan dalam mode edit ring tetap
+menampilkan namanya (bukan kode mentah), batas ring kuning tebal di semua ~9.000
+desa, Master Pos Dealer tidak error dengan kolom ring baru (semuanya "—", sesuai
+keputusan mulai kosong).
+
+**Dua bug ditemukan dan diperbaiki selama verifikasi** — dicatat supaya tidak
+terulang: (1) `frontend/css/app.css` (build output Tailwind) belum di-`npm run css`
+ulang sesudah kelas `grid-cols-5` dipakai pertama kali di template literal JS —
+board 5-kelompok tampil sebagai daftar bertumpuk, bukan 5 kolom, sampai build
+dijalankan ulang; (2) `S.performanceCriteria` default salah ketik `'percent'`
+(sisa dari draft awal, seharusnya `'units'`) — sortnya tetap jalan benar (fallback
+ke units di `sortPerformance`), tapi tombol kriterianya tidak ada yang menyala di
+tampilan awal.
+
+### Blok baru Analisis Penjualan Wilayah, ikon dealer segitiga (2026-08-31, putaran ketiga Pakbos)
+
+Datang mid-sesi lewat pesan baru waktu verifikasi putaran kedua sedang berjalan.
+Detail keputusan di `DECISIONS.md` (dua entri baru).
+
+- Blok baru **Analisis Penjualan Wilayah** — satu baris satu DESA (nama, kecamatan/
+  kota, total sales, %kontribusi, posisi relatif), basis kontribusi relatif terhadap
+  `activeRows()` apa adanya (otomatis jadi "relatif dealer/pos yang difilter" waktu
+  itu aktif). SELALU tampil di halaman biasa (bawah Performa Pos Dealer); di layar
+  penuh peta GANTI TEMPAT dengan Performa Pos Dealer tergantung filter (dealer/pos →
+  Wilayah, kota/semua → Performa) — satu slot, dua grup toggle.
+- Auto-loop SENDIRI (bukan tombol Live manual) — mulai begitu ada isinya, tombol
+  Pause menghentikan. Diverifikasi: pause/resume ganti ikon dengan benar, panel
+  benar-benar tergulir sendiri (ketangkap kamera di tengah animasi gulir).
+- Titik dealer di peta jadi **segitiga** (`clip-path`), bukan lingkaran — beda jelas
+  dari titik pos yang tetap bulat. Diverifikasi visual di screenshot.
+- Sekalian diperbaiki: bug tersisa dari verifikasi putaran kedua —
+  `map.js` sempat memanggil `openRingChooser` dengan 3 argumen (kode, NAMA dari
+  properti fitur geojson, event asli) tapi `rings.js` belum menerima argumen nama
+  itu, jadi `event` di dalam fungsi salah menerima string bukan MouseEvent. Sudah
+  diperbaiki DAN diverifikasi manfaatnya: nama desa tanpa riwayat penjualan sekarang
+  benar-benar tampil (sebelum perbaikan ini ditulis, belum pernah ada baris yang
+  bisa membuktikannya).
+- Diuji otomatis: `test/sales-stats.test.js` (kasus `contributionsByVillage`,
+  `contributionsByOutlet` lama dipastikan tidak berubah perilaku sesudah
+  di-refactor jadi pemanggil `contributionsByField`), `test/page.test.js` (id
+  markup baru, auto-loop dua-state, panel-switching layar penuh).
 
 ### Panel wilayah jadi 4 blok: Overview, Sales, Distribution, Business Reference (2026-08-30)
 

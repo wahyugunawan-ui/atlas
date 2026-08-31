@@ -31,7 +31,7 @@ export function drawMarkers() {
     const medium = sameDealer && posFilter !== 'ALL' && !selected;
 
     const el = document.createElement('div');
-    el.className = 'marker-outlet' + (grey ? ' abu' : '') +
+    el.className = 'marker-outlet pos' + (grey ? ' abu' : '') +
       (medium ? ' sedang' : '') + (selected ? ' terpilih' : '');
     el.style.background = grey ? '' : dealerColor(S.registry, outlet.dealerCode);
     el.innerHTML = '<i class="ph-fill ph-storefront"></i>';
@@ -45,6 +45,58 @@ export function drawMarkers() {
     S.markers.push(new maplibregl.Marker({ element: el })
       .setLngLat([outlet.lng, outlet.lat]).addTo(S.map));
   });
+}
+
+/**
+ * Titik HQ dealer, terpisah dari titik pos sejak 2026-08-31 (permintaan Pakbos) —
+ * lapisan sendiri, toggle "Titik Dealer" sendiri (lihat redrawMap() di map.js), dan
+ * jadi jalan pintas ke Edit Ring dari peta (lihat startRingEdit() di rings.js: dealer
+ * dengan satu pos langsung masuk mode edit, lebih dari satu pos tampilkan pemilih).
+ *
+ * `.dealer` di className memakai kelas ukuran yang SUDAH ADA di app.css
+ * (marker-outlet.dealer, 30px) — dirancang lebih besar daripada `.pos` (22px) supaya
+ * dua jenis titik tidak tertukar di peta yang sama.
+ */
+export function drawDealerMarkers() {
+  S.dealerMarkers.forEach((m) => m.remove());
+  S.dealerMarkers = [];
+
+  const perDealer = sumBy(activeRows(), 'dealer');
+  const dealerFilter = scopeValue('dealer');
+  const posFilter = scopeValue('pos');
+  const focusDealer = posFilter !== 'ALL'
+    ? (S.outletByCode[posFilter] || {}).dealerCode : dealerFilter;
+
+  S.dealers.forEach((dealer) => {
+    if (dealer.lat == null) return;
+    const selected = focusDealer === dealer.code;
+    const grey = focusDealer !== 'ALL' && !selected;
+
+    const el = document.createElement('div');
+    el.className = 'marker-outlet dealer' + (grey ? ' abu' : '') + (selected ? ' terpilih' : '');
+    el.style.background = grey ? '' : dealerColor(S.registry, dealer.code);
+    el.innerHTML = '<i class="ph-fill ph-buildings"></i>';
+
+    el.addEventListener('mouseenter', (e) =>
+      showDealerTooltip(dealer, perDealer[dealer.code] || 0, e));
+    el.addEventListener('mousemove', moveTooltip);
+    el.addEventListener('mouseleave', () => $('tooltip').classList.remove('show'));
+    el.addEventListener('click', (e) => { e.stopPropagation(); applyScope('dealer', dealer.code); });
+
+    S.dealerMarkers.push(new maplibregl.Marker({ element: el })
+      .setLngLat([dealer.lng, dealer.lat]).addTo(S.map));
+  });
+}
+
+function showDealerTooltip(dealer, units, event) {
+  const tip = $('tooltip');
+  tip.innerHTML =
+    `<div class="font-bold text-white">${esc(dealer.name)}</div>` +
+    `<div class="text-[11px] text-slate-300 mt-0.5">${esc(formatNumber(dealer.outletCount || 0))} pos</div>` +
+    `<div class="text-[11px] text-slate-300 mt-1.5">${esc(formatNumber(units))} penjualan pada filter ini</div>` +
+    `<div class="text-[10px] text-slate-400 mt-1">klik untuk melihat seluruh pos dealer ini</div>`;
+  tip.classList.add('show');
+  moveTooltip(event);
 }
 
 function showOutletTooltip(outlet, units, event) {
