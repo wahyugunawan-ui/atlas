@@ -17,6 +17,7 @@ const { parseCsv, stripBom } = require('../core/csv');
 const { COLUMN, aggregate } = require('../core/aggregate');
 const { regionKey } = require('../core/region');
 const { resolveGroups } = require('../core/grouping');
+const { cellText } = require('../core/excel-coords');
 const store = require('./db');
 const importLock = require('./import-lock');
 
@@ -78,8 +79,11 @@ async function readXlsx(file) {
     const values = [];
     for (let i = 1; i <= columnCount; i++) {
       const cell = cells[i];
-      values.push(cell == null ? '' : String(
-        typeof cell === 'object' && cell.text !== undefined ? cell.text : cell).trim());
+      // cellText() membuka DUA bentuk sel objek ExcelJS (formula {formula,result}
+      // dan rich-text {text,hyperlink}) — sebelum ini cuma rich-text yang dibuka,
+      // dan kolom hasil VLOOKUP (formula) tertulis "[object Object]" ke database
+      // secara diam-diam. Lihat docs/DECISIONS.md.
+      values.push(cell == null ? '' : String(cellText(cell)).trim());
     }
     rows.push(values);
   });

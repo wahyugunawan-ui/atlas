@@ -185,8 +185,12 @@
 
   /* Bilah alat edit ring. Melayang di atas peta karena yang disunting ada DI peta —
      menaruhnya di samping berarti mata bolak-balik tiap satu kecamatan diklik. */
+  /* flex-wrap + max-width: coverage pos punya 8 kotak (bukan 3 seperti ring dealer),
+     tidak muat satu baris di layar sempit — melipat ke baris berikutnya daripada
+     meluber keluar peta. */
   #ring-bar { position: absolute; left: 50%; transform: translateX(-50%); bottom: 18px;
-    z-index: 30; display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
+    z-index: 30; display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    padding: 8px 10px; max-width: min(92vw, 820px); justify-content: center; }
   .ring-kotak { display: flex; flex-direction: column; gap: 1px; min-width: 92px; }
   .ring-kotak .n { font-family: 'JetBrains Mono', monospace; font-weight: 800; font-size: 13px; }
   .ring-kotak .isi { font-size: 10px; color: #94a3b8; max-width: 130px;
@@ -201,6 +205,12 @@
   .rp-ring { transition: background .15s ease, color .15s ease; }
   .rp-ring:hover { background: #eef2f8; }
   .rp-ring.aktif { color: #fff; border-color: transparent; }
+
+  /* Tampilan Ring Dealer nonaktif kalau scope bukan dealer, Coverage POS nonaktif
+     kalau scope bukan pos — lihat syncGroupControls() di map.js. */
+  #pilihan-ring-dealer.nonaktif, #pilihan-coverage-pos.nonaktif {
+    opacity: .4; pointer-events: none;
+  }
 
   @media (prefers-reduced-motion: reduce) {
     .pilih-panel { animation: none; }
@@ -235,10 +245,22 @@
   <div class="flex items-center gap-1 overflow-x-auto">
     <button onclick="switchTab('peta')" id="nav-peta" class="nav-btn active whitespace-nowrap flex items-center px-4 py-2.5 rounded-xl text-sm font-semibold"><i class="ph ph-squares-four text-lg mr-2"></i> Insight &amp; Peta</button>
     <button onclick="switchTab('import')" id="nav-import" class="nav-btn whitespace-nowrap flex items-center px-4 py-2.5 rounded-xl text-sm font-semibold"><i class="ph ph-upload-simple text-lg mr-2"></i> Import Data</button>
-    <button onclick="switchTab('pos')" id="nav-pos" class="nav-btn whitespace-nowrap flex items-center px-4 py-2.5 rounded-xl text-sm font-semibold"><i class="ph ph-storefront text-lg mr-2"></i> Master Pos Dealer</button>
-    <button onclick="switchTab('dealer')" id="nav-dealer" class="nav-btn whitespace-nowrap flex items-center px-4 py-2.5 rounded-xl text-sm font-semibold"><i class="ph ph-buildings text-lg mr-2"></i> Master Dealer</button>
     <button onclick="switchTab('konsumen')" id="nav-konsumen" class="nav-btn whitespace-nowrap flex items-center px-4 py-2.5 rounded-xl text-sm font-semibold"><i class="ph ph-users-three text-lg mr-2"></i> Data Konsumen</button>
-    <button onclick="switchTab('kelurahan')" id="nav-kelurahan" class="nav-btn whitespace-nowrap flex items-center px-4 py-2.5 rounded-xl text-sm font-semibold"><i class="ph ph-map-pin-line text-lg mr-2"></i> Master Kelurahan</button>
+    <!-- Sejak 2026-08-31 malam: Master Dealer/Master Pos Dealer/Master Kelurahan
+         dipindah dari tiga tombol datar ke satu flyout "Master" (permintaan user,
+         navbar disederhanakan jadi 4 tombol). Gaya `.pilih`/`.pilih-panel`/`.pilih-opsi`
+         dipakai ulang dari combobox filter yang sudah ada; logika buka/tutupnya
+         sendiri — lihat toggleMasterMenu()/closeMasterMenu() di tables.js. -->
+    <div class="pilih" id="nav-master-wrap">
+      <button onclick="toggleMasterMenu()" id="nav-master" class="nav-btn whitespace-nowrap flex items-center px-4 py-2.5 rounded-xl text-sm font-semibold">
+        <i class="ph ph-database text-lg mr-2"></i> Master<i class="ph ph-caret-down pilih-caret ml-1.5"></i>
+      </button>
+      <div id="master-panel" class="pilih-panel" hidden style="width:220px">
+        <button onclick="switchTab('dealer')" id="nav-dealer" class="pilih-opsi"><i class="ph ph-buildings mr-2"></i>Master Dealer</button>
+        <button onclick="switchTab('pos')" id="nav-pos" class="pilih-opsi"><i class="ph ph-storefront mr-2"></i>Master Pos Dealer</button>
+        <button onclick="switchTab('kelurahan')" id="nav-kelurahan" class="pilih-opsi"><i class="ph ph-map-pin-line mr-2"></i>Master Kelurahan</button>
+      </div>
+    </div>
   </div>
   <div class="ml-auto flex items-center gap-2 shrink-0">
     <div class="bg-white/10 rounded-xl px-3 py-2 text-[11px] text-white/80 hidden lg:block">
@@ -277,11 +299,6 @@
 <main class="flex-1 overflow-y-auto">
 <section id="tab-peta" class="p-4 md:p-6 space-y-5">
 
-  <div>
-    <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900">Insight Distribusi Geospasial</h1>
-    <p class="text-sm text-slate-500 mt-0.5">Sebaran penjualan per kelurahan, agregat bulanan</p>
-  </div>
-
   <!-- Ruang lingkup: apa yang sedang dihitung. Ini yang membuat heatmap relatif
        tidak menyesatkan — orang selalu tahu 100%-nya siapa. -->
   <div id="scope-bar" class="flex items-center gap-2 text-sm bg-white rounded-xl border border-slate-100 px-4 py-2.5 shadow-sm">
@@ -289,26 +306,16 @@
     <span class="text-slate-500">Heatmap dihitung terhadap:</span>
     <span id="scope-label" class="font-bold text-slate-800">seluruh penjualan</span>
     <button id="scope-clear" onclick="resetFilters()" class="hidden ml-1 text-xs font-bold px-2 py-1 rounded-lg text-white" style="background:var(--astra-navy)">kembali ke semua</button>
-    <button id="btn-edit-ring" onclick="startRingEdit()" class="hidden ml-auto text-xs font-bold px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-target mr-1"></i>Edit ring pos ini</button>
+    <button id="btn-edit-ring" onclick="startGroupEdit()" class="hidden ml-auto text-xs font-bold px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-target mr-1"></i>Edit ring dealer ini</button>
   </div>
 
-  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-    <div class="stat-card bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-      <div class="text-[11px] uppercase font-bold text-slate-400 tracking-wider">Dealer Aktif</div>
-      <div id="kpi-dealer" class="text-4xl font-extrabold mt-1 text-slate-900">0</div>
-    </div>
-    <div class="stat-card bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-      <div class="text-[11px] uppercase font-bold text-slate-400 tracking-wider">Total Penjualan</div>
-      <div id="kpi-unit" class="text-4xl font-extrabold mt-1 text-slate-900">0</div>
-    </div>
-    <div class="stat-card bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-      <div class="text-[11px] uppercase font-bold text-slate-400 tracking-wider">Kelurahan Terlayani</div>
-      <div id="kpi-terlayani" class="text-4xl font-extrabold mt-1 text-emerald-600">0</div>
-    </div>
-    <div class="stat-card bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-      <div class="text-[11px] uppercase font-bold text-slate-400 tracking-wider">Kelurahan Kosong</div>
-      <div id="kpi-kosong" class="text-4xl font-extrabold mt-1" style="color:var(--astra-red)">0</div>
-    </div>
+  <!-- Ringkasan utama — sejak 2026-08-31 malam ikut scope (Kota/Semua, Dealer, Pos)
+       alih-alih 4 KPI statis yang sebelumnya selalu sama nilainya berapa pun
+       filternya. Isinya dirender renderTopSummary() di render.js, satu baris grid,
+       sama seperti ringkas-jangkauan di panel Performa (field-nya beda: scope
+       dealer di sini TANPA pecahan Ring/Coverage, rinciannya cukup di satu tempat). -->
+  <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+    <div id="ringkas-utama"></div>
   </div>
 
   <!-- Peta ada TEPAT di bawah empat blok ringkasan, bukan di bawah treemap.
@@ -329,7 +336,7 @@
       <!-- Di ATAS peta, bukan cuma di bilah ruang lingkup jauh di atas halaman.
            Orang yang baru mengklik marker sedang melihat peta; tombol yang ada di
            luar layar sama saja dengan tidak ada. -->
-      <button onclick="startRingEdit()" id="btn-ring-peta" title="Tentukan kecamatan ring 1, 2, dan 3 untuk pos ini"
+      <button onclick="startGroupEdit()" id="btn-ring-peta" title="Tentukan kecamatan ring dealer (1-3) atau coverage pos (1-8)"
               class="map-panel hidden px-3 py-2 text-xs font-bold flex items-center gap-1.5" style="color:var(--astra-navy)">
         <i class="ph-fill ph-target"></i><span>Edit ring</span>
       </button>
@@ -340,17 +347,17 @@
          yang harus disamakan terus-menerus pasti menyimpang suatu hari. -->
     <div id="fs-filter-host" class="hanya-penuh absolute top-6 left-1/2 -translate-x-1/2 z-20 map-panel"></div>
 
-    <!-- Edit ring. Di dalam #map-shell supaya ikut terbawa waktu peta dibuat layar
-         penuh — menyunting ring justru paling enak di layar penuh. -->
+    <!-- Edit ring dealer / coverage pos. Di dalam #map-shell supaya ikut terbawa waktu
+         peta dibuat layar penuh — menyunting justru paling enak di layar penuh.
+         Isi ring-kotak-list dan jumlah slotnya (3 untuk ring dealer, 8 untuk coverage
+         pos) dirender dinamis oleh rings.js, bukan statis di sini — lihat renderBar(). -->
     <div id="ring-bar" class="hidden map-panel">
       <div class="flex flex-col mr-1">
-        <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Edit ring</span>
+        <span id="ring-mode-label" class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Edit ring</span>
         <span id="ring-nama" class="text-xs font-bold text-slate-800 max-w-[180px] truncate"></span>
       </div>
-      <div class="ring-kotak"><span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Ring 1 <span id="ring-jml-1" class="n text-slate-800">0</span></span><span id="ring-isi-1" class="isi">—</span></div>
-      <div class="ring-kotak"><span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Ring 2 <span id="ring-jml-2" class="n text-slate-800">0</span></span><span id="ring-isi-2" class="isi">—</span></div>
-      <div class="ring-kotak"><span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Ring 3 <span id="ring-jml-3" class="n text-slate-800">0</span></span><span id="ring-isi-3" class="isi">—</span></div>
-      <span class="text-[11px] text-slate-400 max-w-[150px] leading-tight">Klik satu kelurahan/desa di peta, lalu pilih ringnya.</span>
+      <div id="ring-kotak-list" class="flex items-center gap-2 flex-wrap"></div>
+      <span id="ring-bantuan" class="text-[11px] text-slate-400 max-w-[150px] leading-tight">Klik satu kecamatan di peta, lalu pilih kelompoknya.</span>
       <span id="ring-pesan" class="text-[11px] text-red-600"></span>
       <button id="ring-simpan" onclick="saveRingEdit()" class="px-3 py-1.5 rounded-lg text-xs font-bold text-white" style="background:var(--astra-navy)">Simpan</button>
       <button onclick="cancelRingEdit()" class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 text-slate-600">Batal</button>
@@ -383,8 +390,8 @@
 
       <div class="text-[10px] font-bold text-slate-400 uppercase mb-1">Tampilan Dasar</div>
       <div class="flex bg-slate-100 rounded-lg p-0.5 text-[11px] font-bold mb-3">
-        <button onclick="setBasemap('lokal')" id="bm-lokal" class="flex-1 px-2 py-1.5 rounded-md bg-white text-slate-800 shadow-sm">Lokal</button>
-        <button onclick="setBasemap('satelit')" id="bm-satelit" class="flex-1 px-2 py-1.5 rounded-md text-slate-500">Satelit</button>
+        <button onclick="setBasemap('lokal')" id="bm-lokal" class="flex-1 px-2 py-1.5 rounded-md text-slate-500">Lokal</button>
+        <button onclick="setBasemap('satelit')" id="bm-satelit" class="flex-1 px-2 py-1.5 rounded-md bg-white text-slate-800 shadow-sm">Satelit</button>
         <button onclick="setBasemap('polos')" id="bm-polos" class="flex-1 px-2 py-1.5 rounded-md text-slate-500">Polos</button>
       </div>
 
@@ -396,16 +403,34 @@
       <label class="toggle-row"><span class="text-xs font-semibold text-slate-600">Titik Penjualan</span><span class="switch"><input type="checkbox" id="opt-jual" checked onchange="redrawMap()"><span class="track"></span></span></label>
 
       <!-- Pengganti Radius jangkauan (3/5/7/10 km) + Lingkaran Radius sejak
-           2026-08-31 — permintaan Pakbos. Menyorot desa ring itu MILIK POS YANG
-           SEDANG DIPILIH, bukan lagi lingkaran geometris di sekitarnya. -->
+           2026-08-31 pagi. Sejak sore itu juga, ring pindah ke DEALER (kecamatan) dan
+           pos mendapat coverage baru (kecamatan, 1-8) — dua grup terpisah, aktif
+           bergantian menurut scope (lihat syncGroupControls() di map.js). -->
       <div class="mt-2 pt-2 border-t border-slate-200">
-        <div class="text-[10px] font-bold text-slate-400 uppercase mb-1">Tampilkan Ring</div>
-        <div class="flex bg-slate-100 rounded-lg p-0.5 text-[11px] font-bold" id="pilihan-ring-view">
-          <button onclick="setRingView(1)" id="rv-1" class="flex-1 px-2 py-1.5 rounded-md text-slate-500">Ring 1</button>
-          <button onclick="setRingView(2)" id="rv-2" class="flex-1 px-2 py-1.5 rounded-md text-slate-500">Ring 2</button>
-          <button onclick="setRingView(3)" id="rv-3" class="flex-1 px-2 py-1.5 rounded-md text-slate-500">Ring 3</button>
+        <div class="text-[10px] font-bold text-slate-400 uppercase mb-1">Tampilan Ring Dealer</div>
+        <div class="flex bg-slate-100 rounded-lg p-0.5 text-[11px] font-bold" id="pilihan-ring-dealer">
+          <button onclick="setRingViewDealer('lokasi')" id="rv-lokasi" class="flex-1 px-2 py-1.5 rounded-md text-slate-500">Lokasi</button>
+          <button onclick="setRingViewDealer(1)" id="rv-1" class="flex-1 px-2 py-1.5 rounded-md text-slate-500">Ring 1</button>
+          <button onclick="setRingViewDealer(2)" id="rv-2" class="flex-1 px-2 py-1.5 rounded-md text-slate-500">Ring 2</button>
+          <button onclick="setRingViewDealer(3)" id="rv-3" class="flex-1 px-2 py-1.5 rounded-md text-slate-500">Ring 3</button>
         </div>
-        <p class="text-[10px] text-slate-400 mt-1 leading-snug">Menyorot desa ring itu milik pos yang sedang dipilih. Klik lagi untuk mematikan.</p>
+        <p class="text-[10px] text-slate-400 mt-1 leading-snug">Menyorot kecamatan ring milik dealer yang sedang dipilih. Aktif hanya saat scope Dealer dipilih.</p>
+      </div>
+
+      <div class="mt-2 pt-2 border-t border-slate-200">
+        <div class="text-[10px] font-bold text-slate-400 uppercase mb-1">Tampilan Coverage POS</div>
+        <div class="flex flex-wrap gap-0.5 bg-slate-100 rounded-lg p-0.5 text-[10px] font-bold" id="pilihan-coverage-pos">
+          <button onclick="setCoverageViewPos('lokasi')" id="cv-lokasi" class="px-2 py-1.5 rounded-md text-slate-500">Lokasi</button>
+          <button onclick="setCoverageViewPos(1)" id="cv-1" class="px-2 py-1.5 rounded-md text-slate-500">Cov 1</button>
+          <button onclick="setCoverageViewPos(2)" id="cv-2" class="px-2 py-1.5 rounded-md text-slate-500">Cov 2</button>
+          <button onclick="setCoverageViewPos(3)" id="cv-3" class="px-2 py-1.5 rounded-md text-slate-500">Cov 3</button>
+          <button onclick="setCoverageViewPos(4)" id="cv-4" class="px-2 py-1.5 rounded-md text-slate-500">Cov 4</button>
+          <button onclick="setCoverageViewPos(5)" id="cv-5" class="px-2 py-1.5 rounded-md text-slate-500">Cov 5</button>
+          <button onclick="setCoverageViewPos(6)" id="cv-6" class="px-2 py-1.5 rounded-md text-slate-500">Cov 6</button>
+          <button onclick="setCoverageViewPos(7)" id="cv-7" class="px-2 py-1.5 rounded-md text-slate-500">Cov 7</button>
+          <button onclick="setCoverageViewPos(8)" id="cv-8" class="px-2 py-1.5 rounded-md text-slate-500">Cov 8</button>
+        </div>
+        <p class="text-[10px] text-slate-400 mt-1 leading-snug">Menyorot kecamatan coverage milik pos yang sedang dipilih. Aktif hanya saat scope Pos dipilih.</p>
       </div>
 
       <div class="mt-3 pt-3 border-t border-slate-200">
@@ -463,11 +488,16 @@
     <div id="treemap-chart" style="height:330px"></div>
   </div>
 
+  <!-- Sejak 2026-08-31 malam: dua blok di bawah ini sebaris 2 kolom, porsi 70/30
+       (permintaan user) — pola grid-cols-1 xl:grid-cols-N + xl:col-span-M yang sama
+       dipakai split 66/33 tab Import, basis 10 kolom di sini supaya rasionya pas.
+       Stack 1 kolom di layar sempit (di bawah breakpoint xl). -->
+  <div class="grid grid-cols-1 xl:grid-cols-10 gap-4">
   <!-- Sejak 2026-08-31: baris penuh di bawah Proporsi Penjualan, satu baris satu pos
        (permintaan Pakbos) — sebelumnya kartu ringkas di sisi treemap. Field per baris
        sekarang lebih banyak (kontribusi, kelompok posisi relatif, kelompok acuan
        bisnis, %ring 1/2/3) dan butuh lebar penuh supaya tidak terpotong. -->
-  <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+  <div class="xl:col-span-7 bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
     <div class="flex items-center justify-between gap-2 flex-wrap">
       <div class="flex items-center gap-2 text-sm font-bold text-slate-700"><i class="ph-fill ph-target"></i> ANALISIS PERFORMA POS DEALER</div>
       <div class="flex items-center gap-1.5">
@@ -495,7 +525,7 @@
   <!-- Blok baru (permintaan Pakbos, putaran ketiga): satu baris satu DESA, SELALU
        tampil (tidak bergantung filter). Auto-loop sendiri begitu ada isinya, tombol
        Pause bukan Live — beda dari blok Performa Pos Dealer di atas. -->
-  <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+  <div class="xl:col-span-3 bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
     <div class="flex items-center justify-between gap-2 flex-wrap">
       <div class="flex items-center gap-2 text-sm font-bold text-slate-700"><i class="ph-fill ph-map-pin-area"></i> ANALISIS PENJUALAN WILAYAH</div>
       <button id="btn-live-wilayah" onclick="toggleLiveWilayah()" title="Jeda gulir otomatis"
@@ -503,6 +533,7 @@
     </div>
     <p class="text-xs text-slate-400 mt-0.5 mb-3">Total sales, %kontribusi, dan kelompok posisi relatif per desa — relatif terhadap dealer/pos yang sedang difilter (atau seluruh yang tampil kalau tidak ada filter dealer/pos). Diurutkan dari penjualan terendah.</p>
     <div id="panel-wilayah" class="overflow-y-auto space-y-2 pr-1" style="max-height:460px"></div>
+  </div>
   </div>
 
   <!-- Rekap dealer: muncul waktu satu dealer atau satu pos dipilih. -->
@@ -658,9 +689,7 @@
           <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Nama Pos</th>
           <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Dealer Induk</th>
           <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Alamat &amp; Koordinat</th>
-          <th class="px-3 py-2.5 text-center text-[11px] font-bold text-slate-500 uppercase" title="Jumlah kecamatan di ring 1">Ring 1</th>
-          <th class="px-3 py-2.5 text-center text-[11px] font-bold text-slate-500 uppercase" title="Jumlah kecamatan di ring 2">Ring 2</th>
-          <th class="px-3 py-2.5 text-center text-[11px] font-bold text-slate-500 uppercase" title="Jumlah kecamatan di ring 3">Ring 3</th>
+          <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase" title="Kecamatan coverage 1-8 pos ini">Coverage</th>
           <th class="px-3 py-2.5 text-right text-[11px] font-bold text-slate-500 uppercase">Pelanggan</th>
           <th class="px-3 py-2.5 text-center text-[11px] font-bold text-slate-500 uppercase">Aksi</th>
         </tr></thead>
@@ -689,6 +718,9 @@
           <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Nama Dealer</th>
           <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Alamat</th>
           <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Koordinat</th>
+          <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase" title="Kecamatan di ring 1">Ring 1</th>
+          <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase" title="Kecamatan di ring 2">Ring 2</th>
+          <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase" title="Kecamatan di ring 3">Ring 3</th>
           <th class="px-3 py-2.5 text-right text-[11px] font-bold text-slate-500 uppercase">Jumlah Pos</th>
           <th class="px-3 py-2.5 text-center text-[11px] font-bold text-slate-500 uppercase">Aksi</th>
         </tr></thead>
@@ -934,30 +966,21 @@
   <div id="treemap-chart-besar" class="flex-1 min-h-0"></div>
 </div>
 
+<!-- Pemilih kecamatan: dipakai KEDUA editor (ring dealer 3 slot, coverage pos 8
+     slot) — tombol kelompoknya dirender dinamis oleh rings.js sesuai editor yang
+     sedang aktif, bukan statis di sini. -->
 <div id="ring-pilih" class="hidden map-panel">
-  <div class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Kelurahan/Desa</div>
+  <div class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Kecamatan</div>
   <div id="rp-kec-nama" class="text-sm font-extrabold text-slate-800 leading-tight"></div>
   <div class="flex items-center gap-2 mb-2">
     <span id="rp-kec-kode" class="mono text-[10px] text-slate-400"></span>
     <span id="rp-kec-status" class="text-[10px] text-slate-500"></span>
   </div>
-  <div class="flex items-center gap-1.5">
-    <button id="rp-ring-1" onclick="assignRing(1)" class="rp-ring px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 text-slate-600">Ring 1</button>
-    <button id="rp-ring-2" onclick="assignRing(2)" class="rp-ring px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 text-slate-600">Ring 2</button>
-    <button id="rp-ring-3" onclick="assignRing(3)" class="rp-ring px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 text-slate-600">Ring 3</button>
-  </div>
+  <div id="rp-tombol-ring" class="flex items-center gap-1.5 flex-wrap max-w-[220px]"></div>
   <div class="flex items-center gap-2 mt-2">
-    <button id="rp-lepas" onclick="assignRing(0)" class="hidden text-[11px] font-bold text-red-600 hover:underline">Lepas dari ring</button>
+    <button id="rp-lepas" onclick="assignRing(0)" class="hidden text-[11px] font-bold text-red-600 hover:underline">Lepas dari kelompok</button>
     <button onclick="closeRingChooser()" class="ml-auto text-[11px] font-semibold text-slate-500 hover:underline">Batal</button>
   </div>
-</div>
-
-<!-- Dealer dengan lebih dari satu pos: pilih dulu pos mana yang ring-nya disunting.
-     Muncul dari startRingEdit() waktu scope dealer aktif (klik titik dealer di peta). -->
-<div id="ring-pilih-pos" class="hidden map-panel p-3 w-64">
-  <div class="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">Pilih pos dealer ini</div>
-  <div id="rp-pos-daftar" class="space-y-0.5 max-h-52 overflow-y-auto"></div>
-  <button onclick="closeRingOutletChooser()" class="mt-1.5 text-[11px] font-semibold text-slate-500 hover:underline">Batal</button>
 </div>
 
 <div id="modal-reset-pos" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[300] flex items-center justify-center p-4" onclick="if(event.target===this) closeResetOutlets()">

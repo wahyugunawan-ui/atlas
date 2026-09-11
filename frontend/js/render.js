@@ -7,26 +7,16 @@ import {
 import { KARESIDENAN } from './config.js';
 import { $, esc, formatNumber, formatPercent, sumBy } from './dom.js';
 import {
-  activeRows, applyScope, clearScope, pageFilters, scopeLabel, scopeValue, splitByCoverage,
+  activeRows, applyScope, clearScope, pageFilters, scopeLabel, scopeValue,
 } from './filters.js';
 import {
   businessReferenceGroup, contributionsByOutlet, contributionsByVillage,
-  fixedContributionClass, KONTRIBUSI_LABEL, outletRingSplit, POSISI_LABEL,
+  dealerRingSplit, fixedContributionClass, groupSplit, KONTRIBUSI_LABEL, POSISI_LABEL,
   referenceGap, relativePosition,
 } from './sales-stats.js';
 import { posisiBadgeHtml } from './tables.js';
 import { S } from './state.js';
 
-export function renderKpi(rows, perVillage) {
-  const dealers = new Set(rows.map((r) => r.dealer));
-  const units = rows.reduce((sum, r) => sum + r.units, 0);
-  const served = Object.keys(perVillage).filter((k) => perVillage[k] > 0).length;
-
-  $('kpi-dealer').textContent = formatNumber(dealers.size);
-  $('kpi-unit').textContent = formatNumber(units);
-  $('kpi-terlayani').textContent = formatNumber(served);
-  $('kpi-kosong').textContent = formatNumber(S.villages.length - served);
-}
 
 /**
  * Label tier legenda peta — HANYA di sini, permintaan Pakbos 2026-08-31. TIDAK
@@ -122,12 +112,14 @@ export function renderDealerLegend(rows) {
 /* ==========================================================================
    ANALISIS PERFORMA POS DEALER
    ==========================================================================
-   Sejak 2026-08-31 (permintaan Pakbos): persentase "dalam/luar radius jangkauan"
-   diganti total jadi %ring 1/2/3 (penetapan manual, lihat Bagian D di rencana) +
-   %di luar ketiga ring, dan ditambah %Sales Contribution, Kelompok Relative Position,
-   dan Kelompok Business Reference per pos — semuanya relatif terhadap TOTAL SELURUH
-   POS yang tampil di filter aktif, dihitung lewat fungsi murni sales-stats.js (tidak
-   ada mesin klasifikasi baru, cuma dipanggil dengan input per-outlet).
+   Sejak 2026-08-31 pagi (permintaan Pakbos): persentase "dalam/luar radius jangkauan"
+   diganti total jadi %ring 1/2/3, ditambah %Sales Contribution, Kelompok Relative
+   Position, dan Kelompok Business Reference per pos. Sejak 2026-08-31 SORE, ring
+   pindah ke DEALER (lihat dealerScopeSummary di bawah) dan blok performa per-POS ini
+   memakai COVERAGE 1-8 (kecamatan) sebagai gantinya — lihat docs/DECISIONS.md.
+   Semuanya relatif terhadap TOTAL SELURUH POS yang tampil di filter aktif, dihitung
+   lewat fungsi murni sales-stats.js (tidak ada mesin klasifikasi baru, cuma dipanggil
+   dengan input per-outlet).
    ========================================================================== */
 
 /**
@@ -149,7 +141,7 @@ function performanceByOutlet(rows) {
     const contribution = kontribusi.has(code) ? kontribusi.get(code) : null;
     const posisi = contribution == null ? null : relativePosition(contribution, breaks);
     const gap = referenceGap(contribution, S.businessReferencePercent);
-    const ring = outletRingSplit(outletRows, S.rings[code]);
+    const cover = groupSplit(outletRows, S.posCoverage[code], S.villageByCode, 8);
 
     return {
       code,
@@ -160,10 +152,8 @@ function performanceByOutlet(rows) {
       contribution,
       posisi,
       acuanGroup: businessReferenceGroup(gap),
-      percent1: ring.percent1,
-      percent2: ring.percent2,
-      percent3: ring.percent3,
-      percentLuarRing: 100 - ring.percent1 - ring.percent2 - ring.percent3,
+      coveragePercents: cover.percents, // indeks 0..7 = Coverage 1..8
+      percentLuarCoverage: 100 - cover.percents.reduce((a, b) => a + b, 0),
     };
   });
 
@@ -171,13 +161,16 @@ function performanceByOutlet(rows) {
   POSISI_LABEL.forEach((label) => { counts[label] = 0; });
   all.forEach((item) => { if (item.posisi) counts[item.posisi]++; });
 
-  // Peringkat per ring dihitung dari SELURUH pos (`all`), bukan dari hasil saring
+  // Peringkat per coverage dihitung dari SELURUH pos (`all`), bukan dari hasil saring
   // kelompok — mengklik satu kartu di board tidak boleh mengubah arti "peringkat 3
   // dari 25", cuma mempersempit pos MANA yang ditampilkan.
-  const ringKey = 'percent' + S.performanceRingFocus;
-  const ringSorted = [...all].sort((a, b) => b[ringKey] - a[ringKey]);
-  const ringRank = new Map(ringSorted.map((item, i) => [item.code, i + 1]));
-  all.forEach((item) => { item.ringRank = ringRank.get(item.code); item.ringRankTotal = all.length; });
+  const idx = S.performanceCoverageFocus - 1;
+  const coverageSorted = [...all].sort((a, b) => b.coveragePercents[idx] - a.coveragePercents[idx]);
+  const coverageRank = new Map(coverageSorted.map((item, i) => [item.code, i + 1]));
+  all.forEach((item) => {
+    item.coverageRank = coverageRank.get(item.code);
+    item.coverageRankTotal = all.length;
+  });
 
   const filtered = S.performanceGroupFilter
     ? all.filter((item) => item.posisi === S.performanceGroupFilter)
@@ -185,8 +178,9 @@ function performanceByOutlet(rows) {
 
   filtered.sort((a, b) => {
     const desc = S.performanceSort === 'desc';
-    if (S.performanceCriteria === 'ring') {
-      return desc ? b[ringKey] - a[ringKey] : a[ringKey] - b[ringKey];
+    if (S.performanceCriteria === 'coverage') {
+      return desc ? b.coveragePercents[idx] - a.coveragePercents[idx]
+        : a.coveragePercents[idx] - b.coveragePercents[idx];
     }
     return desc ? b.units - a.units : a.units - b.units;
   });
@@ -213,11 +207,11 @@ export function setPerformanceCriteria(criteria) {
   window.renderAll();
 }
 
-/** @param {1|2|3} ring */
-export function setPerformanceRingFocus(ring) {
-  const nomor = Number(ring);
-  if (![1, 2, 3].includes(nomor)) return;
-  S.performanceRingFocus = nomor;
+/** @param {number} num 1..8 */
+export function setPerformanceCoverageFocus(num) {
+  const nomor = Number(num);
+  if (nomor < 1 || nomor > 8) return;
+  S.performanceCoverageFocus = nomor;
   window.renderAll();
 }
 
@@ -228,29 +222,30 @@ export function filterPerformanceGroup(label) {
 }
 
 /**
- * Kriteria + ring fokus + arah urut — WAJIB tertulis di layar (Pakbos eksplisit:
- * "diinformasikan ring berapa"). Sama untuk panel normal, layar penuh peta, dan
- * tampilan besar (Pakbos: sort harus jalan di baik layar penuh maupun tidak).
+ * Kriteria + coverage fokus + arah urut — WAJIB tertulis di layar (Pakbos eksplisit:
+ * "diinformasikan ring berapa", sekarang coverage berapa sejak ring pindah ke dealer).
+ * Sama untuk panel normal, layar penuh peta, dan tampilan besar (Pakbos: sort harus
+ * jalan di baik layar penuh maupun tidak).
  */
 function performanceControlsHtml() {
   const crit = S.performanceCriteria;
-  const ring = S.performanceRingFocus;
+  const cov = S.performanceCoverageFocus;
   const desc = S.performanceSort === 'desc';
   const btn = (active) => 'px-2 py-1 rounded-md ' +
     (active ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500');
-  const label = crit === 'ring'
-    ? `Diurutkan berdasar %Ring ${ring} ${desc ? 'terbesar' : 'terkecil'}`
+  const label = crit === 'coverage'
+    ? `Diurutkan berdasar %Coverage ${cov} ${desc ? 'terbesar' : 'terkecil'}`
     : `Diurutkan berdasar total sales ${desc ? 'terbesar' : 'terkecil'}`;
 
   return `<div class="flex items-center gap-1.5 flex-wrap mb-2">` +
     `<div class="flex bg-slate-100 rounded-lg p-0.5 text-[10px] font-bold">` +
     `<button onclick="setPerformanceCriteria('units')" class="${btn(crit === 'units')}">Total Sales</button>` +
-    `<button onclick="setPerformanceCriteria('ring')" class="${btn(crit === 'ring')}">Ring</button>` +
+    `<button onclick="setPerformanceCriteria('coverage')" class="${btn(crit === 'coverage')}">Coverage</button>` +
     `</div>` +
-    (crit === 'ring'
+    (crit === 'coverage'
       ? `<div class="flex bg-slate-100 rounded-lg p-0.5 text-[10px] font-bold">` +
-        [1, 2, 3].map((r) =>
-          `<button onclick="setPerformanceRingFocus(${r})" class="${btn(ring === r)}">${r}</button>`).join('') +
+        Array.from({ length: 8 }, (_, i) => i + 1).map((c) =>
+          `<button onclick="setPerformanceCoverageFocus(${c})" class="${btn(cov === c)}">${c}</button>`).join('') +
         `</div>`
       : '') +
     `<span class="text-[10px] text-slate-400">${esc(label)}</span>` +
@@ -283,11 +278,16 @@ function acuanBadgeHtml(label) {
     `${esc(label)}</span>`;
 }
 
-/** Baris peringkat ring — cuma ditulis waktu kriteria sort memang "ring". */
-function ringRankLine(item) {
-  if (S.performanceCriteria !== 'ring') return '';
-  return `<div class="text-[10px] text-slate-400 mt-1">Peringkat ${esc(item.ringRank)} dari ` +
-    `${esc(item.ringRankTotal)} — Ring ${S.performanceRingFocus}</div>`;
+/** Baris peringkat coverage — cuma ditulis waktu kriteria sort memang "coverage". */
+function coverageRankLine(item) {
+  if (S.performanceCriteria !== 'coverage') return '';
+  return `<div class="text-[10px] text-slate-400 mt-1">Peringkat ${esc(item.coverageRank)} dari ` +
+    `${esc(item.coverageRankTotal)} — Coverage ${S.performanceCoverageFocus}</div>`;
+}
+
+/** Ringkasan singkat coverage 1-8 untuk tooltip — 8 kolom tidak muat di baris tabel. */
+function coverageTooltip(item) {
+  return item.coveragePercents.map((p, i) => `Cov${i + 1}: ${p.toFixed(0)}%`).join(' · ');
 }
 
 /** Baris lebar: panel normal (di bawah Proporsi Penjualan) dan tampilan besar. */
@@ -307,19 +307,18 @@ function performanceRowWide(item) {
     `<div class="text-[9px] text-slate-400">kontribusi</div></div>` +
     posisiBadgeHtml(item.posisi) +
     acuanBadgeHtml(item.acuanGroup) +
-    `<div class="flex items-center gap-1 text-[10px] mono shrink-0 text-slate-500">` +
-    `<span title="Ring 1">R1 ${esc(item.percent1.toFixed(0))}%</span>` +
-    `<span title="Ring 2">R2 ${esc(item.percent2.toFixed(0))}%</span>` +
-    `<span title="Ring 3">R3 ${esc(item.percent3.toFixed(0))}%</span>` +
-    `<span title="Di luar ketiga ring" class="text-slate-400">Luar ${esc(item.percentLuarRing.toFixed(0))}%</span>` +
+    `<div class="flex items-center gap-1 text-[10px] mono shrink-0 text-slate-500" ` +
+    `title="${esc(coverageTooltip(item))}">` +
+    `<span>Coverage ${esc((100 - item.percentLuarCoverage).toFixed(0))}%</span>` +
+    `<span class="text-slate-400">Luar ${esc(item.percentLuarCoverage.toFixed(0))}%</span>` +
     `</div>` +
     `<div class="flex items-center gap-1.5 shrink-0" onclick="event.stopPropagation()">` +
     `<button onclick="showOnMap('${esc(item.code)}')" class="px-2 py-1.5 rounded-lg text-[11px] font-bold text-white" ` +
     `style="background:var(--astra-navy)"><i class="ph-fill ph-map-trifold"></i></button>` +
-    `<button onclick="editRingFromTable('${esc(item.code)}')" class="px-2 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50">` +
+    `<button onclick="editPosCoverageFromTable('${esc(item.code)}')" class="px-2 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50">` +
     `<i class="ph ph-target"></i></button>` +
     `</div></div>` +
-    ringRankLine(item) +
+    coverageRankLine(item) +
     `</div>`;
 }
 
@@ -333,13 +332,12 @@ function performanceRowCompact(item) {
     `<span class="flex-1 text-xs font-semibold text-slate-800 truncate">${esc(item.name)}</span>` +
     `<span class="text-[10px] text-slate-400 mono shrink-0">${esc(formatNumber(item.units))}</span></div>` +
     `<div class="text-[10px] text-slate-400 truncate">${esc(item.dealer)}</div>` +
-    `<div class="flex items-center gap-1 mt-1 text-[9px] mono text-slate-500">` +
-    `<span>R1 ${esc(item.percent1.toFixed(0))}%</span>` +
-    `<span>R2 ${esc(item.percent2.toFixed(0))}%</span>` +
-    `<span>R3 ${esc(item.percent3.toFixed(0))}%</span>` +
-    `<span class="text-slate-400">Luar ${esc(item.percentLuarRing.toFixed(0))}%</span></div>` +
+    `<div class="flex items-center gap-1 mt-1 text-[9px] mono text-slate-500" ` +
+    `title="${esc(coverageTooltip(item))}">` +
+    `<span>Coverage ${esc((100 - item.percentLuarCoverage).toFixed(0))}%</span>` +
+    `<span class="text-slate-400">Luar ${esc(item.percentLuarCoverage.toFixed(0))}%</span></div>` +
     `<div class="flex items-center gap-1 mt-1">${posisiBadgeHtml(item.posisi)}${acuanBadgeHtml(item.acuanGroup)}</div>` +
-    ringRankLine(item) +
+    coverageRankLine(item) +
     `</div>`;
 }
 
@@ -347,20 +345,33 @@ function performanceRowCompact(item) {
  * Ringkasan kontekstual di atas daftar Performa Pos — sejak 2026-08-31 GANTI TOTAL
  * (permintaan Pakbos, putaran keempat) dari "Dalam radius X km" (radius-based, satu
  * bentuk untuk semua orang) jadi tiga bentuk berbeda menurut filter yang aktif.
- * `splitByCoverage`/`coverage.js` TIDAK dihapus — masih dipakai `dealerCardHtml()`
- * dan tooltip kelurahan (`outlets.js`), di luar cakupan perubahan ini.
+ * `splitByCoverage`/`coverage.js` TIDAK dihapus — masih dipakai tooltip kelurahan
+ * (`outlets.js`), di luar cakupan perubahan ini.
  */
 const average = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
 
 /**
  * grid-template-columns lewat inline style, SENGAJA bukan Tailwind grid-cols-N:
- * jumlah kolomnya beda tiap mode (4/6/4), dan proyek ini sudah DUA KALI lupa
- * `npm run css` sesudah kelas Tailwind baru dipakai di template literal JS
- * (grid-cols-5 di Bagian B, .marker-outlet.dealer di Bagian H) — inline style
- * tidak butuh build step sama sekali, jadi kelas bug itu mustahil terulang di sini.
+ * jumlah kolomnya beda tiap mode (4/6/9/10 sejak coverage 1-8 ikut ditampilkan), dan
+ * proyek ini sudah DUA KALI lupa `npm run css` sesudah kelas Tailwind baru dipakai di
+ * template literal JS (grid-cols-5 di Bagian B, .marker-outlet.dealer di Bagian H) —
+ * inline style tidak butuh build step sama sekali, jadi kelas bug itu mustahil
+ * terulang di sini.
+ *
+ * `auto-fill` + `minmax`, BUKAN `repeat(N,...)` sejak coverage pos bisa sampai 9 sel
+ * sekaligus (total + 8 coverage) — memaksa 9 kolom di satu baris membuat tiap sel
+ * terlalu sempit untuk dibaca. Sel-sel MELIPAT ke baris berikutnya begitu lebar
+ * panelnya tidak cukup, lebar minimum tiap sel tetap terjaga.
+ *
+ * `auto-fit`, BUKAN `auto-fill`: keduanya melipat sama begitu sempit, tapi beda
+ * waktu SELNYA SEDIKIT dan panelnya lebar (mis. 4 sel scope Kota di kartu ringkasan
+ * utama, selebar halaman) — `auto-fill` tetap MENCADANGKAN kolom kosong sebanyak
+ * yang muat secara lebar, jadi 4 selnya mepet ke kiri dan separuh baris sisanya
+ * kosong. `auto-fit` MELUMAT kolom kosong itu, sel yang ada (lewat `1fr`) melebar
+ * mengisi satu baris penuh — persis yang diminta tim.
  */
 function summaryGridHtml(cells) {
-  return `<div class="grid gap-2" style="grid-template-columns:repeat(${cells.length},minmax(0,1fr))">` +
+  return `<div class="grid gap-2" style="grid-template-columns:repeat(auto-fit,minmax(84px,1fr))">` +
     cells.map((c) => `<div class="rounded-xl border border-slate-200 p-2.5 text-center">` +
       `<div class="text-sm font-extrabold text-slate-800 mono">${esc(c.value)}</div>` +
       `<div class="text-[9px] uppercase font-bold text-slate-400 tracking-wide mt-0.5">${esc(c.label)}</div></div>`).join('') +
@@ -381,36 +392,79 @@ function baseScopeSummary(rows) {
   ]);
 }
 
-function dealerScopeSummary(rows) {
+/**
+ * Union kecamatan dari coverage seluruh pos di bawah satu dealer — dipakai
+ * dealerScopeSummary untuk bucket "Coverage gabungan" di dealerRingSplit().
+ */
+function dealerCoverageDistricts(dealerCode) {
+  const districts = new Set();
+  Object.values(S.outletByCode)
+    .filter((o) => o.dealerCode === dealerCode)
+    .forEach((o) => {
+      Object.keys(S.posCoverage[o.code] || {}).forEach((d) => districts.add(d));
+    });
+  return districts;
+}
+
+/**
+ * Enam sel dasar scope dealer (jumlah desa, jumlah pos, total sales, tiga AVG) —
+ * dipakai DUA tempat: dealerScopeSummary() di bawah (ringkas-jangkauan, panel
+ * Performa, ditambah pecahan Ring/Coverage) dan topScopeSummary() (kartu ringkasan
+ * atas halaman, TANPA pecahan ring/coverage — dikonfirmasi user waktu perencanaan
+ * 2026-08-31: kartu atas sengaja ringkas, rincian ring/coverage cukup di satu
+ * tempat).
+ */
+function dealerScopeBaseCells(rows, dealerCode) {
   const { list, breaks } = villageSalesRows(rows);
   const totalSales = rows.reduce((sum, r) => sum + r.units, 0);
   const kontribusi = list.map((v) => v.contribution).filter((v) => v != null);
   const avg = average(kontribusi);
   const gaps = list.map((v) => referenceGap(v.contribution, S.businessReferencePercent)).filter((g) => g != null);
   const avgGap = average(gaps);
-  const outletCount = (S.dealerByCode[scopeValue('dealer')] || {}).outletCount || 0;
-  return summaryGridHtml([
+  const outletCount = (S.dealerByCode[dealerCode] || {}).outletCount || 0;
+
+  return [
     { label: 'Jumlah Desa', value: formatNumber(list.length) },
     { label: 'Jumlah Pos Dealer', value: formatNumber(outletCount) },
     { label: 'Total Sales', value: formatNumber(totalSales) },
     { label: 'AVG Kontribusi', value: avg == null ? '—' : avg.toFixed(2) + '%' },
     { label: 'AVG Posisi Relatif', value: avg == null ? '—' : (relativePosition(avg, breaks) || '—') },
     { label: 'AVG Acuan Bisnis', value: avgGap == null ? '—' : (avgGap > 0 ? '+' : '') + avgGap.toFixed(2) },
+  ];
+}
+
+function dealerScopeSummary(rows) {
+  const dealerCode = scopeValue('dealer');
+  const cells = dealerScopeBaseCells(rows, dealerCode);
+
+  // Ring dealer (kecamatan) + coverage gabungan pos cabangnya — ring menang kalau
+  // satu kecamatan masuk keduanya (dikonfirmasi user waktu perencanaan 2026-08-31).
+  const split = dealerRingSplit(
+    rows, S.dealerRings[dealerCode], dealerCoverageDistricts(dealerCode), S.villageByCode);
+
+  return summaryGridHtml([
+    ...cells,
+    { label: 'Ring 1', value: split.percent1.toFixed(1) + '%' },
+    { label: 'Ring 2', value: split.percent2.toFixed(1) + '%' },
+    { label: 'Ring 3', value: split.percent3.toFixed(1) + '%' },
+    { label: 'Coverage Gabungan Pos', value: split.percentCoverage.toFixed(1) + '%' },
   ]);
 }
 
 function posScopeSummary(rows) {
   const pos = scopeValue('pos');
   const total = rows.reduce((sum, r) => sum + r.units, 0);
-  const ringMap = S.rings[pos] || {};
-  const counts = { 1: 0, 2: 0, 3: 0 };
-  Object.values(ringMap).forEach((r) => { if (counts[r] !== undefined) counts[r]++; });
-  const split = outletRingSplit(rows, ringMap); // SUDAH ADA (Bagian B1) — reuse apa adanya
+  const coverageMap = S.posCoverage[pos] || {};
+  const counts = {};
+  for (let i = 1; i <= 8; i++) counts[i] = 0;
+  Object.values(coverageMap).forEach((c) => { if (counts[c] !== undefined) counts[c]++; });
+  const split = groupSplit(rows, coverageMap, S.villageByCode, 8);
   return summaryGridHtml([
     { label: 'Total Penjualan Pos', value: formatNumber(total) },
-    { label: 'Ring 1', value: `${formatNumber(counts[1])} desa · ${split.percent1.toFixed(1)}%` },
-    { label: 'Ring 2', value: `${formatNumber(counts[2])} desa · ${split.percent2.toFixed(1)}%` },
-    { label: 'Ring 3', value: `${formatNumber(counts[3])} desa · ${split.percent3.toFixed(1)}%` },
+    ...Array.from({ length: 8 }, (_, i) => ({
+      label: `Coverage ${i + 1}`,
+      value: `${formatNumber(counts[i + 1])} kec · ${split.percents[i].toFixed(1)}%`,
+    })),
   ]);
 }
 
@@ -418,6 +472,31 @@ function scopeSummary(rows) {
   if (scopeValue('pos') !== 'ALL') return posScopeSummary(rows);
   if (scopeValue('dealer') !== 'ALL') return dealerScopeSummary(rows);
   return baseScopeSummary(rows); // Kota ATAU Semua — activeRows() yang sudah menentukan isi `rows`
+}
+
+/**
+ * Kartu ringkasan UTAMA di puncak halaman Insight & Peta — menggantikan 4 KPI
+ * statis (Dealer Aktif/Total Penjualan/Kelurahan Terlayani/Kelurahan Kosong) yang
+ * sebelumnya SELALU sama nilainya berapa pun filternya. Sejak 2026-08-31 malam
+ * ikut scope, sama seperti scopeSummary() (ringkas-jangkauan, panel Performa) —
+ * TAPI field-nya beda: scope dealer di sini TANPA pecahan Ring/Coverage (dikonfirmasi
+ * user, kartu atas sengaja ringkas — rincian ring/coverage cukup di satu tempat),
+ * scope pos SAMA PERSIS posScopeSummary() (kedelapan Coverage-nya, dikonfirmasi
+ * user waktu perencanaan).
+ *
+ * Kota dan "Semua" SENGAJA sama (baseScopeSummary) — dikonfirmasi user: tanpa
+ * filter dihitung dari SELURUH data, kartunya tetap 4 field yang sama.
+ */
+function topScopeSummary(rows) {
+  if (scopeValue('pos') !== 'ALL') return posScopeSummary(rows);
+  if (scopeValue('dealer') !== 'ALL') {
+    return summaryGridHtml(dealerScopeBaseCells(rows, scopeValue('dealer')));
+  }
+  return baseScopeSummary(rows);
+}
+
+export function renderTopSummary(rows) {
+  $('ringkas-utama').innerHTML = topScopeSummary(rows);
 }
 
 export function renderPerformance(rows) {
@@ -448,6 +527,8 @@ export function renderPerformance(rows) {
   if ($('fs-ringkas')) $('fs-ringkas').innerHTML = summary;
   if ($('fp-performa')) $('fp-performa').innerHTML = bodyWide;
   if ($('fp-ringkas')) $('fp-ringkas').innerHTML = summary;
+
+  autoStartPerforma();
   if ($('fp-lingkup')) $('fp-lingkup').textContent = 'Dihitung terhadap ' + scopeLabel();
 }
 
@@ -463,8 +544,11 @@ export function openPerformaFull() {
 export function closePerformaFull() {
   $('modal-performa').classList.add('hidden');
   // Gulir otomatis ikut berhenti: kalau tidak, dia terus berjalan di panel yang
-  // tertutup dan tombol Live-nya tetap menyala tanpa ada yang bergerak.
-  if (S.livePerforma) toggleLivePerforma();
+  // tertutup dan tombol Live-nya tetap menyala tanpa ada yang bergerak. Dihentikan
+  // LANGSUNG (bukan lewat toggleLivePerforma) supaya livePerformaPaused tidak ikut
+  // ke-set — panel normal yang kini terlihat harus tetap auto-mulai lagi lewat
+  // autoStartPerforma(), bukan diam menunggu tombol Live diklik.
+  stopLivePerforma();
 }
 
 /**
@@ -494,19 +578,7 @@ function panelPerformaAktif() {
  * Berhenti sendiri kalau daftarnya tidak lebih panjang dari wadahnya: menggulir
  * sesuatu yang sudah muat seluruhnya cuma membuat layar bergetar.
  */
-export function toggleLivePerforma() {
-  const tombol = [$('btn-live-performa'), $('btn-live-performa-besar')].filter(Boolean);
-
-  if (S.livePerforma) {
-    clearInterval(S.livePerforma);
-    S.livePerforma = null;
-    tombol.forEach((b) => {
-      b.classList.remove('live-nyala');
-      b.querySelector('i').className = 'ph ph-play';
-    });
-    return;
-  }
-
+function startLivePerforma() {
   S.livePerforma = setInterval(() => {
     const panel = panelPerformaAktif();
     if (!panel) return;
@@ -514,11 +586,38 @@ export function toggleLivePerforma() {
     if (sisa <= 4) return;
     panel.scrollTop = panel.scrollTop >= sisa - 1 ? 0 : panel.scrollTop + 1;
   }, 40);
-
-  tombol.forEach((b) => {
+  [$('btn-live-performa'), $('btn-live-performa-besar')].filter(Boolean).forEach((b) => {
     b.classList.add('live-nyala');
     b.querySelector('i').className = 'ph ph-pause';
   });
+}
+
+/** Dipanggil tiap renderPerformance() — aman dipanggil berkali-kali, dijaga oleh dua state. */
+function autoStartPerforma() {
+  if (S.livePerforma || S.livePerformaPaused) return;
+  startLivePerforma();
+}
+
+/** Hentikan interval TANPA menandai livePerformaPaused — dipakai closePerformaFull(). */
+function stopLivePerforma() {
+  if (!S.livePerforma) return;
+  clearInterval(S.livePerforma);
+  S.livePerforma = null;
+  [$('btn-live-performa'), $('btn-live-performa-besar')].filter(Boolean).forEach((b) => {
+    b.classList.remove('live-nyala');
+    b.querySelector('i').className = 'ph ph-play';
+  });
+}
+
+/** Tombol Pause/Lanjut — dipencet manusia, jadi livePerformaPaused IKUT ditandai. */
+export function toggleLivePerforma() {
+  if (S.livePerforma) {
+    stopLivePerforma();
+    S.livePerformaPaused = true;
+    return;
+  }
+  S.livePerformaPaused = false;
+  startLivePerforma();
 }
 
 /* ==========================================================================
@@ -683,12 +782,20 @@ function activeDealerCode() {
   return dealer !== 'ALL' ? dealer : null;
 }
 
+/**
+ * Sejak 2026-08-31: trio Total/Dalam jangkauan/Di luar (berbasis `splitByCoverage()`,
+ * radius lama) diganti metrik kontribusi/posisi relatif/acuan bisnis yang sudah
+ * dipakai di panel lain, plus pecahan ring (scope dealer) atau coverage (scope pos)
+ * — permintaan eksplisit user, dikonfirmasi lewat pertanyaan field "Pos".
+ */
 function dealerCardHtml(compact) {
   const code = activeDealerCode();
   if (!code) return '';
 
   // Seluruh pos milik dealer ini pada periode dan wilayah aktif — TIDAK ikut
-  // dipersempit filter pos. Yang ditanyakan kartu ini memang rekap dealernya.
+  // dipersempit filter pos. Yang ditanyakan kartu ini memang rekap dealernya
+  // (AVG Kontribusi/Posisi Relatif/Acuan Bisnis tetap level dealer walau lagi
+  // melihat satu pos tertentu — cuma pecahan ring/coverage di bawah yang beda).
   const f = pageFilters();
   const city = f.cityCode;
   const rows = S.sales.filter((r) => {
@@ -702,8 +809,6 @@ function dealerCardHtml(compact) {
     return true;
   });
 
-  const split = splitByCoverage(rows);
-  const percent = split.total ? (split.inside / split.total) * 100 : 0;
   const name = S.dealerNames[code] || code;
   const color = dealerColor(S.registry, code);
 
@@ -715,21 +820,50 @@ function dealerCardHtml(compact) {
     `${esc((S.outletByCode[oc] || {}).name || oc)}` +
     `<span class="n">${esc(formatNumber(perOutlet[oc]))}</span></span>`).join(' ');
 
-  const stat = (value, label, cls, style) =>
-    `<div class="text-center shrink-0"><div class="${compact ? 'text-lg' : 'text-2xl'} font-extrabold ${cls}" ${style}>${value}</div>` +
-    `<div class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">${label}</div></div>`;
+  // Pos: nama pos yang sedang aktif kalau scope pos dipilih, jumlah pos di bawah
+  // dealer ini kalau belum (dikonfirmasi user waktu perencanaan 2026-08-31).
+  const activePos = scopeValue('pos');
+  const posValue = activePos !== 'ALL'
+    ? ((S.outletByCode[activePos] || {}).name || activePos)
+    : formatNumber(order.length) + ' pos';
 
-  return `<div class="flex items-center gap-${compact ? '3' : '4'} ${compact ? '' : 'flex-wrap'}">` +
+  // AVG Kontribusi/Posisi Relatif/Acuan Bisnis: tiga sel terakhir dealerScopeBaseCells,
+  // dihitung dari `rows` (dealer-wide) yang sama seperti panel ringkasan lain.
+  const [, , , kontribusi, posisiRelatif, acuanBisnis] = dealerScopeBaseCells(rows, code);
+
+  // Cabang: pos aktif → %coverage 1-8 milik pos itu SENDIRI (bukan dealer-wide —
+  // disaring ulang ke penjualan pos ini saja, sama seperti posScopeSummary() di
+  // tempat lain memakai rows yang sudah tersaring scope pos lewat activeRows());
+  // kalau tidak ada pos aktif (scope dealer saja) → %ring 1/2/3 + %luar (di luar 3
+  // ring) milik dealer ini, dari `rows` dealer-wide. "Luar" dihitung di sini, BUKAN
+  // field dealerRingSplit() — kartu ini cuma minta 4 angka (ring1/2/3/luar), beda
+  // dari panel ringkas-jangkauan yang punya "Coverage Gabungan Pos" terpisah.
+  let cabang;
+  if (activePos !== 'ALL') {
+    const posRows = rows.filter((r) => r.outlet === activePos);
+    const split = groupSplit(posRows, S.posCoverage[activePos], S.villageByCode, 8);
+    cabang = Array.from({ length: 8 }, (_, i) =>
+      ({ label: `Coverage ${i + 1}`, value: split.percents[i].toFixed(1) + '%' }));
+  } else {
+    const split = dealerRingSplit(
+      rows, S.dealerRings[code], dealerCoverageDistricts(code), S.villageByCode);
+    const luar = 100 - split.percent1 - split.percent2 - split.percent3;
+    cabang = [
+      { label: 'Ring 1', value: split.percent1.toFixed(1) + '%' },
+      { label: 'Ring 2', value: split.percent2.toFixed(1) + '%' },
+      { label: 'Ring 3', value: split.percent3.toFixed(1) + '%' },
+      { label: 'Luar', value: luar.toFixed(1) + '%' },
+    ];
+  }
+
+  const stats = summaryGridHtml(
+    [{ label: 'Pos', value: posValue }, kontribusi, posisiRelatif, acuanBisnis, ...cabang]);
+
+  return `<div>` +
+    `<div class="flex items-center gap-${compact ? '3' : '4'} justify-between"><div class="flex items-center gap-${compact ? '3' : '4'} min-w-0">` +
     `<div class="${compact ? 'w-8 h-8 text-sm' : 'w-10 h-10'} rounded-xl flex items-center justify-center text-white font-extrabold shrink-0" ` +
     `style="background:${esc(color)}">${esc(name.slice(0, 1))}</div>` +
-    `<div class="min-w-0">` +
     `<div class="font-extrabold text-slate-800 truncate ${compact ? 'text-sm' : ''}">${esc(name)}</div>` +
-    `<div class="text-[11px] text-slate-400 truncate">Rekap seluruh pos di bawah dealer ini` +
-    `${order.length ? ` · ${esc(order.length)} pos` : ''}</div></div>` +
-    `<div class="flex items-center gap-${compact ? '4' : '6'} ml-auto shrink-0">` +
-    stat(esc(formatNumber(split.total)), 'Total', 'text-slate-800', '') +
-    stat(esc(percent.toFixed(0)) + '%', 'Dalam jangkauan', 'text-emerald-600', '') +
-    stat(esc((100 - percent).toFixed(0)) + '%', 'Di luar', '', 'style="color:var(--astra-red)"') +
     `</div>` +
     `<div class="flex items-center gap-2 shrink-0">` +
     // Tombolnya cuma di kartu penuh. Kartu ringkas di atas peta memang dibuat sependek
@@ -740,9 +874,11 @@ function dealerCardHtml(compact) {
       `<i class="ph ph-list-magnifying-glass mr-1"></i>Rincian per kelurahan</button>`) +
     `<button onclick="closeDealerCard()" class="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50">Tutup</button>` +
     `</div></div>` +
+    `<div class="mt-3">${stats}</div>` +
     (compact
       ? `<div class="flex gap-2 mt-2.5 pt-2.5 border-t border-slate-200 overflow-x-auto pb-1">${chips}</div>`
-      : `<div class="flex flex-wrap gap-2 mt-4 pt-4 border-t border-slate-100">${chips}</div>`);
+      : `<div class="flex flex-wrap gap-2 mt-4 pt-4 border-t border-slate-100">${chips}</div>`) +
+    `</div>`;
 }
 
 export function renderDealerCard() {

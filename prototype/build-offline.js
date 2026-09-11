@@ -252,6 +252,15 @@ export const saveAlias = () => tolak('Mencocokkan nama kelurahan');
 export const deleteAlias = () => tolak('Membatalkan pencocokan');
 export const deletePeriod = () => tolak('Menghapus periode');
 export const uploadImport = () => tolak('Mengimpor berkas');
+export const fetchDistricts = () => Promise.resolve({ districts: [] });
+export const saveDealerRings = () => tolak('Menyimpan ring dealer');
+export const savePosCoverage = () => tolak('Menyimpan coverage pos');
+export const resetOutlets = () => tolak('Mengosongkan master pos dan dealer');
+export const createDealer = () => tolak('Menambah dealer');
+export const saveDealer = () => tolak('Menyimpan perubahan dealer');
+export const deleteDealer = () => tolak('Menghapus dealer');
+export const previewOutletImport = () => tolak('Mengimpor master pos');
+export const commitOutletImport = () => tolak('Mengimpor master pos');
 `;
 
 /* ==========================================================================

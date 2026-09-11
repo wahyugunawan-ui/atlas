@@ -30,4 +30,17 @@ function regionKey(cityCode, districtName, villageName) {
     normalizeName(villageName);
 }
 
-module.exports = { normalizeName, toDottedCityCode, regionKey };
+/**
+ * 'Kab. Sleman' / 'Kabupaten Sleman' -> 'SLEMAN'. 'Kota Yogyakarta' -> 'YOGYAKARTA'.
+ *
+ * Sumber Excel yang menyebut kabupaten/kota dengan TEKS BEBAS (bukan kode BPS) tidak
+ * selalu memakai ejaan resmi penuh — "Kab." vs "Kabupaten" berbeda string tapi
+ * kabupaten yang sama. Melucuti awalan administratif dari KEDUA sisi (teks Excel
+ * maupun villages.city_name) sebelum dibandingkan membuat keduanya bertemu di nama
+ * inti yang sama, tanpa perlu tabel alias.
+ */
+function coreCityName(value) {
+  return normalizeName(value).replace(/^(KABUPATEN|KOTAMADYA|KOTA|KAB)/, '');
+}
+
+module.exports = { normalizeName, toDottedCityCode, regionKey, coreCityName };

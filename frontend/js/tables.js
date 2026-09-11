@@ -12,7 +12,9 @@ import {
 } from './config.js';
 import { $, esc, formatNumber, formatPercent, monthLabel, sumBy, toast } from './dom.js';
 import { syncFilterBar } from './filter-bar.js';
-import { activeRows, clearScope, dealerBreakdown, pageFilters, scopeValue } from './filters.js';
+import {
+  activeRows, clearScope, dealerBreakdown, pageFilters, scopeValue, setScope,
+} from './filters.js';
 import { selectOutlet } from './outlets.js';
 import {
   contributionPercent, contributionsForRows, groupByCity, referenceGap, referenceRatio,
@@ -555,7 +557,8 @@ export function closeVillageDetail() {
 const RING_NAMA_TAMPIL = 3;
 
 /**
- * Satu sel ring: kecamatan mana saja yang masuk ring itu untuk pos ini.
+ * Satu sel ring (dealer, 1-3): kecamatan mana saja yang masuk ring itu untuk dealer
+ * ini.
  *
  * Namanya ditulis, bukan cuma jumlahnya — diminta tim, dan memang itu yang dicari
  * orang waktu memeriksa hasil pengisian ring. Tapi satu ring bisa memuat belasan
@@ -565,19 +568,21 @@ const RING_NAMA_TAMPIL = 3;
  *
  * Yang kosong ditulis tanda hubung, bukan angka nol. "Belum diisi" dan "benar-benar
  * nol" dua hal berbeda, dan angka nol di kolom baru akan terbaca seperti temuan.
+ *
+ * @param {Object} groupMap  S.dealerRings[dealerCode] atau S.posCoverage[outletCode]
+ * @param {number} group     nomor ring/coverage yang mau ditulis
  */
-function ringCell(outletCode, ring) {
-  const punya = S.rings[outletCode] || {};
-  const kode = Object.keys(punya).filter((c) => punya[c] === ring);
+function groupCell(groupMap, group) {
+  const punya = groupMap || {};
+  const kode = Object.keys(punya).filter((c) => punya[c] === group);
   if (!kode.length) {
     return '<td class="px-3 py-2 text-center mono text-xs text-slate-300">&mdash;</td>';
   }
 
-  // Kode yang tidak dikenal tetap ditampilkan sebagai kode, bukan dilewati: desa
-  // yang hilang dari daftar tapi masih tersimpan di ring adalah hal yang harus
-  // terlihat, bukan disembunyikan.
-  const nama = kode.map((c) => (S.villageByCode[c] || {}).name || c)
-    .sort((a, b) => a.localeCompare(b));
+  // Kode yang tidak dikenal tetap ditampilkan sebagai kode, bukan dilewati: kecamatan
+  // yang hilang dari daftar nama tapi masih tersimpan di ring/coverage adalah hal
+  // yang harus terlihat, bukan disembunyikan.
+  const nama = kode.map((c) => S.districtNames[c] || c).sort((a, b) => a.localeCompare(b));
   const tampil = nama.slice(0, RING_NAMA_TAMPIL);
   const sisa = nama.length - tampil.length;
 
@@ -588,6 +593,31 @@ function ringCell(outletCode, ring) {
     '</span></td>';
 }
 
+/**
+ * Satu sel ringkas coverage (pos, 1-8): total kecamatan di seluruh 8 grup, rincian
+ * per grup di tooltip. Delapan kolom terpisah seperti ring dealer tidak muat di
+ * lebar tabel Master Pos Dealer — beda dari groupCell() di atas yang menulis satu
+ * ring per kolom.
+ */
+function coverageCellRingkas(outletCode) {
+  const punya = S.posCoverage[outletCode] || {};
+  const kodeUnik = Object.keys(punya);
+  if (!kodeUnik.length) {
+    return '<td class="px-3 py-2 text-xs text-slate-300">&mdash;</td>';
+  }
+
+  const grupTerisi = new Set(Object.values(punya)).size;
+  const tooltip = Array.from({ length: 8 }, (_, i) => i + 1).map((g) => {
+    const nama = kodeUnik.filter((c) => punya[c] === g)
+      .map((c) => S.districtNames[c] || c).sort((a, b) => a.localeCompare(b));
+    return `Cov${g}: ${nama.length ? nama.join(', ') : '—'}`;
+  }).join(' · ');
+
+  return `<td class="px-3 py-2 text-xs text-slate-600" title="${esc(tooltip)}">` +
+    `<span class="mono font-bold text-slate-800">${esc(String(kodeUnik.length))}</span> kec · ` +
+    `<span class="text-slate-500">${esc(String(grupTerisi))} grup terisi</span></td>`;
+}
+
 export function renderOutletTable() {
   const query = ($('mpos-search').value || '').toLowerCase();
   const f = pageFilters('pos');
@@ -596,7 +626,10 @@ export function renderOutletTable() {
   // Filter KOTA sengaja tidak menyaring daftar pos, cuma angkanya. Pos tidak punya
   // kabupaten sendiri di data ini — yang punya kabupaten adalah kelurahan tempat
   // penjualannya jatuh. Menebaknya dari koordinat pos akan salah tanpa gejala.
-  const list = S.outlets.filter((o) =>
+  // S.realOutlets, bukan S.outlets — katalog ini cuma pos FISIK sungguhan, tidak
+  // ikut baris "proxy" per dealer yang menyambungkan penjualan level-dealer lama
+  // (lihat schema.sql komentar outlets.is_dealer_proxy).
+  const list = S.realOutlets.filter((o) =>
     (f.dealerCode === 'ALL' || o.dealerCode === f.dealerCode) &&
     (f.outletCode === 'ALL' || o.code === f.outletCode) &&
     (!query || o.name.toLowerCase().includes(query) || o.code.includes(query)))
@@ -619,32 +652,42 @@ export function renderOutletTable() {
     `<div class="mono text-[10px] text-slate-400">` +
     (o.lat == null ? 'belum di-pin'
       : `${esc(o.lat.toFixed(5))}, ${esc(o.lng.toFixed(5))}`) + `</div></td>` +
-    ringCell(o.code, 1) + ringCell(o.code, 2) + ringCell(o.code, 3) +
+    coverageCellRingkas(o.code) +
     `<td class="px-3 py-2 text-right font-bold mono ${perOutlet[o.code] ? 'text-slate-900' : 'text-slate-300'}">` +
     `${esc(formatNumber(perOutlet[o.code] || 0))}</td>` +
     `<td class="px-3 py-2 text-center whitespace-nowrap">` +
     (o.lat == null
       ? `<button onclick="promptPin('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-map-pin"></i> Pin</button> `
       : `<button onclick="showOnMap('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-white" style="background:var(--astra-navy)"><i class="ph-fill ph-map-trifold"></i> Lihat di peta</button> `) +
-    `<button onclick="editRingFromTable('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-target"></i> Ring</button> ` +
+    `<button onclick="editPosCoverageFromTable('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-target"></i> Coverage</button> ` +
     `<button onclick="openOutletEditor('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-pencil-simple"></i> Edit</button>` +
     `</td></tr>`).join('')
-    : '<tr><td colspan="9" class="text-center py-8 text-slate-400 text-sm">Tidak ada pos yang cocok.</td></tr>';
+    : '<tr><td colspan="7" class="text-center py-8 text-slate-400 text-sm">Tidak ada pos yang cocok.</td></tr>';
 }
 
 /**
- * Tombol "Ring" di tabel: pindah ke halaman peta, pilih posnya, lalu buka mode edit.
+ * Tombol "Coverage" di tabel pos: pindah ke halaman peta, pilih posnya, lalu buka
+ * mode edit coverage.
  *
- * Ringnya dipilih dengan mengklik kecamatan di peta, jadi tombol di tabel tidak bisa
- * membuka apa pun sendiri — dia mengantar orang ke tempat pemilihannya. Jeda 120 ms
- * yang sama dengan showOnMap(): peta baru bisa dipakai sesudah tabnya benar-benar
- * terlihat dan MapLibre sempat menghitung ulang ukurannya.
+ * Coverage-nya dipilih dengan mengklik kecamatan di peta, jadi tombol di tabel tidak
+ * bisa membuka apa pun sendiri — dia mengantar orang ke tempat pemilihannya. Jeda
+ * 120 ms yang sama dengan showOnMap(): peta baru bisa dipakai sesudah tabnya benar-
+ * benar terlihat dan MapLibre sempat menghitung ulang ukurannya.
  */
-export function editRingFromTable(code) {
+export function editPosCoverageFromTable(code) {
   switchTab('peta');
   setTimeout(() => {
     clearScope('pos');
     selectOutlet(code);
+    window.startCoverageEdit(code);
+  }, 120);
+}
+
+/** Tombol "Ring" di tabel dealer: sama seperti editPosCoverageFromTable, tapi dealer. */
+export function editDealerRingFromTable(code) {
+  switchTab('peta');
+  setTimeout(() => {
+    setScope('dealer', code, true);
     window.startRingEdit(code);
   }, 120);
 }
@@ -1073,12 +1116,15 @@ export function renderDealerTable() {
     `<td class="px-3 py-2 mono text-[10px] text-slate-400">` +
     (d.lat == null ? '—' : `${esc(Number(d.lat).toFixed(5))}, ${esc(Number(d.lng).toFixed(5))}`) +
     `</td>` +
+    groupCell(S.dealerRings[d.code], 1) + groupCell(S.dealerRings[d.code], 2) +
+    groupCell(S.dealerRings[d.code], 3) +
     `<td class="px-3 py-2 text-right font-bold mono text-slate-900">${esc(formatNumber(Number(d.outletCount)))}</td>` +
     `<td class="px-3 py-2 text-center whitespace-nowrap">` +
+    `<button onclick="editDealerRingFromTable('${esc(d.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-target"></i> Ring</button> ` +
     `<button onclick="openDealerEditor('${esc(d.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-pencil-simple"></i> Edit</button> ` +
     `<button onclick="deleteDealerConfirm('${esc(d.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-red-200 text-red-700 hover:bg-red-50"><i class="ph ph-trash"></i></button>` +
     `</td></tr>`).join('')
-    : '<tr><td colspan="6" class="text-center py-8 text-slate-400 text-sm">Tidak ada dealer yang cocok.</td></tr>';
+    : '<tr><td colspan="9" class="text-center py-8 text-slate-400 text-sm">Tidak ada dealer yang cocok.</td></tr>';
 }
 
 export function openNewDealer() {
@@ -1434,6 +1480,13 @@ export async function renderCustomerTable(keepOffset) {
   }
 }
 
+// Tiga tab ini sejak 2026-08-31 malam dipindah dari tombol datar di navbar ke dalam
+// flyout "Master" (lihat toggleMasterMenu() di bawah) — nama tab & id nav-*-nya TIDAK
+// berubah, cuma posisi DOM-nya. Daftar terpisah di sini (bukan dihitung dari
+// switchTab) supaya kedua tempat yang perlu tahu "tab mana yang masuk flyout" tidak
+// bisa menyimpang diam-diam.
+const TAB_MASTER = ['dealer', 'pos', 'kelurahan'];
+
 export function switchTab(name) {
   ['peta', 'import', 'pos', 'dealer', 'konsumen', 'kelurahan'].forEach((tab) => {
     const section = $('tab-' + tab);
@@ -1441,6 +1494,11 @@ export function switchTab(name) {
     if (section) section.classList.toggle('hidden', tab !== name);
     if (nav) nav.classList.toggle('active', tab === name);
   });
+  // Tombol trigger Master sendiri bukan nama tab (tidak ada tab-master/nav-master di
+  // loop atas) — disorot terpisah waktu salah satu tab di dalam flyoutnya aktif.
+  const navMaster = $('nav-master');
+  if (navMaster) navMaster.classList.toggle('active', TAB_MASTER.includes(name));
+  closeMasterMenu();
 
   // Urutannya penting: halaman aktif ditetapkan SEBELUM tabelnya digambar, kalau tidak
   // tabelnya membaca filter halaman sebelumnya. Halaman impor tidak punya filter, dan
@@ -1461,6 +1519,37 @@ export function switchTab(name) {
   if (name === 'kelurahan') renderVillageTable();
   if (name === 'import') window.refreshImportTab();
 }
+
+/**
+ * Flyout navbar "Master" (Master Dealer/Master Pos Dealer/Master Kelurahan) — gaya
+ * visual pakai ulang kelas `.pilih`/`.pilih-panel`/`.pilih-opsi` yang sudah ada
+ * (combobox filter, `frontend/index.html`), tapi logika buka/tutupnya SENDIRI, bukan
+ * lewat combobox.js: `terbuka`/`host()`/`_combo` di sana terikat erat ke semantik
+ * filter (pairs, onPick, kotak cari) yang tidak relevan di sini — tiga isi panelnya
+ * cuma tombol switchTab() biasa, bukan pilihan yang menyaring data.
+ */
+export function toggleMasterMenu() {
+  const panel = $('master-panel');
+  if (!panel) return;
+  const buka = !panel.hidden;
+  if (buka) { closeMasterMenu(); return; }
+  panel.hidden = false;
+  $('nav-master-wrap').classList.add('buka');
+}
+
+export function closeMasterMenu() {
+  const panel = $('master-panel');
+  if (!panel || panel.hidden) return;
+  panel.hidden = true;
+  $('nav-master-wrap').classList.remove('buka');
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#nav-master-wrap')) closeMasterMenu();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeMasterMenu();
+});
 
 // Kolom nomor mesin dan bukti foto belum dinyalakan karena datanya memang tidak ada
 // di berkas bulanan Astra. Dibaca di sini supaya lint tidak menganggapnya tak terpakai

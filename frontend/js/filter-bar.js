@@ -159,7 +159,10 @@ export function fillFilterBar() {
     .filter((code) => S.dealerNames[code])
     .map((code) => [code, S.dealerNames[code]]), 'Semua', pilihLingkup('dealer'));
 
-  fillCombo('pos', 'Pos', S.outlets.slice()
+  // S.realOutlets, bukan S.outlets — dropdown Pos cuma menawarkan pos fisik
+  // sungguhan, tidak ikut baris "proxy" per dealer (lihat schema.sql komentar
+  // outlets.is_dealer_proxy).
+  fillCombo('pos', 'Pos', S.realOutlets.slice()
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((o) => [o.code, o.name]), 'Semua', pilihLingkup('pos'));
 

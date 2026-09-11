@@ -52,11 +52,29 @@ Istilah wilayah memakai terjemahan resmi BPS supaya konsisten:
 
 ## Sedang dikerjakan
 
-Kosong — "Revisi pra-present HO" (di bawah) selesai semua per 2026-08-31, plus
-permintaan tambahan Pakbos yang datang di tengah jalan (Kares, ring per desa, dst).
-Lihat entri terbaru di **Selesai**. **Belum diverifikasi visual di browser** — lihat
-catatan di entri itu, ini yang paling perlu dicek berikutnya sebelum dianggap benar-
-benar tuntas.
+Kosong secara kode — ring dealer (1-3)/coverage pos (1-8), impor Master Dealer &
+Pos dari Excel, perbaikan sambungan penjualan bulanan ke dealer, ringkasan
+atas Insight jadi kontekstual + grid responsif, perbaikan `offline-html`,
+bawaan Opsi Peta (Satelit + live dashboard Performa Pos), DAN kartu
+dealer/pos + layout Insight 70/30 + navbar 4 tombol/flyout Master (semua
+2026-08-31, lihat enam entri terbaru di **Selesai**) sudah selesai dan 27/27
+berkas tes hijau. **Belum diverifikasi visual di browser oleh manusia** —
+API dan test suite sudah dicek lewat curl/otomatis (termasuk kolom "Pos
+Dealer" Data Konsumen, sudah dikonfirmasi tidak lagi "[object Object]" lewat
+query database langsung), tapi klik-per-klik UI belum pernah dicoba di
+browser sungguhan: editor ring dealer, editor coverage pos, dua grup Opsi
+Peta, tombol quick-access "Edit ring"/"Edit coverage", Master Pos Dealer
+(harus 109 baris), Master Dealer ("Jumlah Pos" harus tidak ikut menghitung
+78 baris proxy), blok ringkasan atas per skenario filter (kota/dealer/pos)
+di berbagai lebar layar, basemap Satelit bawaan, live-scroll Performa
+Pos/Penjualan Wilayah yang auto-mulai sendiri, kartu dealer/pos versi baru
+di kedua mode peta, grid 70/30 Insight, dan flyout Master. Ini yang paling
+perlu dicek berikutnya sebelum dianggap benar-benar tuntas.
+
+**Yang menunggu di luar kode:** 17-18 nama kecamatan di kolom KEC COVER sheet POS
+tidak cocok/ambigu (kemungkinan salah ketik sumber, mis. "KALOGONDANG") — lihat
+DECISIONS.md untuk daftarnya, menunggu perbaikan Excel + impor ulang dengan
+`--no-reset` (supaya penjualan yang sudah ada tidak ikut terhapus).
 
 ---
 
@@ -136,6 +154,197 @@ cuma perluasan ke Sulawesi ke timur.
 ---
 
 ## Selesai
+
+### Kartu dealer/pos di peta diganti metrik kontribusi; navbar 4 tombol + flyout Master (2026-08-31 malam)
+
+Empat permintaan sekaligus, direncanakan lewat Plan Mode (tiga agen Explore
+paralel + dua pertanyaan konfirmasi sebelum menulis rencana). Detail penuh
+di DECISIONS.md entri "[2026-08-31] Kartu dealer/pos di peta diganti metrik
+kontribusi; navbar disederhanakan jadi 4 tombol + flyout Master".
+
+**Selesai dan diuji otomatis (27/27 berkas tes, `npm run css` dijalankan
+ulang untuk kelas grid baru):**
+- Kartu info dealer/pos (`#kartu-dealer`/`#fs-kartu`, `dealerCardHtml()` di
+  `render.js`): trio Total/%dalam/%luar jangkauan (radius lama) diganti
+  Pos/AVG Kontribusi/AVG Posisi Relatif/AVG Acuan Bisnis + pecahan %ring
+  1/2/3/luar (scope dealer) atau %coverage 1-8 (scope pos, disaring ke
+  penjualan pos itu sendiri).
+- Blok Analisis Performa Pos Dealer & Analisis Penjualan Wilayah di halaman
+  Insight disusun sebaris 2 kolom, porsi 70/30 (`grid-cols-1 xl:grid-cols-10`
+  + `xl:col-span-7`/`xl:col-span-3`, stack 1 kolom di bawah `xl`).
+- Judul halaman "Insight Distribusi Geospasial / Sebaran penjualan..."
+  dihapus.
+- Navbar atas dari 6 tombol datar jadi 4 (Insight & Peta, Import Data, Data
+  Konsumen, Master) — Master Dealer/Master Pos Dealer/Master Kelurahan
+  dipindah ke flyout baru (`toggleMasterMenu()`, gaya `.pilih-panel` yang
+  sudah ada, logika buka/tutup sendiri).
+- Auto-scroll panel layar penuh peta (Analisis Performa Pos & Penjualan
+  Wilayah) yang juga diminta di pesan yang sama — **sudah selesai** dari
+  entri di atas ("Bawaan Opsi Peta..."), tidak ada kode baru untuk ini.
+
+**Ditanya balik ke pengguna, dikonfirmasi:** field "Pos" di kartu dealer =
+nama pos aktif/jumlah pos (bukan daftar chip, itu dipertahankan terpisah);
+item flyout "Master Kecamatan" = halaman "Master Kelurahan" yang sudah ada,
+bukan halaman baru.
+
+**Belum:**
+- **Verifikasi visual di browser** — kartu dealer/pos di kedua scope &
+  kedua mode, grid 70/30 di berbagai lebar layar, dan flyout Master
+  (buka/tutup, klik-luar, Escape, highlight submenu aktif) belum pernah
+  dicoba langsung. Backend tidak disentuh sesi ini, jadi cukup refresh
+  browser (hard refresh) — tidak perlu restart server.
+
+### Bawaan Opsi Peta: Satelit + live dashboard Performa Pos auto-mulai (2026-08-31 malam)
+
+Permintaan eksplisit soal tampilan bawaan waktu halaman dibuka. Sebagian besar
+sudah sesuai dari perubahan sesi sebelumnya (nama toggle, status On/Off
+kelurahan/kecamatan/kota, titik dealer/pos terpisah, Lingkaran Radius sudah
+tidak ada) — dua yang diubah: basemap bawaan jadi Satelit, dan panel Analisis
+Performa Pos Dealer kini auto-mulai gulir otomatis (sama seperti Analisis
+Penjualan Wilayah yang sudah begitu). Detail di DECISIONS.md entri
+"[2026-08-31] Bawaan Opsi Peta saat halaman dibuka...".
+
+**Selesai dan diuji otomatis (27/27 berkas tes):**
+- `S.basemap` bawaan `'satelit'`; diterapkan lewat `setBasemap()` di penangan
+  `load` peta, di belakang loader.
+- `toggleLivePerforma()` dipecah jadi `startLivePerforma()`/
+  `stopLivePerforma()`/`autoStartPerforma()`, mengikuti pola `liveWilayah`
+  yang sudah ada; `S.livePerformaPaused` state baru.
+- `closePerformaFull()` memakai `stopLivePerforma()` langsung (bukan
+  `toggleLivePerforma()`) supaya panel normal tetap auto-mulai lagi sesudah
+  modal ditutup.
+
+**Ditanya balik, tidak diubah:** warna batas Kecamatan (pengguna pilih tetap
+pink `#db2777`); default toggle Titik Pos (tidak disebut di permintaan,
+dibiarkan On seperti sebelumnya).
+
+**Belum:**
+- **Verifikasi visual di browser** — basemap Satelit benar tampil saat
+  halaman dibuka, dan kedua panel live-scroll (Performa Pos, Penjualan
+  Wilayah) benar bergulir sendiri tanpa diklik, belum pernah dicoba langsung.
+
+### `npm run offline-html` diperbaiki — `API_STUB` ketinggalan 9 fungsi (2026-08-31 malam)
+
+Pengguna bertanya cara menyimpan progres jadi HTML (fitur `offline-html` yang
+sudah ada). Dicoba jalan, gagal: `API_STUB` di `prototype/build-offline.js`
+belum tahu 9 fungsi baru yang ditambahkan `api.js` sepanjang sesi ini (ring
+dealer/coverage pos, CRUD Master Dealer, impor Master Pos). Detail di
+DECISIONS.md entri "[2026-08-31] `API_STUB` di `build-offline.js`
+disamakan lagi dengan `api.js` asli".
+
+**Selesai:** 9 stub ditambahkan (`fetchDistricts` resolve kosong, 8 lainnya —
+semua aksi tulis — ditolak lewat `tolak()` seperti pola yang sudah ada).
+`npm run offline-html` dijalankan ulang dan berhasil: `prototype/astra-offline.html`
+11,7 MB. `npm test` tetap 27/27 hijau.
+
+**Belum:** Berkas HTML hasilnya sendiri belum dibuka/diklik di browser oleh
+manusia untuk verifikasi visual (editor ring/coverage/dealer di dalamnya
+seharusnya menampilkan pesan "tidak bisa dilakukan di berkas demo").
+
+### Ringkasan atas Insight jadi kontekstual per filter + grid responsif (2026-08-31 malam)
+
+Blok ringkasan paling atas halaman Insight (dulu 4 kartu tetap: Dealer Aktif,
+Total Penjualan, Kelurahan Terlayani, Kelurahan Kosong) diganti isinya
+mengikuti filter aktif (kota/dealer/pos, field beda-beda per level — lihat
+DECISIONS.md entri "[2026-08-31] Ringkasan atas halaman Insight jadi
+kontekstual per filter"), lalu grid-nya (dipakai bareng panel jangkauan yang
+sudah ada) diganti `auto-fill` → `auto-fit` supaya baris dengan sel lebih
+sedikit tidak menyisakan ruang kosong di kanan (DECISIONS.md entri
+"[2026-08-31] Grid ringkasan: `auto-fill` diganti `auto-fit`...").
+
+**Selesai dan diuji otomatis (27/27 berkas tes):**
+- `renderKpi()` (4 kartu statis) dihapus, diganti `renderTopSummary()` +
+  `topScopeSummary()` di `frontend/js/render.js`.
+- `dealerScopeBaseCells()` baru, dipakai bareng kartu atas dan panel jangkauan
+  supaya sel skenario dealer tidak dobel ditulis.
+- `frontend/index.html`: markup 4 `.stat-card` diganti satu
+  `<div id="ringkas-utama">` kosong; kelas `.stat-card` yang jadi tidak
+  terpakai dihapus dari `app.css`, `npm run css` dijalankan ulang.
+- `summaryGridHtml()`: `grid-template-columns` ganti kata kunci `auto-fit`.
+
+**Belum:**
+- **Verifikasi visual di browser** — belum pernah diklik/dilihat langsung di
+  browser sungguhan, termasuk cek tiap skenario filter (kota/dealer/pos) dan
+  lebar layar sempit/lebar.
+
+### Outlet "proxy dealer": penjualan bulanan tersambung ke dealer, bukan pos fisik (2026-08-31 malam)
+
+Setelah entri di bawah (Master Pos pindah ke 109 kode fisik), pengguna
+mengimpor Excel penjualan bulanan sungguhan — ternyata cuma menyebut identitas
+level DEALER, bukan pos fisik, dan kolom "Pos Dealer" di Data Konsumen
+menampilkan "[object Object]". Detail penuh di `DECISIONS.md` entri
+"[2026-08-31] Outlet 'proxy dealer'...".
+
+**Selesai dan diuji otomatis (27/27 berkas tes):**
+- **Bug nyata diperbaiki**: `readXlsx()` di `importer.js` tidak pernah membuka
+  sel formula ExcelJS (cuma rich-text) — kolom nama dealer di Excel sungguhan
+  berisi VLOOKUP, jadi setiap nama "baru" tertulis "[object Object]" ke
+  database. `backend/core/excel-coords.js` `cellText()` diperluas menangani
+  formula DAN rich-text sekaligus; `importer.js` memakainya.
+- Skema: `dealers.legacy_code` (kode "Kode Dealer" numerik) dan
+  `outlets.is_dealer_proxy` (penanda baris yang mewakili dealer, bukan pos
+  fisik) — dua kolom baru, `ALTER TABLE ADD COLUMN IF NOT EXISTS`.
+- `scripts/import-dealer-pos-rings.js`: Fase D baru (upsert baris proxy per
+  dealer — sekaligus memperbaiki baris "[object Object]" yang sudah terlanjur
+  ada), flag `--no-reset` (perbaiki tanpa membuang sales/customers yang sudah
+  diimpor), kolom Kel/Kec sheet POS sekarang dipakai mempertajam pencocokan
+  kecamatan coverage.
+- Backend: `listDealers()` "Jumlah Pos" tidak lagi ikut menghitung baris
+  proxy; `summary()` mengirim penanda proxy ke frontend.
+- Frontend: `S.realOutlets` (katalog pos fisik saja) dipakai Master Pos
+  Dealer & dropdown filter Pos; `S.outlets`/`S.outletByCode` TETAP penuh
+  (dipakai resolusi nama & filter konsumen per dealer).
+- Perbaikan sampingan: `scripts/export-geo.js` di folder proyek aktif
+  ternyata ketinggalan perbaikan `kota.geojson` 404 DAN pembersihan
+  `tulisKelurahanRing()` dari sesi sebelumnya (sempat dikerjakan di lokasi
+  folder yang salah) — dua-duanya disamakan sekarang.
+- Dijalankan terhadap database sungguhan: 78 baris proxy diperbaiki, 1 baris
+  dealer "hantu" (`OBJECTOBJECT`) dihapus, 9.949 baris `sales` dan 18.9xx
+  baris `customers` yang sudah diimpor tidak tersentuh sama sekali.
+
+**Belum:**
+- **Verifikasi visual di browser** — lihat catatan di "Sedang dikerjakan".
+- 17-18 nama kecamatan coverage masih tidak cocok (typo sumber, lihat
+  DECISIONS.md).
+- Sistem input penjualan PER-POS (bukan per-dealer) belum ada — direncanakan
+  setelah format database ini dianggap final oleh tim.
+
+### Ring dealer (1-3) & Coverage pos (1-8) menggantikan ring per pos+kelurahan, impor Master Dealer/Pos dari Excel (2026-08-31 sore)
+
+Membalik arah keputusan pagi harinya di entri di bawah ("ring per desa") — bukan
+pembatalan, evolusi: ring naik level ke DEALER (kecamatan cocok untuk cakupan
+sebesar itu), POS mendapat konsep baru coverage (kecamatan, 8 slot). Detail penuh
+di `DECISIONS.md` entri "[2026-08-31] Ring pindah ke DEALER+kecamatan, Coverage
+baru milik POS (1-8)".
+
+**Selesai dan diuji otomatis (26/26 berkas tes):**
+- Skema: `outlet_rings` dihapus total, diganti `dealer_rings` + `pos_coverage_district`.
+- Backend: `saveDealerRings`/`allDealerRings`, `savePosCoverage`/`allPosCoverage`,
+  rute `PUT /dealers/:code/rings` dan `PUT /outlets/:code/coverage`.
+- Frontend: editor ring/coverage digeneralisasi satu mesin (`rings.js`
+  `createGroupEditor`), peta pakai layer `kec-isi` baru (bukan lagi `kel-ring-*`),
+  Opsi Peta dapat dua grup ("Tampilan Ring Dealer", "Tampilan Coverage POS")
+  aktif/nonaktif ikut scope. Agregasi dealer dapat pecahan Ring1/2/3/Coverage
+  gabungan (ring menang kalau tumpang tindih); agregasi pos dapat pecahan Coverage
+  1-8. Master Dealer dapat 3 kolom Ring baru; Master Pos kehilangan 3 kolom Ring,
+  dapat 1 kolom Coverage ringkas.
+- Skrip baru `scripts/import-dealer-pos-rings.js`: Master Dealer (78, dari sheet
+  "Dealer"), Master Pos (109, dari sheet "POS", level FISIK — menggantikan skema
+  lama yang levelnya cabang), ring dealer (dari "Ring dealer.xls", format biner
+  lama, dibaca dependency baru `xlsx`/SheetJS), coverage pos (dari kolom KEC COVER
+  1-8 sheet POS). Hasil bersih: 78/78 dealer, 109/109 pos, 1.361 baris ring, 610
+  baris coverage (17 kecamatan sumber tidak cocok, dilaporkan bukan dibuang).
+
+**Belum:**
+- **Verifikasi visual di browser** — lihat catatan di "Sedang dikerjakan" di atas.
+- Data penjualan kosong (reset saat migrasi kode pos) — perlu impor ulang lewat
+  Import Data dengan 109 kode pos baru.
+- 17 kecamatan tidak cocok di sumber Excel (lihat DECISIONS.md) — perlu perbaikan
+  manual di Excel lalu impor ulang.
+- `xlsx` (SheetJS) punya kerentanan HIGH tanpa perbaikan di registry npm — dampaknya
+  kecil (skrip CLI sekali-jalan, bukan bagian server), tapi belum dipantau berkala.
+- Tidak ada tes otomatis untuk `import-dealer-pos-rings.js` sendiri (beda dari
+  `fill-pos-coordinates.js` yang punya test-nya) — baru diverifikasi manual.
 
 ### Permintaan Pakbos: Kares, ring per desa, blok Performa dirombak, peta dirapikan (2026-08-31)
 

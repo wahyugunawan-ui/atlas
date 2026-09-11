@@ -183,27 +183,73 @@ export function businessReferenceGroup(gap) {
 }
 
 /**
- * Bagi penjualan satu outlet ke ring 1/2/3, dari penetapan manual (bukan radius) —
- * lihat backend/server/schema.sql `outlet_rings`. Desa yang tidak masuk ring manapun
- * TIDAK dihitung ke ring manapun, tapi TETAP masuk `total` — sisanya adalah
- * "%di luar ketiga ring" (`100 - percent1 - percent2 - percent3`), dihitung
- * pemanggilnya supaya totalnya selalu genap 100% di layar.
+ * Bagi penjualan satu pos ke coverage 1..8 (kecamatan), dari penetapan manual (bukan
+ * radius) — lihat backend/server/schema.sql `pos_coverage_district`. Kecamatan yang
+ * tidak masuk coverage manapun TIDAK dihitung ke kelompok manapun, tapi TETAP masuk
+ * `total` — sisanya adalah "%di luar semua coverage", dihitung pemanggilnya supaya
+ * totalnya selalu genap 100% di layar.
  *
- * @param {Array<{village, units}>} rows  baris SATU outlet, sudah difilter
- * @param {Object} ringMap  S.rings[outletCode] — {villageCode: 1|2|3}, atau undefined
+ * Generik untuk jumlah kelompok berapa pun (dipakai coverage pos, 8 kelompok) —
+ * bedanya dari ring dealer (yang punya bucket tambahan "coverage gabungan" dan aturan
+ * prioritas) cukup besar untuk dipisah sebagai dealerRingSplit() sendiri di bawah,
+ * bukan dipaksa satu fungsi dengan banyak cabang.
+ *
+ * @param {Array<{village, units}>} rows  baris SATU pos, sudah difilter
+ * @param {Object} groupMap  S.posCoverage[outletCode] — {districtCode: 1..groupCount}
+ * @param {Object} villageByCode  S.villageByCode — {villageCode: {districtCode, ...}}
+ * @param {number} groupCount  jumlah slot, 8 untuk coverage pos
+ * @return {{total: number, percents: number[]}}  percents[0] = kelompok 1, dst.
  */
-export function outletRingSplit(rows, ringMap) {
-  const units = { 1: 0, 2: 0, 3: 0 };
+export function groupSplit(rows, groupMap, villageByCode, groupCount) {
+  const units = {};
+  for (let i = 1; i <= groupCount; i++) units[i] = 0;
   let total = 0;
   (rows || []).forEach((row) => {
     total += row.units;
-    const ring = ringMap ? ringMap[row.village] : undefined;
-    if (ring === 1 || ring === 2 || ring === 3) units[ring] += row.units;
+    const district = villageByCode ? (villageByCode[row.village] || {}).districtCode : undefined;
+    const group = district && groupMap ? groupMap[district] : undefined;
+    if (group >= 1 && group <= groupCount) units[group] += row.units;
+  });
+  const percents = [];
+  for (let i = 1; i <= groupCount; i++) {
+    percents.push(contributionPercent(units[i], total) || 0);
+  }
+  return { total, percents };
+}
+
+/**
+ * Bagi penjualan satu dealer ke Ring 1/2/3 (kecamatan milik dealer itu) dan "Coverage
+ * gabungan" (union kecamatan dari seluruh coverage pos cabangnya). Kalau satu
+ * kecamatan masuk ring DAN coverage gabungan sekaligus, RING MENANG — dikonfirmasi
+ * user waktu perencanaan (2026-08-31). Kecamatan yang tidak masuk keduanya TIDAK
+ * dihitung ke kelompok manapun, tapi TETAP masuk `total`.
+ *
+ * @param {Array<{village, units}>} rows  baris SATU dealer, sudah difilter
+ * @param {Object} ringMap  S.dealerRings[dealerCode] — {districtCode: 1|2|3}
+ * @param {Set<string>} coverageDistricts  union kecamatan dari S.posCoverage milik
+ *   seluruh pos dealer ini — dibangun pemanggilnya (butuh S.outletByCode)
+ * @param {Object} villageByCode  S.villageByCode — {villageCode: {districtCode, ...}}
+ * @return {{total: number, percent1: number, percent2: number, percent3: number,
+ *   percentCoverage: number}}
+ */
+export function dealerRingSplit(rows, ringMap, coverageDistricts, villageByCode) {
+  const units = { 1: 0, 2: 0, 3: 0, coverage: 0 };
+  let total = 0;
+  (rows || []).forEach((row) => {
+    total += row.units;
+    const district = villageByCode ? (villageByCode[row.village] || {}).districtCode : undefined;
+    const ring = district && ringMap ? ringMap[district] : undefined;
+    if (ring === 1 || ring === 2 || ring === 3) {
+      units[ring] += row.units;
+    } else if (district && coverageDistricts && coverageDistricts.has(district)) {
+      units.coverage += row.units;
+    }
   });
   return {
     total,
     percent1: contributionPercent(units[1], total) || 0,
     percent2: contributionPercent(units[2], total) || 0,
     percent3: contributionPercent(units[3], total) || 0,
+    percentCoverage: contributionPercent(units.coverage, total) || 0,
   };
 }

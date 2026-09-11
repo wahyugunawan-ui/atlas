@@ -45,7 +45,12 @@ export const S = {
 
   // --- dari server ---
   villages: [],            // [{code, name, district, cityCode, cityName, provinceCode, lat, lng}]
-  outlets: [],             // [{code, name, dealerCode, dealerName, address, lat, lng}]
+  outlets: [],             // [{code, name, dealerCode, dealerName, address, lat, lng, synthetic}]
+  // Katalog pos FISIK sungguhan saja — S.outlets bisa memuat baris "proxy" per
+  // dealer (synthetic:true) yang menyambungkan penjualan level-dealer lama;
+  // dipakai Master Pos Dealer, dropdown filter Pos, titik di peta. Diisi dari
+  // S.outlets di buildIndexes(), lihat app.js.
+  realOutlets: [],
   dealers: [],             // [{code, name, address, lat, lng, outletCount}]
   sales: [],               // [{period, village, outlet, dealer, units}]
   periods: [],
@@ -70,7 +75,7 @@ export const S = {
   // --- peta ---
   map: null,
   layersReady: false,
-  basemap: 'lokal',
+  basemap: 'satelit',
   markers: [],
   dealerMarkers: [],       // titik HQ dealer, terpisah dari titik pos (S.markers)
   salePoints: null,        // dibangkitkan sekali, dipakai ulang
@@ -84,15 +89,21 @@ export const S = {
   // Bawaannya yang terkecil, karena yang dicari orang di panel ini adalah pos yang
   // paling bermasalah — bukan yang paling baik.
   performanceSort: 'asc',
-  // Kriteria sort blok Performa: 'percent' (dalam/luar ring, bawaan) | 'units' (total
-  // sales) | 'ring' (peringkat %ring tertentu, lihat performanceRingFocus).
+  // Kriteria sort blok Performa: 'percent' (dalam/luar coverage, bawaan) | 'units'
+  // (total sales) | 'coverage' (peringkat %coverage tertentu, lihat performanceCoverageFocus).
+  //
+  // Sejak 2026-08-31 sore memakai coverage pos (1-8, kecamatan), bukan lagi ring
+  // (ring pindah ke dealer) — lihat docs/DECISIONS.md.
   performanceCriteria: 'units',
-  performanceRingFocus: 1, // 1|2|3 — ring yang dipakai waktu performanceCriteria==='ring'
+  performanceCoverageFocus: 1, // 1..8 — dipakai waktu performanceCriteria==='coverage'
   performanceGroupFilter: null, // salah satu POSISI_LABEL, atau null = semua kelompok
+  // Auto-loop SENDIRI begitu ada isinya (sama seperti liveWilayah di bawah) —
+  // livePerformaPaused membedakan "belum pernah mulai" (biarkan auto-start jalan) dari
+  // "user menekan Pause" (jangan auto-mulai lagi).
   livePerforma: null,      // id interval gulir otomatis; null berarti mati
-  // Blok Analisis Penjualan Wilayah (Bagian H): auto-loop SENDIRI begitu ada isinya,
-  // beda dari livePerforma yang manual — liveWilayahPaused membedakan "belum pernah
-  // mulai" (biarkan auto-start jalan) dari "user menekan Pause" (jangan auto-mulai lagi).
+  livePerformaPaused: false,
+  // Blok Analisis Penjualan Wilayah (Bagian H): pola sama persis dengan livePerforma
+  // di atas.
   liveWilayah: null,
   liveWilayahPaused: false,
   treemapView: 'dealer',
@@ -105,10 +116,13 @@ export const S = {
   // mengubah warna peta sungguhan sampai togglenya dipasang di bagian berikutnya.
   heatmapMode: 'relative',
 
-  // --- ring layanan: rings[outletCode][villageCode] = 1|2|3 ---
-  // Sejak [tanggal eksekusi] per DESA/KELURAHAN, bukan lagi per kecamatan — permintaan
-  // Pakbos. Data ring versi kecamatan lama dihapus total, mulai dari kosong.
-  rings: {},
+  // --- ring dealer & coverage pos: dealerRings[dealerCode][districtCode] = 1|2|3,
+  // posCoverage[outletCode][districtCode] = 1..8 ---
+  // Sejak 2026-08-31 sore, ring pindah dari pos+kelurahan ke DEALER+KECAMATAN, dan pos
+  // mendapat konsep baru coverage (1-8, kecamatan) — lihat docs/DECISIONS.md. Data ring
+  // versi pos+kelurahan lama dihapus total, mulai dari kosong.
+  dealerRings: {},
+  posCoverage: {},
   districtNames: {},       // kode kecamatan -> nama, untuk menyebutnya di layar (Master Kelurahan)
 
   // --- jangkauan ---
@@ -117,9 +131,11 @@ export const S = {
   radiusM: 5000,
   radiiM: [5000],
   coverageReady: false,
-  // Mode Tampilkan Ring (Bagian I, pengganti pilihan Radius jangkauan yang lama):
-  // 1|2|3 kalau sedang menyorot ring itu untuk pos yang dipilih, null kalau mati.
-  ringView: null,
+  // Mode tampilan ring/coverage di peta (pengganti pilihan Radius jangkauan lama):
+  // { mode: 'dealer-ring'|'pos-coverage'|'lokasi-dealer'|'lokasi-pos'|null, value: 1..8|null }.
+  // Satu objek, bukan dua field terpisah, supaya "grup mana aktif" dan "slot yang mana"
+  // tidak pernah tidak sinkron (mis. mode pos-coverage dengan value sisa dari ring 1-3).
+  ringView: { mode: null, value: null },
 
   // --- mode dan suntingan ---
   fullscreen: false,

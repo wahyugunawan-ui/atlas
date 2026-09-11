@@ -92,39 +92,33 @@ async function tulisKecamatan(db, dir) {
 }
 
 /**
- * Batas SEMUA desa/kelurahan, tanpa disaring, khusus mode edit ring.
+ * Batas kabupaten/kota, diturunkan dari poligon kelurahan.
  *
- * Sejak 2026-08-31 ring dipilih per desa (bukan lagi kecamatan) — permintaan Pakbos.
- * `kelurahan.geojson` di atas SENGAJA hanya berisi desa yang sudah punya penjualan
- * atau jangkauan (4.003 dari 8.999); memakainya untuk edit ring berarti ~5.000 desa
- * TANPA penjualan jadi tidak bisa diklik — padahal itu justru yang paling perlu
- * ditandai (sama seperti alasan kecamatan di atas tidak disaring).
- *
- * Berkas terpisah dari `kelurahan.geojson`, dimuat lazy oleh frontend HANYA waktu
- * mode edit ring dinyalakan (lihat addRingVillageLayers() di map.js) — biaya
- * ukurannya cuma ditanggung orang yang benar-benar menyunting ring, bukan semua
- * pengunjung halaman. Toleransi penyederhanaan disamakan dengan kecamatan (dipilih
- * dengan klik, bukan dibaca detail) supaya ukurannya tidak membengkak dua kali lipat.
+ * Dimuat sekali di awal ('kota.geojson', lihat boot() di app.js) untuk garis merah
+ * dan label kabupaten yang selalu tampak di peta — beda dari kecamatan yang lazy-load
+ * lewat toggle. SELURUH 40 kabupaten/kota diekspor, sama seperti kecamatan: menyaring
+ * ke yang berpenjualan membuat batas orientasi paling penting justru hilang.
  */
-async function tulisKelurahanRing(db, dir) {
+async function tulisKota(db, dir) {
   const rows = await store.all(db, `
-    SELECT village_code AS code, village_name AS name,
-           city_code AS "cityCode", city_name AS "cityName",
+    SELECT city_code AS code, MIN(city_name) AS name,
            ST_AsGeoJSON(
-             ST_Transform(ST_SimplifyPreserveTopology(geom_m, $1), 4326), 5
+             ST_Transform(
+               ST_SimplifyPreserveTopology(ST_Union(geom_m), $1), 4326), 5
            ) AS geometry
     FROM villages
     WHERE geom_m IS NOT NULL
-    ORDER BY province_code, city_name, district_name, village_name`, [TOLERANSI_KEC_M]);
+    GROUP BY city_code
+    ORDER BY MIN(city_name)`, [TOLERANSI_KEC_M]);
 
   const features = rows.map((r) => ({
     type: 'Feature',
-    properties: { kode: r.code, nama: r.name, kode_kota: r.cityCode, nama_kota: r.cityName },
+    properties: { kode: r.code, nama_kota: r.name },
     geometry: JSON.parse(r.geometry),
   }));
 
   const isi = JSON.stringify({ type: 'FeatureCollection', features });
-  tulisAman(path.join(dir, 'kelurahan-ring.geojson'), isi);
+  tulisAman(path.join(dir, 'kota.geojson'), isi);
   return { jumlah: features.length, bytes: isi.length };
 }
 
@@ -173,8 +167,8 @@ async function main() {
   const isi = JSON.stringify({ type: 'FeatureCollection', features });
   tulisAman(file, isi);
 
+  const kota = await tulisKota(db, dir);
   const kec = await tulisKecamatan(db, dir);
-  const kelRing = await tulisKelurahanRing(db, dir);
 
   console.log('');
   console.log(`  kelurahan di database : ${total}`);
@@ -184,15 +178,16 @@ async function main() {
   console.log(`  berkas                : ${(isi.length / 1048576).toFixed(2)} MB`);
   console.log(`                          ${file}`);
   console.log('');
-  console.log(`  kecamatan             : ${kec.jumlah}  (referensi visual, batas & nama)`);
+  console.log(`  kabupaten/kota        : ${kota.jumlah}  (garis & nama, dimuat sejak awal)`);
+  console.log(`  penyederhanaan        : ${TOLERANSI_KEC_M} m`);
+  console.log(`  berkas                : ${(kota.bytes / 1048576).toFixed(2)} MB`);
+  console.log(`                          ${path.join(dir, 'kota.geojson')}`);
+  console.log('');
+  console.log(`  kecamatan             : ${kec.jumlah}  (referensi visual, batas & nama;`);
+  console.log(`                          juga target klik editor ring dealer/coverage pos)`);
   console.log(`  penyederhanaan        : ${TOLERANSI_KEC_M} m`);
   console.log(`  berkas                : ${(kec.bytes / 1048576).toFixed(2)} MB`);
   console.log(`                          ${path.join(dir, 'kecamatan.geojson')}`);
-  console.log('');
-  console.log(`  desa (edit ring)      : ${kelRing.jumlah}  (semuanya, untuk memilih ring)`);
-  console.log(`  penyederhanaan        : ${TOLERANSI_KEC_M} m`);
-  console.log(`  berkas                : ${(kelRing.bytes / 1048576).toFixed(2)} MB`);
-  console.log(`                          ${path.join(dir, 'kelurahan-ring.geojson')}`);
   console.log('');
 
   await store.close();

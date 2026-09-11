@@ -41,6 +41,19 @@ async function test() {
     const baris1 = daftar.find((d) => d.code === d1.code);
     assert.strictEqual(Number(baris1.outletCount), 1, 'outletCount tidak menghitung pos yang ada');
 
+    // outletCount TIDAK boleh ikut menghitung baris "proxy" (outlets.is_dealer_proxy)
+    // — baris itu mewakili dealer sendiri untuk menyambungkan penjualan level-dealer
+    // lama, bukan pos fisik sungguhan. Kalau ikut terhitung, "Jumlah Pos" di Master
+    // Dealer diam-diam lebih besar dari katalog Master Pos Dealer yang sebenarnya.
+    await store.run(db, `
+      INSERT INTO outlets (outlet_code, outlet_name, dealer_code, dealer_name, is_dealer_proxy)
+      VALUES ('12345', ?, ?, ?, true)`, [d1.name, d1.code, d1.name]);
+    const daftarSesudahProxy = await repo.listDealers();
+    const baris1SesudahProxy = daftarSesudahProxy.find((d) => d.code === d1.code);
+    assert.strictEqual(Number(baris1SesudahProxy.outletCount), 1,
+      'outletCount ikut menghitung baris outlets.is_dealer_proxy — seharusnya cuma pos fisik');
+    await store.run(db, `DELETE FROM outlets WHERE outlet_code = '12345'`);
+
     // --- updateDealer ---
     const d2 = await repo.createDealer({ dealerName: 'Dealer Uji Dua' });
     const disunting = await repo.updateDealer(d1.code, { address: 'Jl. Uji 1' });

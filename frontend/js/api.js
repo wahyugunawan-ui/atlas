@@ -76,14 +76,23 @@ export function fetchDistricts() {
 }
 
 /**
- * Simpan ring satu pos. Badannya gambaran LENGKAP, bukan tambalan — yang tidak ikut
- * dikirim berarti dilepas, dan itu memang yang dilihat orang di layar.
+ * Simpan ring satu dealer. Badannya gambaran LENGKAP, bukan tambalan — yang tidak
+ * ikut dikirim berarti dilepas, dan itu memang yang dilihat orang di layar.
  */
-export function saveRings(outletCode, rings) {
-  return request(`${API}outlets/${encodeURIComponent(outletCode)}/rings`, {
+export function saveDealerRings(dealerCode, rings) {
+  return request(`${API}dealers/${encodeURIComponent(dealerCode)}/rings`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ rings }),
+  });
+}
+
+/** Simpan coverage satu pos. Pola sama persis dengan saveDealerRings di atas. */
+export function savePosCoverage(outletCode, coverage) {
+  return request(`${API}outlets/${encodeURIComponent(outletCode)}/coverage`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ coverage }),
   });
 }
 

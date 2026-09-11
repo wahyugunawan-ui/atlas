@@ -43,6 +43,7 @@ function simpanKonsumen(field) {
 
 const PERIOD = /^\d{4}-(0[1-9]|1[0-2])$/;
 const VILLAGE = /^\d{2}\.\d{2}\.\d{2}\.\d{4}$/;
+const DISTRICT = /^\d{2}\.\d{2}\.\d{2}$/;
 const CITY = /^\d{2}\.\d{2}$/;
 const PROVINCE = /^\d{2}$/;
 const OUTLET = /^[A-Za-z0-9._-]{1,32}$/;
@@ -182,40 +183,69 @@ function build(config) {
     }
   });
 
-  /** Daftar kecamatan, untuk pemilih ring. Tanpa PII, tanpa penyaring. */
+  /** Daftar kecamatan, untuk pemilih ring/coverage. Tanpa PII, tanpa penyaring. */
   api.get('/districts', async (req, res) => {
     res.json({ districts: await repo.districts() });
   });
 
   /**
-   * Ganti seluruh ring satu pos.
+   * Ganti seluruh ring satu dealer.
    *
    * Badannya gambaran LENGKAP, bukan tambalan: {rings: {"33.13.09": 1, ...}}.
    * Mengirim sebagian berarti sisanya terhapus, dan itu memang yang diinginkan —
    * halaman selalu mengirim keadaan akhir yang dilihat orang di layar.
    */
-  api.put('/outlets/:code/rings', async (req, res) => {
+  api.put('/dealers/:code/rings', async (req, res) => {
     const code = String(req.params.code || '');
-    if (!OUTLET.test(code)) {
-      return res.status(400).json({ error: 'Kode pos tidak sah.' });
+    if (!DEALER.test(code)) {
+      return res.status(400).json({ error: 'Kode dealer tidak sah.' });
     }
     const rings = (req.body || {}).rings;
     if (!rings || typeof rings !== 'object' || Array.isArray(rings)) {
       return res.status(400).json({
-        error: 'Kirim {rings: {"kode desa": 1|2|3}}.',
+        error: 'Kirim {rings: {"kode kecamatan": 1|2|3}}.',
       });
     }
     // Bentuk kodenya diperiksa di sini; keberadaannya diperiksa repositori terhadap
-    // daftar kelurahan. Dua-duanya menolak, tidak ada yang dilewati diam-diam.
-    const salah = Object.keys(rings).filter((c) => !VILLAGE.test(c));
+    // daftar kecamatan. Dua-duanya menolak, tidak ada yang dilewati diam-diam.
+    const salah = Object.keys(rings).filter((c) => !DISTRICT.test(c));
     if (salah.length) {
       return res.status(400).json({
-        error: `Kode desa harus bertitik seperti 33.13.09.2001. Yang salah: ` +
+        error: `Kode kecamatan harus bertitik seperti 33.13.09. Yang salah: ` +
           salah.slice(0, 5).join(', '),
       });
     }
     try {
-      res.json(await repo.saveOutletRings(code, rings));
+      res.json(await repo.saveDealerRings(code, rings));
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  /**
+   * Ganti seluruh coverage satu pos. Pola sama persis dengan ring dealer di atas,
+   * bedanya rentang nilai (1..8) dan entitasnya.
+   */
+  api.put('/outlets/:code/coverage', async (req, res) => {
+    const code = String(req.params.code || '');
+    if (!OUTLET.test(code)) {
+      return res.status(400).json({ error: 'Kode pos tidak sah.' });
+    }
+    const coverage = (req.body || {}).coverage;
+    if (!coverage || typeof coverage !== 'object' || Array.isArray(coverage)) {
+      return res.status(400).json({
+        error: 'Kirim {coverage: {"kode kecamatan": 1..8}}.',
+      });
+    }
+    const salah = Object.keys(coverage).filter((c) => !DISTRICT.test(c));
+    if (salah.length) {
+      return res.status(400).json({
+        error: `Kode kecamatan harus bertitik seperti 33.13.09. Yang salah: ` +
+          salah.slice(0, 5).join(', '),
+      });
+    }
+    try {
+      res.json(await repo.savePosCoverage(code, coverage));
     } catch (error) {
       res.status(400).json({ error: error.message });
     }

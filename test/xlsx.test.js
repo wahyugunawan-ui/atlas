@@ -84,6 +84,15 @@ async function buatXlsx(dir) {
   baris.getCell(5).value = 5;
   ws.addRow(['  spasi di ujung  ', '', '', '', '']);
 
+  // Sel formula (mis. hasil VLOOKUP) — ExcelJS mengembalikannya sebagai objek
+  // {formula, result}, BUKAN nilai polos. Sel ini persis bentuk yang dulu
+  // ditulis "[object Object]" ke database oleh readXlsx() sebelum diperbaiki
+  // memakai cellText() — lihat docs/DECISIONS.md.
+  const barisFormula = ws.addRow([]);
+  barisFormula.getCell(1).value = {
+    formula: 'VLOOKUP(B4,[1]Sheet1!$B$3:$D$80,3,FALSE)', result: 'CAHAYA BONANZA ABADI',
+  };
+
   const file = path.join(dir, 'uji.xlsx');
   await wb.xlsx.writeFile(file);
   return file;
@@ -94,7 +103,7 @@ async function test() {
   try {
     const rows = await readTable(await buatXlsx(dir));
 
-    assert.strictEqual(rows.length, 3, 'jumlah baris salah');
+    assert.strictEqual(rows.length, 4, 'jumlah baris salah');
     assert.deepStrictEqual(rows[0], ['A', 'B', 'C', 'D', 'E']);
 
     // Inti tesnya: 'empat' HARUS tetap di indeks 3 (kolom 4), bukan bergeser ke
@@ -104,6 +113,12 @@ async function test() {
 
     // Spasi di ujung dibuang; itu yang membuat pencocokan nama kelurahan bekerja.
     assert.strictEqual(rows[2][0], 'spasi di ujung');
+
+    // Sel formula dibuka ke hasilnya (.result), bukan String({formula,result})
+    // yang menghasilkan "[object Object]" secara diam-diam.
+    assert.strictEqual(rows[3][0], 'CAHAYA BONANZA ABADI',
+      'sel formula tidak dibuka ke .result — inilah asal "[object Object]" di ' +
+      'kolom nama dealer/outlet waktu Excel sumbernya memakai VLOOKUP');
 
     // Berkas tanpa sheet dan format asing ditolak dengan pesan yang menyebut sebabnya.
     await assert.rejects(() => readTable(path.join(dir, 'x.pdf')),

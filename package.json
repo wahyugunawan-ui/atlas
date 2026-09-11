@@ -27,13 +27,15 @@
     "export-geo": "node scripts/export-geo.js",
     "demo-excel": "node scripts/make-demo-excel.js",
     "fill-pos-coordinates": "node scripts/fill-pos-coordinates.js",
+    "import-dealer-pos-rings": "node scripts/import-dealer-pos-rings.js",
     "offline-html": "node prototype/build-offline.js"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
-    "pg": "^8.23.0"
+    "pg": "^8.23.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@fontsource/jetbrains-mono": "^5.3.0",

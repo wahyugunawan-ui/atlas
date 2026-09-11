@@ -65,10 +65,14 @@ async function summary() {
        OR geom_m IS NULL
     ORDER BY province_code, city_name, district_name, village_name`);
 
+  // is_dealer_proxy dikirim (bukan disaring di sini) supaya S.outletByCode di
+  // frontend tetap punya nama dealer yang benar untuk baris level-dealer lama
+  // (lihat schema.sql komentar outlets.is_dealer_proxy) — yang disaring adalah
+  // TAMPILAN katalog (S.realOutlets di app.js), bukan pencarian nama.
   const outlets = await store.all(db, `
     SELECT outlet_code AS code, outlet_name AS name,
            dealer_code AS "dealerCode", dealer_name AS "dealerName",
-           address, lat, lng
+           address, lat, lng, is_dealer_proxy AS synthetic
     FROM outlets
     ORDER BY outlet_name`);
 
@@ -96,11 +100,14 @@ async function summary() {
     periods: periodRows.map((r) => r.period),
     lastImport,
     coverage: await coverage.all(),
-    rings: await allRings(),
+    // Ring milik dealer, coverage milik pos — dua konsep terpisah sejak 2026-08-31
+    // sore, lihat komentar di schema.sql dan docs/DECISIONS.md.
+    dealerRings: await allDealerRings(),
+    posCoverage: await allPosCoverage(),
     // Daftar kecamatan ikut dikirim supaya halaman bisa menyebut NAMANYA, bukan cuma
     // kodenya. Tidak bisa diturunkan dari daftar kelurahan: kelurahan yang dikirim
-    // sudah disaring ke yang punya penjualan, sementara ring justru sering menandai
-    // kecamatan yang belum ada penjualannya sama sekali. 654 baris, ~40 KB.
+    // sudah disaring ke yang punya penjualan, sementara ring/coverage justru sering
+    // menandai kecamatan yang belum ada penjualannya sama sekali. 654 baris, ~40 KB.
     districts: await districts(),
     radiiM: coverage.RADII_M,
     radiusM: coverage.DEFAULT_RADIUS_M,
@@ -507,25 +514,42 @@ async function unmatchedWithSuggestions(period) {
  * dihapus, sama seperti pada penghapusan periode.
  */
 /**
- * Seluruh ring, dibentuk rings[outletCode][villageCode] = 1|2|3.
+ * Seluruh ring dealer, dibentuk dealerRings[dealerCode][districtCode] = 1|2|3.
  *
- * Sejak [tanggal eksekusi] per DESA/KELURAHAN, bukan lagi per kecamatan — permintaan
- * Pakbos, lihat docs/DECISIONS.md. Dikirim sekaligus di /api/summary, sama seperti
- * jangkauan: halaman butuh semuanya untuk menghitung %ring tiap baris penjualan tanpa
+ * Sejak 2026-08-31 sore, ring pindah dari pos+kelurahan ke DEALER+KECAMATAN — lihat
+ * docs/DECISIONS.md. Dikirim sekaligus di /api/summary, sama seperti jangkauan:
+ * halaman butuh semuanya untuk menghitung %ring tiap baris penjualan tanpa
  * bolak-balik ke server.
  */
-async function allRings() {
+async function allDealerRings() {
   const rows = await store.all(store.db(), `
-    SELECT outlet_code AS "outletCode", village_code AS "villageCode", ring
-    FROM outlet_rings`);
+    SELECT dealer_code AS "dealerCode", district_code AS "districtCode", ring
+    FROM dealer_rings`);
   const out = {};
   rows.forEach((r) => {
-    (out[r.outletCode] || (out[r.outletCode] = {}))[r.villageCode] = Number(r.ring);
+    (out[r.dealerCode] || (out[r.dealerCode] = {}))[r.districtCode] = Number(r.ring);
   });
   return out;
 }
 
-/** Daftar kecamatan untuk pemilih ring: kode, nama, dan kabupatennya. */
+/**
+ * Seluruh coverage pos, dibentuk posCoverage[outletCode][districtCode] = 1..8.
+ *
+ * Konsep baru sejak 2026-08-31 sore, bukan penggantian nama dari `coverage` (rasio
+ * radius PostGIS lama, lihat backend/server/coverage-store.js) — lihat docs/DECISIONS.md.
+ */
+async function allPosCoverage() {
+  const rows = await store.all(store.db(), `
+    SELECT outlet_code AS "outletCode", district_code AS "districtCode", coverage_num
+    FROM pos_coverage_district`);
+  const out = {};
+  rows.forEach((r) => {
+    (out[r.outletCode] || (out[r.outletCode] = {}))[r.districtCode] = Number(r.coverage_num);
+  });
+  return out;
+}
+
+/** Daftar kecamatan untuk pemilih ring/coverage: kode, nama, dan kabupatennya. */
 async function districts() {
   return store.all(store.db(), `
     SELECT district_code AS code, MIN(district_name) AS name,
@@ -535,24 +559,30 @@ async function districts() {
     ORDER BY MIN(city_name), MIN(district_name)`);
 }
 
+/** Kode kecamatan yang benar-benar dikenal, dari daftar kandidat. Dipakai kedua fungsi save di bawah. */
+async function knownDistricts(db, codes) {
+  return new Set((await store.all(db, `
+    SELECT DISTINCT district_code AS code FROM villages
+    WHERE district_code = ANY(?)`, [codes])).map((r) => r.code));
+}
+
 /**
- * Ganti seluruh ring satu pos sekaligus.
+ * Ganti seluruh ring satu dealer sekaligus.
  *
  * Hapus lalu tulis ulang di dalam satu transaksi — pola yang sama dengan impor, dan
  * alasannya sama: menambal sebagian membuat sisa dari susunan lama tertinggal tanpa
- * ada yang tahu. Yang dikirim halaman adalah gambaran LENGKAP ring pos itu.
+ * ada yang tahu. Yang dikirim halaman adalah gambaran LENGKAP ring dealer itu.
  *
- * Kode desa yang tidak dikenal DITOLAK, bukan dilewati diam-diam. Ring yang diam-diam
- * kehilangan satu desa tetap terlihat masuk akal di layar.
+ * Kode kecamatan yang tidak dikenal DITOLAK, bukan dilewati diam-diam.
  *
- * @param {string} outletCode
- * @param {Object} assignments  {villageCode: 1|2|3}
+ * @param {string} dealerCode
+ * @param {Object} assignments  {districtCode: 1|2|3}
  */
-async function saveOutletRings(outletCode, assignments) {
+async function saveDealerRings(dealerCode, assignments) {
   const db = store.db();
-  const outlet = await store.one(db,
-    'SELECT outlet_code FROM outlets WHERE outlet_code = ?', [outletCode]);
-  if (!outlet) throw new Error(`Pos ${outletCode} tidak ada.`);
+  const dealer = await store.one(db,
+    'SELECT dealer_code FROM dealers WHERE dealer_code = ?', [dealerCode]);
+  if (!dealer) throw new Error(`Dealer ${dealerCode} tidak ada.`);
 
   const entries = Object.entries(assignments || {});
   for (const [, ring] of entries) {
@@ -563,28 +593,70 @@ async function saveOutletRings(outletCode, assignments) {
 
   if (entries.length) {
     const codes = entries.map(([code]) => code);
-    const dikenal = new Set((await store.all(db, `
-      SELECT DISTINCT village_code AS code FROM villages
-      WHERE village_code = ANY(?)`, [codes])).map((r) => r.code));
+    const dikenal = await knownDistricts(db, codes);
     const asing = codes.filter((c) => !dikenal.has(c));
     if (asing.length) {
-      throw new Error(`Kelurahan/desa tidak dikenal: ${asing.slice(0, 5).join(', ')}` +
+      throw new Error(`Kecamatan tidak dikenal: ${asing.slice(0, 5).join(', ')}` +
         (asing.length > 5 ? ` dan ${asing.length - 5} lagi.` : '.'));
     }
   }
 
   await store.transaction(db, async (conn) => {
-    await conn.query('DELETE FROM outlet_rings WHERE outlet_code = ?', [outletCode]);
+    await conn.query('DELETE FROM dealer_rings WHERE dealer_code = ?', [dealerCode]);
     if (entries.length) {
       const bulk = store.bulkValues(
-        entries.map(([code, ring]) => [outletCode, code, Number(ring)]));
+        entries.map(([code, ring]) => [dealerCode, code, Number(ring)]));
       await conn.query(
-        'INSERT INTO outlet_rings (outlet_code, village_code, ring) VALUES ' + bulk.text,
+        'INSERT INTO dealer_rings (dealer_code, district_code, ring) VALUES ' + bulk.text,
         bulk.params);
     }
   });
 
-  return { outlet: outletCode, villages: entries.length };
+  return { dealer: dealerCode, districts: entries.length };
+}
+
+/**
+ * Ganti seluruh coverage satu pos sekaligus. Pola sama persis dengan saveDealerRings,
+ * bedanya rentang nilai (1..8) dan tabel tujuannya.
+ *
+ * @param {string} outletCode
+ * @param {Object} assignments  {districtCode: 1..8}
+ */
+async function savePosCoverage(outletCode, assignments) {
+  const db = store.db();
+  const outlet = await store.one(db,
+    'SELECT outlet_code FROM outlets WHERE outlet_code = ?', [outletCode]);
+  if (!outlet) throw new Error(`Pos ${outletCode} tidak ada.`);
+
+  const entries = Object.entries(assignments || {});
+  for (const [, num] of entries) {
+    if (!Number.isInteger(Number(num)) || Number(num) < 1 || Number(num) > 8) {
+      throw new Error('Coverage harus angka 1 sampai 8.');
+    }
+  }
+
+  if (entries.length) {
+    const codes = entries.map(([code]) => code);
+    const dikenal = await knownDistricts(db, codes);
+    const asing = codes.filter((c) => !dikenal.has(c));
+    if (asing.length) {
+      throw new Error(`Kecamatan tidak dikenal: ${asing.slice(0, 5).join(', ')}` +
+        (asing.length > 5 ? ` dan ${asing.length - 5} lagi.` : '.'));
+    }
+  }
+
+  await store.transaction(db, async (conn) => {
+    await conn.query('DELETE FROM pos_coverage_district WHERE outlet_code = ?', [outletCode]);
+    if (entries.length) {
+      const bulk = store.bulkValues(
+        entries.map(([code, num]) => [outletCode, code, Number(num)]));
+      await conn.query(
+        'INSERT INTO pos_coverage_district (outlet_code, district_code, coverage_num) VALUES ' +
+        bulk.text, bulk.params);
+    }
+  });
+
+  return { outlet: outletCode, districts: entries.length };
 }
 
 async function resetOutlets(ip) {
@@ -755,11 +827,18 @@ async function listOutletsForImport() {
     FROM outlets`);
 }
 
-/** Semua dealer, lengkap jumlah pos yang menunjuknya. Untuk halaman Master Dealer. */
+/**
+ * Semua dealer, lengkap jumlah pos yang menunjuknya. Untuk halaman Master Dealer.
+ *
+ * outletCount HANYA menghitung pos fisik sungguhan — baris "proxy" (lihat
+ * outlets.is_dealer_proxy, dipakai menyambungkan penjualan level-dealer lama)
+ * sengaja tidak ikut, supaya "Jumlah Pos" tidak diam-diam lebih besar dari
+ * katalog Master Pos Dealer yang sebenarnya.
+ */
 async function listDealers() {
   return store.all(store.db(), `
     SELECT d.dealer_code AS code, d.dealer_name AS name, d.address, d.lat, d.lng,
-           COUNT(o.outlet_code) AS "outletCount"
+           COUNT(o.outlet_code) FILTER (WHERE NOT o.is_dealer_proxy) AS "outletCount"
     FROM dealers d
     LEFT JOIN outlets o ON o.dealer_code = d.dealer_code
     GROUP BY d.dealer_code
@@ -923,7 +1002,7 @@ async function updateOutlet(code, patch, config) {
 module.exports = {
   summary, unmatched, imports, periodSummary,
   customersInVillage, browseCustomers, hasCustomers, logCustomerAccess, updateOutlet,
-  resetOutlets, allRings, districts, saveOutletRings,
+  resetOutlets, allDealerRings, allPosCoverage, districts, saveDealerRings, savePosCoverage,
   resolveDealer, createOutlet, deletePeriod,
   listDealers, createDealer, updateDealer, deleteDealer, listOutletsForImport,
   aliases, saveAlias, deleteAlias, latestUnmatchedPeriod, unmatchedWithSuggestions,

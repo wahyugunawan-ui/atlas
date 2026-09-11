@@ -62,6 +62,12 @@ export function setScope(kind, code, force) {
     S.heatmapMode = value !== 'ALL' ? 'fixed' : 'relative';
     if (window.syncHeatmapModeButtons) window.syncHeatmapModeButtons();
   }
+
+  // Kontrol "Tampilan Ring Dealer"/"Tampilan Coverage POS" aktif/nonaktif mengikuti
+  // scope dealer/pos — dipanggil untuk KETIGA kind (dealer/pos bisa ikut berubah jadi
+  // ALL lewat eksklusivitas di atas, bukan cuma waktu dipanggil langsung). Lewat
+  // window dengan alasan sama seperti syncHeatmapModeButtons di atas.
+  if (window.syncGroupControls) window.syncGroupControls();
 }
 
 /** @param {string} [kind] tanpa argumen, kosongkan KETIGANYA (dipakai tombol Reset). */

@@ -21,7 +21,8 @@ async function test() {
   const {
     groupByCity, contributionPercent, contributionsForRows, relativePosition,
     fixedContributionClass, referenceGap, referenceRatio, KONTRIBUSI_TETAP,
-    contributionsByOutlet, contributionsByVillage, businessReferenceGroup, outletRingSplit,
+    contributionsByOutlet, contributionsByVillage, businessReferenceGroup, groupSplit,
+    dealerRingSplit,
   } = await import(url('sales-stats.js'));
   const { percentileBreaks } = await import(url('colors.js'));
 
@@ -150,33 +151,64 @@ async function test() {
   assert.strictEqual(businessReferenceGroup(null), null);
 
   /* ------------------------------------------------------------------
-     8. outletRingSplit — %ring 1/2/3 per DESA (bukan kecamatan), sisanya di luar ring
+     8. groupSplit — %coverage 1..N per KECAMATAN desanya (sejak 2026-08-31 sore,
+        ring pindah ke dealer & coverage pos jadi per kecamatan, bukan per desa)
      ------------------------------------------------------------------ */
-  const ringMap = { 'DESA-A': 1, 'DESA-B': 2, 'DESA-C': 3 };
-  const rowsRing = [
+  const villageDistrictByCode = {
+    'DESA-A': { districtCode: 'KEC-1' },
+    'DESA-B': { districtCode: 'KEC-2' },
+    'DESA-C': { districtCode: 'KEC-3' },
+    'DESA-TANPA-GRUP': { districtCode: 'KEC-X' },
+  };
+  const groupMap = { 'KEC-1': 1, 'KEC-2': 2, 'KEC-3': 3 };
+  const rowsGrup = [
     { village: 'DESA-A', units: 10 },
     { village: 'DESA-B', units: 20 },
     { village: 'DESA-C', units: 30 },
-    { village: 'DESA-TANPA-RING', units: 40 },
+    { village: 'DESA-TANPA-GRUP', units: 40 },
   ];
-  const split = outletRingSplit(rowsRing, ringMap);
-  assert.strictEqual(split.total, 100, 'desa tanpa ring tetap ikut masuk total');
-  assert.strictEqual(split.percent1, 10);
-  assert.strictEqual(split.percent2, 20);
-  assert.strictEqual(split.percent3, 30);
-  assert.strictEqual(100 - split.percent1 - split.percent2 - split.percent3, 40,
-    '%di luar ring (100 - 1 - 2 - 3) harus sama dengan porsi desa tanpa ring');
-  assert.deepStrictEqual(outletRingSplit([], ringMap),
-    { total: 0, percent1: 0, percent2: 0, percent3: 0 },
+  const split = groupSplit(rowsGrup, groupMap, villageDistrictByCode, 3);
+  assert.strictEqual(split.total, 100, 'desa tanpa grup tetap ikut masuk total');
+  assert.deepStrictEqual(split.percents, [10, 20, 30],
+    'percents[0..2] harus persis kelompok 1/2/3');
+  assert.strictEqual(100 - split.percents.reduce((a, b) => a + b, 0), 40,
+    '%di luar semua kelompok harus sama dengan porsi desa tanpa grup');
+  assert.deepStrictEqual(groupSplit([], groupMap, villageDistrictByCode, 3),
+    { total: 0, percents: [0, 0, 0] },
     'tanpa baris seharusnya nol rapi, bukan NaN dari pembagian 0/0');
-  assert.deepStrictEqual(outletRingSplit(rowsRing, undefined),
-    { total: 100, percent1: 0, percent2: 0, percent3: 0 },
-    'outlet tanpa ring sama sekali (ringMap undefined) seharusnya semua di luar ring');
+  assert.deepStrictEqual(groupSplit(rowsGrup, undefined, villageDistrictByCode, 3),
+    { total: 100, percents: [0, 0, 0] },
+    'entitas tanpa grup sama sekali (groupMap undefined) seharusnya semua di luar grup');
+
+  /* ------------------------------------------------------------------
+     9. dealerRingSplit — Ring 1/2/3 (kecamatan dealer) + Coverage gabungan (union
+        kecamatan pos-pos cabangnya); RING MENANG kalau satu kecamatan masuk dua-duanya
+     ------------------------------------------------------------------ */
+  const dealerRingMap = { 'KEC-1': 1, 'KEC-2': 2 }; // KEC-3 sengaja TIDAK di ring manapun
+  const coverageDistricts = new Set(['KEC-2', 'KEC-3']); // KEC-2 tumpang tindih dgn ring 2
+  const rowsDealer = [
+    { village: 'DESA-A', units: 10 },              // KEC-1 -> ring 1
+    { village: 'DESA-B', units: 20 },              // KEC-2 -> ring 2 (menang atas coverage)
+    { village: 'DESA-C', units: 30 },              // KEC-3 -> tidak di ring, tapi di coverage
+    { village: 'DESA-TANPA-GRUP', units: 40 },     // KEC-X -> tidak masuk manapun
+  ];
+  const dsplit = dealerRingSplit(rowsDealer, dealerRingMap, coverageDistricts, villageDistrictByCode);
+  assert.strictEqual(dsplit.total, 100);
+  assert.strictEqual(dsplit.percent1, 10);
+  assert.strictEqual(dsplit.percent2, 20,
+    'KEC-2 ada di ring 2 DAN coverage — harus dihitung di ring (ring menang)');
+  assert.strictEqual(dsplit.percent3, 0);
+  assert.strictEqual(dsplit.percentCoverage, 30,
+    'KEC-3 tidak di ring manapun tapi di coverage — harus masuk coverage gabungan');
+  assert.strictEqual(
+    100 - dsplit.percent1 - dsplit.percent2 - dsplit.percent3 - dsplit.percentCoverage, 40,
+    'sisa yang tidak masuk ring maupun coverage harus sama dengan porsi KEC-X');
 
   console.log('OK sales-stats — kontribusi dihitung per kota (bukan global), total ' +
     'nol menghasilkan null, kelas interval tetap 5 kelas tidak tumpang tindih, ' +
     'Selisih/Rasio mengikuti benchmark yang diberikan, kontribusi per outlet, ' +
-    'kelompok acuan bisnis, dan %ring per desa dihitung benar');
+    'kelompok acuan bisnis, %coverage per kecamatan pos, dan %ring dealer + coverage ' +
+    'gabungan (ring menang atas tumpang tindih) dihitung benar');
 }
 
 test().catch((error) => {

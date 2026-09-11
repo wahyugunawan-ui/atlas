@@ -11,24 +11,25 @@ import { buildColorRegistry } from './colors.js';
 import { $, bbox, esc, formatNumber, monthLabel, toast } from './dom.js';
 import { chooseCombo, comboSearch, toggleCombo } from './combobox.js';
 import {
-  assignRing, cancelRingEdit, chooseRingOutlet, closeRingChooser, closeRingOutletChooser,
-  openRingChooser, ringEditing, saveRingEdit, startRingEdit,
+  anyGroupEditing, assignRing, cancelRingEdit, closeRingChooser,
+  openRingChooser, ringEditing, coverageEditing, saveRingEdit, startRingEdit,
+  startCoverageEdit, startGroupEdit,
 } from './rings.js';
 import { fillFilterBar, onPeriodChange, resetFilters, syncFilterBar } from './filter-bar.js';
 import { activeRows, applyScope, scopeLabel, scopeValue } from './filters.js';
 import {
   addLayers, fitToScope, invalidateSalePoints, paintChoropleth, redrawMap, setBasemap,
-  setHeatmapMode, setRingView, syncHeatmapModeButtons, toggleDistrictNames,
-  setupMap, toggleFullscreen,
+  setCoverageViewPos, setHeatmapMode, setRingViewDealer, syncGroupControls,
+  syncHeatmapModeButtons, toggleDistrictNames, setupMap, toggleFullscreen,
 } from './map.js';
 import {
   closeSelectionInfo, drawDealerMarkers, drawMarkers, selectOutlet, showVillageTooltip,
 } from './outlets.js';
 import {
-  closeDealerCard, closeTreemapFull, renderDealerCard, renderDealerLegend, renderKpi,
+  closeDealerCard, closeTreemapFull, renderDealerCard, renderDealerLegend, renderTopSummary,
   renderLegend, closePerformaFull, filterPerformanceGroup, openPerformaFull,
   openTreemapFull, renderPerformance, renderTreemap, renderWilayah, selectEntity,
-  setPerformanceCriteria, setPerformanceRingFocus, setTreemapView, syncFullscreenPanels,
+  setPerformanceCriteria, setPerformanceCoverageFocus, setTreemapView, syncFullscreenPanels,
   togglePerformanceSort, toggleLivePerforma, toggleLiveWilayah,
 } from './render.js';
 import { S } from './state.js';
@@ -41,10 +42,10 @@ import {
   askResetOutlets, closeResetOutlets, resetOutletsTyped, confirmResetOutlets,
   openOutletEditor, openVillageDetail, pickFromMap,
   promptPin,
-  editRingFromTable,
+  editDealerRingFromTable, editPosCoverageFromTable,
   renderCustomerTable,
   renderOutletTable, renderVillageTable, saveOutletEditor, searchCustomers, showOnMap,
-  switchTab,
+  switchTab, toggleMasterMenu,
   renderDealerTable, openNewDealer, closeNewDealer, saveNewDealer,
   openDealerEditor, closeDealerEditor, saveDealerEditor, deleteDealerConfirm,
 } from './tables.js';
@@ -61,24 +62,25 @@ import {
 const HANDLERS = {
   // filter dan peta
   onPeriodChange, toggleCombo, comboSearch, chooseCombo, resetFilters,
-  startRingEdit, cancelRingEdit, saveRingEdit, ringEditing,
+  startRingEdit, startCoverageEdit, startGroupEdit, cancelRingEdit, saveRingEdit, ringEditing,
+  coverageEditing, anyGroupEditing,
   openRingChooser, closeRingChooser, assignRing,
-  chooseRingOutlet, closeRingOutletChooser,
-  redrawMap, setBasemap, setRingView, setHeatmapMode, applyScope, toggleFullscreen, fitToScope,
-  toggleDistrictNames,
+  redrawMap, setBasemap, setRingViewDealer, setCoverageViewPos, setHeatmapMode,
+  applyScope, toggleFullscreen, fitToScope, toggleDistrictNames,
   // ringkasan
   setTreemapView, selectEntity, closeDealerCard, togglePerformanceSort,
   toggleLivePerforma, openPerformaFull, closePerformaFull,
-  setPerformanceCriteria, setPerformanceRingFocus, filterPerformanceGroup,
+  setPerformanceCriteria, setPerformanceCoverageFocus, filterPerformanceGroup,
   openTreemapFull, closeTreemapFull, toggleLiveWilayah,
   // sunting pos
   openOutletEditor, closeOutletEditor, pickFromMap, saveOutletEditor, dealerChoiceChanged,
   // peta dan outlet
   selectOutlet, closeSelectionInfo, openVillageDetail, closeVillageDetail,
   // tabel
-  switchTab, renderOutletTable, renderVillageTable, showOnMap, jumpToVillage, promptPin,
+  switchTab, toggleMasterMenu, renderOutletTable, renderVillageTable, showOnMap, jumpToVillage, promptPin,
   openDealerDetail, openCitySummary, toggleDealerCity, jumpFromDealer,
-  renderCustomerTable, searchCustomers, customerPage, editRingFromTable,
+  renderCustomerTable, searchCustomers, customerPage,
+  editDealerRingFromTable, editPosCoverageFromTable,
   openNewOutlet, closeNewOutlet, newOutletDealerChanged, saveNewOutlet,
   askResetOutlets, closeResetOutlets, resetOutletsTyped, confirmResetOutlets,
   renderDealerTable, openNewDealer, closeNewDealer, saveNewDealer,
@@ -90,7 +92,7 @@ const HANDLERS = {
   runUpload, reviewImport, finishImport, reimportPeriod, refreshImportTab,
   askDeletePeriod, closeDeletePeriod, deletePeriodTyped, confirmDeletePeriod,
   // dipanggil antar modul lewat window supaya tidak ada lingkaran import
-  renderAll, reloadSummary, syncHeatmapModeButtons,
+  renderAll, reloadSummary, syncHeatmapModeButtons, syncGroupControls,
 };
 Object.assign(window, HANDLERS);
 
@@ -128,7 +130,7 @@ export function renderAll() {
     rows.forEach((r) => { perVillage[r.village] = (perVillage[r.village] || 0) + r.units; });
   }
 
-  renderKpi(rows, perVillage);
+  renderTopSummary(rows);
   renderTreemap(rows);
   renderPerformance(rows);
   renderWilayah(rows);
@@ -140,12 +142,18 @@ export function renderAll() {
   $('scope-label').textContent = scope;
   $('scope-clear').classList.toggle('hidden', scope === 'seluruh penjualan');
 
-  // Ring melekat pada POS, tapi tombolnya SEKARANG juga muncul waktu scope DEALER
-  // aktif (permintaan Pakbos, titik dealer punya tombol Edit Ring sendiri) —
-  // startRingEdit() di rings.js yang memutuskan pos mana kalau dealernya py >1 pos.
-  const bisaEditRing = scopeValue('pos') !== 'ALL' || scopeValue('dealer') !== 'ALL';
-  $('btn-edit-ring').classList.toggle('hidden', !bisaEditRing);
-  $('btn-ring-peta').classList.toggle('hidden', !bisaEditRing);
+  // Sejak 2026-08-31 sore: ring milik DEALER, coverage milik POS — tombolnya SATU
+  // slot per lokasi, tapi label dan aksinya ikut scope yang sedang aktif. Dealer
+  // scope menang kalau kebetulan keduanya aktif (tidak akan terjadi sejak scope
+  // kota/dealer/pos saling eksklusif, tapi urutan pengecekan tetap eksplisit).
+  const dealerScope = scopeValue('dealer') !== 'ALL';
+  const posScope = scopeValue('pos') !== 'ALL';
+  const bisaEditGroup = dealerScope || posScope;
+  const labelGroup = dealerScope ? 'Edit ring' : 'Edit coverage';
+  $('btn-edit-ring').classList.toggle('hidden', !bisaEditGroup);
+  $('btn-edit-ring').lastChild.textContent = dealerScope ? 'Edit ring dealer ini' : 'Edit coverage pos ini';
+  $('btn-ring-peta').classList.toggle('hidden', !bisaEditGroup);
+  $('btn-ring-peta').querySelector('span').textContent = labelGroup;
 
   // Jumlah nama yang menunggu dicocokkan, di tombolnya sendiri. Pekerjaan yang
   // menunggu harus terlihat tanpa ada yang membuka modalnya dulu.
@@ -195,7 +203,8 @@ function buildIndexes(data) {
   // Acuan bisnis (Business Reference), bukan hasil statistik — lihat config.js.
   S.businessReferencePercent = data.businessReferencePercent;
 
-  S.rings = data.rings || {};
+  S.dealerRings = data.dealerRings || {};
+  S.posCoverage = data.posCoverage || {};
   S.districtNames = {};
   (data.districts || []).forEach((d) => { S.districtNames[d.code] = d.name; });
   S.coverageAll = data.coverage || {};
@@ -213,6 +222,13 @@ function buildIndexes(data) {
 
   S.outletByCode = {};
   data.outlets.forEach((o) => { S.outletByCode[o.code] = o; });
+
+  // Baris "proxy" (S.outletByCode tetap memuatnya, perlu untuk resolusi nama
+  // dealer di kolom "Pos Dealer" Data Konsumen dan tempat lain yang mencari lewat
+  // kode) TAPI disaring dari sini — S.realOutlets dipakai KATALOG pos fisik
+  // sungguhan: Master Pos Dealer, dropdown filter Pos, titik di peta. Lihat
+  // schema.sql komentar outlets.is_dealer_proxy.
+  S.realOutlets = data.outlets.filter((o) => !o.synthetic);
 
   // Dari dealers, bukan diturunkan dari outlets — dealer yang belum punya pos sama
   // sekali (baru dibuat di Master Dealer) harus tetap muncul di dropdown pos.
@@ -239,7 +255,7 @@ function fillFilters() {
 function updateStatus() {
   const units = S.sales.reduce((sum, r) => sum + r.units, 0);
   $('sidebar-status').textContent =
-    `${formatNumber(S.villages.length)} kelurahan · ${S.outlets.length} pos · ` +
+    `${formatNumber(S.villages.length)} kelurahan · ${S.realOutlets.length} pos · ` +
     `${S.registry.order.length} dealer · ${formatNumber(units)} unit` +
     (S.hasCustomers ? '' : ' · tanpa data konsumen');
 }
@@ -310,6 +326,10 @@ async function boot() {
   setupMap();
   S.map.on('load', () => {
     addLayers();
+    // Gaya awal peta menyalakan basemap 'lokal' — S.basemap default 'satelit' baru
+    // diterapkan di sini, di belakang pageLoader, supaya tidak ada kedipan basemap
+    // yang salah sebelum berpindah.
+    setBasemap(S.basemap);
     S.layersReady = true;
     S.map.fitBounds(bbox(S.geo), { padding: 30, duration: 0 });
     S.map.resize();

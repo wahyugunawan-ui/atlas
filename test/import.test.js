@@ -701,65 +701,87 @@ async function test() {
       'daftar belum cocok tidak ikut pulih');
 
     /* --------------------------------------------------------------------
-       RING LAYANAN PER POS
+       RING DEALER (kecamatan, 1-3) & COVERAGE POS (kecamatan, 1-8)
        --------------------------------------------------------------------
-       Ring menggantikan "dalam radius X km", dan sejak 2026-08-31 per DESA/KELURAHAN
-       (bukan lagi kecamatan). Yang dijaga di sini bukan "simpannya jalan", tapi empat
-       hal yang gagalnya diam: satu desa masuk dua ring sekaligus (satu penjualan
-       terhitung dua kali, totalnya tetap terlihat wajar), desa asing yang dilewati
-       diam-diam, susunan lama yang tertinggal sesudah ditimpa, dan ring yang tetap
-       menempel pada pos yang sudah dihapus.
+       Sejak 2026-08-31 sore, ring pindah dari pos+kelurahan ke DEALER+KECAMATAN,
+       dan pos mendapat konsep baru coverage (1-8, juga kecamatan). Yang dijaga di
+       sini bukan "simpannya jalan", tapi: satu kecamatan masuk dua ring/coverage
+       sekaligus (satu penjualan terhitung dua kali), kecamatan asing yang dilewati
+       diam-diam, susunan lama yang tertinggal sesudah ditimpa, dan ring/coverage
+       yang tetap menempel pada dealer/pos yang sudah dihapus.
        -------------------------------------------------------------------- */
 
-    const posRing = (await store.all(db, 'SELECT outlet_code FROM outlets LIMIT 1'))[0]
+    const dealerRing = (await store.all(db, 'SELECT dealer_code FROM dealers LIMIT 1'))[0]
+      .dealer_code;
+    const posCover = (await store.all(db, 'SELECT outlet_code FROM outlets LIMIT 1'))[0]
       .outlet_code;
-    const desaUji = (await store.all(db,
-      'SELECT village_code AS kode FROM villages ORDER BY village_code LIMIT 3'))
-      .map((r) => r.kode);
-    assert.strictEqual(desaUji.length, 3, 'prasyarat tes: butuh tiga desa');
+    const kecUji = (await store.all(db,
+      'SELECT DISTINCT district_code AS kode FROM villages WHERE district_code IS NOT NULL ' +
+      'ORDER BY district_code LIMIT 3')).map((r) => r.kode);
+    assert.strictEqual(kecUji.length, 3, 'prasyarat tes: butuh tiga kecamatan');
 
-    await repo.saveOutletRings(posRing,
-      { [desaUji[0]]: 1, [desaUji[1]]: 2, [desaUji[2]]: 3 });
-    let ring = (await repo.allRings())[posRing];
+    await repo.saveDealerRings(dealerRing,
+      { [kecUji[0]]: 1, [kecUji[1]]: 2, [kecUji[2]]: 3 });
+    let ring = (await repo.allDealerRings())[dealerRing];
     assert.deepStrictEqual(ring,
-      { [desaUji[0]]: 1, [desaUji[1]]: 2, [desaUji[2]]: 3 },
-      'ring tidak tersimpan apa adanya');
+      { [kecUji[0]]: 1, [kecUji[1]]: 2, [kecUji[2]]: 3 },
+      'ring dealer tidak tersimpan apa adanya');
 
-    // Menyimpan lagi MENGGANTI seluruhnya, bukan menambal. Kalau menambal, desa
+    // Menyimpan lagi MENGGANTI seluruhnya, bukan menambal. Kalau menambal, kecamatan
     // yang dibuang orang di layar tetap tinggal di database dan ikut dihitung.
-    await repo.saveOutletRings(posRing, { [desaUji[0]]: 3 });
-    ring = (await repo.allRings())[posRing];
-    assert.deepStrictEqual(ring, { [desaUji[0]]: 3 },
-      'menyimpan ring menambal, bukan mengganti — susunan lama tertinggal');
+    await repo.saveDealerRings(dealerRing, { [kecUji[0]]: 3 });
+    ring = (await repo.allDealerRings())[dealerRing];
+    assert.deepStrictEqual(ring, { [kecUji[0]]: 3 },
+      'menyimpan ring dealer menambal, bukan mengganti — susunan lama tertinggal');
 
-    // Satu desa tidak bisa ada di dua ring sekaligus. Objek JS sudah mencegahnya di
-    // sisi halaman, tapi yang menjaganya di database adalah primary key — dan itu
-    // yang harus tetap benar kalau suatu hari ada pemanggil lain.
+    // Satu kecamatan tidak bisa ada di dua ring sekaligus. Objek JS sudah mencegahnya
+    // di sisi halaman, tapi yang menjaganya di database adalah primary key.
     await assert.rejects(
       () => store.run(db,
-        'INSERT INTO outlet_rings (outlet_code, village_code, ring) VALUES (?, ?, ?)',
-        [posRing, desaUji[0], 1]),
+        'INSERT INTO dealer_rings (dealer_code, district_code, ring) VALUES (?, ?, ?)',
+        [dealerRing, kecUji[0], 1]),
       /duplicate key|unique/i,
-      'satu desa bisa masuk dua ring sekaligus — penjualannya terhitung dua kali');
+      'satu kecamatan bisa masuk dua ring dealer sekaligus — penjualannya terhitung dua kali');
 
-    // Desa asing DITOLAK, bukan dilewati. Ring yang diam-diam kehilangan satu desa
-    // tetap terlihat masuk akal di layar.
+    // Kecamatan asing DITOLAK, bukan dilewati.
     await assert.rejects(
-      () => repo.saveOutletRings(posRing, { '99.99.99.9999': 1 }),
-      /tidak dikenal/i, 'desa asing tidak ditolak');
+      () => repo.saveDealerRings(dealerRing, { '99.99.99': 1 }),
+      /tidak dikenal/i, 'kecamatan asing tidak ditolak (ring dealer)');
     await assert.rejects(
-      () => repo.saveOutletRings(posRing, { [desaUji[0]]: 4 }),
+      () => repo.saveDealerRings(dealerRing, { [kecUji[0]]: 4 }),
       /Ring harus/i, 'nomor ring di luar 1-3 tidak ditolak');
     await assert.rejects(
-      () => repo.saveOutletRings('POS-TIDAK-ADA', { [desaUji[0]]: 1 }),
-      /tidak ada/i, 'ring bisa disimpan untuk pos yang tidak ada');
+      () => repo.saveDealerRings('DEALER-TIDAK-ADA', { [kecUji[0]]: 1 }),
+      /tidak ada/i, 'ring bisa disimpan untuk dealer yang tidak ada');
 
     // Penolakan TIDAK boleh merusak yang sudah tersimpan.
-    assert.deepStrictEqual((await repo.allRings())[posRing], { [desaUji[0]]: 3 },
-      'ring yang sudah benar ikut hilang waktu simpan berikutnya ditolak');
+    assert.deepStrictEqual((await repo.allDealerRings())[dealerRing], { [kecUji[0]]: 3 },
+      'ring dealer yang sudah benar ikut hilang waktu simpan berikutnya ditolak');
 
-    // Ring tidak boleh menempel pada pos yang sudah tidak ada. Dijaga foreign key
-    // ON DELETE CASCADE, dan reset di bawah ini yang membuktikannya.
+    // --- Coverage pos: pola sama, rentang 1-8, tabel & entitas beda ---
+
+    await repo.savePosCoverage(posCover,
+      { [kecUji[0]]: 1, [kecUji[1]]: 8 });
+    let cover = (await repo.allPosCoverage())[posCover];
+    assert.deepStrictEqual(cover, { [kecUji[0]]: 1, [kecUji[1]]: 8 },
+      'coverage pos tidak tersimpan apa adanya');
+
+    await assert.rejects(
+      () => repo.savePosCoverage(posCover, { '99.99.99': 1 }),
+      /tidak dikenal/i, 'kecamatan asing tidak ditolak (coverage pos)');
+    await assert.rejects(
+      () => repo.savePosCoverage(posCover, { [kecUji[0]]: 9 }),
+      /Coverage harus/i, 'nomor coverage di luar 1-8 tidak ditolak');
+    await assert.rejects(
+      () => repo.savePosCoverage(posCover, { [kecUji[0]]: 0 }),
+      /Coverage harus/i, 'nomor coverage 0 tidak ditolak');
+    await assert.rejects(
+      () => repo.savePosCoverage('POS-TIDAK-ADA', { [kecUji[0]]: 1 }),
+      /tidak ada/i, 'coverage bisa disimpan untuk pos yang tidak ada');
+
+    // Ring/coverage tidak boleh menempel pada dealer/pos yang sudah tidak ada.
+    // Dijaga foreign key ON DELETE CASCADE, dan reset di bawah ini yang membuktikannya
+    // untuk sisi pos (dealer tidak ikut direset oleh reset master pos).
 
     /* --------------------------------------------------------------------
        RESET MASTER POS
@@ -804,7 +826,7 @@ async function test() {
 
     // Empat tabel harus kosong bersamaan. Menyisakan salah satunya bukan "reset yang
     // lebih hati-hati" — itu baris yatim yang tidak muncul di mana pun.
-    for (const tabel of ['outlets', 'sales', 'unmatched', 'coverage', 'outlet_rings']) {
+    for (const tabel of ['outlets', 'sales', 'unmatched', 'coverage', 'pos_coverage_district']) {
       assert.strictEqual(
         Number((await store.one(db, `SELECT COUNT(*) AS n FROM ${tabel}`)).n), 0,
         `tabel ${tabel} tidak ikut dikosongkan waktu master pos direset`);

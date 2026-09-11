@@ -62,8 +62,19 @@ CREATE TABLE IF NOT EXISTS dealers (
   updated_at  TIMESTAMPTZ
 );
 
+-- Kode "Kode Dealer" numerik dari sheet Dealer (mis. "11506") — beda dari
+-- dealer_code (turunan nama, mis. "NUSANTARASAKTIGEJAYAN"). Dipakai
+-- scripts/import-dealer-pos-rings.js membuat baris outlets "proxy" (lihat
+-- kolom outlets.is_dealer_proxy) supaya Excel penjualan bulanan — yang cuma
+-- menyebut identitas level dealer, bukan pos fisik — tetap bisa disambungkan
+-- tanpa mengubah skema sales/customers. NULL untuk dealer yang dibuat manual
+-- lewat halaman Master Dealer.
+ALTER TABLE dealers ADD COLUMN IF NOT EXISTS legacy_code VARCHAR(32);
+
 CREATE TABLE IF NOT EXISTS outlets (
-  outlet_code VARCHAR(32) NOT NULL PRIMARY KEY,     -- kolom "Kode Dealer" di Excel
+  outlet_code VARCHAR(32) NOT NULL PRIMARY KEY,     -- kode POS fisik ("Kode POS OCEAN"),
+                                                     -- ATAU legacy_code dealer kalau
+                                                     -- is_dealer_proxy true — lihat di bawah
   outlet_name VARCHAR(200) NOT NULL,
   dealer_code VARCHAR(64) NOT NULL,                 -- pengelompokan; awalnya tebakan
   dealer_name VARCHAR(200) NOT NULL,
@@ -72,6 +83,21 @@ CREATE TABLE IF NOT EXISTS outlets (
   lng         DOUBLE PRECISION,
   updated_at  TIMESTAMPTZ
 );
+
+-- Baris "proxy": mewakili DEALER itu sendiri, bukan satu pos fisik sungguhan.
+--
+-- Excel penjualan bulanan Astra cuma menyebut identitas level dealer (kolom
+-- "Kode Dealer", lihat komentar di backend/core/aggregate.js COLUMN.outletCode)
+-- — bukan kode pos fisik ("Kode POS OCEAN") yang dipakai 109 baris outlets
+-- sungguhan. Daripada mengubah skema sales/customers (dipakai banyak tempat),
+-- satu baris proxy per dealer dibuat di sini, dikunci ke dealers.legacy_code,
+-- supaya sales.outlet_code/customers.outlet_code yang memang levelnya dealer
+-- langsung punya pasangan tanpa impor ulang.
+--
+-- DISEMBUNYIKAN dari katalog Master Pos Dealer (yang harus tetap sesuai jumlah
+-- baris sheet POS sungguhan) dan dari hitungan "Jumlah Pos" — lihat
+-- repository.js listDealers()/summary() dan frontend/js/app.js S.realOutlets.
+ALTER TABLE outlets ADD COLUMN IF NOT EXISTS is_dealer_proxy BOOLEAN NOT NULL DEFAULT false;
 
 CREATE INDEX IF NOT EXISTS idx_outlets_dealer ON outlets (dealer_code);
 
@@ -213,34 +239,56 @@ CREATE TABLE IF NOT EXISTS coverage (
 
 CREATE INDEX IF NOT EXISTS idx_coverage_outlet ON coverage (outlet_code);
 
--- Ring layanan tiap pos: desa/kelurahan mana yang masuk ring 1, 2, atau 3.
+-- Ring milik DEALER (bukan lagi pos) dan Coverage milik POS: dua tabel di bawah ini
+-- menggantikan `outlet_rings` (per pos, per kelurahan, ring 1-3) TOTAL, per 2026-08-31
+-- sore — permintaan lanjutan yang membalik keputusan pagi harinya di tabel yang sama.
 --
--- Menggantikan cara lama "dalam radius X km" yang menganggap jangkauan itu lingkaran.
--- Radius tidak tahu jalan, sungai, maupun gunung; tim yang tahu. Jadi ringnya
--- DITENTUKAN MANUSIA, bukan dihitung — dan itu satu-satunya alasan tabel ini ada.
+-- Kenapa dibalik lagi: pagi itu ring dipindah ke kelurahan karena kecamatan dianggap
+-- terlalu kasar UNTUK SATU POS. Tapi satu DEALER menaungi banyak pos sekaligus, jadi
+-- kecamatan justru pas untuk level dealer — dan pos sendiri mendapat konsep baru
+-- (coverage, 8 slot bukan 3) di kecamatan yang sama, bukan kelurahan.
 --
--- Sejak 2026-08-31 per village_code, BUKAN LAGI district_code — permintaan Pakbos,
--- granularitas kecamatan dianggap terlalu kasar. Data ring versi kecamatan lama
--- DIHAPUS TOTAL waktu migrasi (lihat docs/DECISIONS.md), bukan diturunkan otomatis.
+-- `outlet_rings` DIHAPUS TOTAL (lihat DROP TABLE di bawah), bukan dimigrasikan
+-- otomatis — data ringnya baru saja dipulihkan dari cadangan pagi itu dan sengaja
+-- tidak diturunkan ke skema baru; ring dealer diisi ulang lewat impor Excel
+-- (scripts/import-dealer-pos-rings.js), lihat docs/DECISIONS.md.
+DROP TABLE IF EXISTS outlet_rings;
+
+-- Ring dealer: kecamatan mana yang masuk ring 1, 2, atau 3 milik satu dealer.
 --
--- Dikunci ke village_code, TIDAK PERNAH ke nama — sama seperti alasan district_code
--- dulu: nama kelurahan berulang lintas kabupaten, kode BPS tidak.
+-- Ditentukan manusia (dari data cabang Astra), bukan dihitung — sama seperti alasan
+-- outlet_rings dulu ada. Dikunci ke district_code, TIDAK PERNAH ke nama: nama
+-- kecamatan berulang lintas kabupaten, kode BPS tidak.
 --
--- Satu desa cuma boleh ada di SATU ring per pos — itu yang dijaga primary key. Ring
--- yang tumpang tindih membuat satu penjualan terhitung dua kali, dan totalnya tetap
--- terlihat masuk akal.
-CREATE TABLE IF NOT EXISTS outlet_rings (
-  outlet_code  VARCHAR(32) NOT NULL,
-  village_code VARCHAR(16) NOT NULL,
-  ring         SMALLINT NOT NULL CHECK (ring BETWEEN 1 AND 3),
-  PRIMARY KEY (outlet_code, village_code),
-  CONSTRAINT fk_rings_outlet FOREIGN KEY (outlet_code)
-    REFERENCES outlets(outlet_code) ON DELETE CASCADE,
-  CONSTRAINT fk_rings_village FOREIGN KEY (village_code)
-    REFERENCES villages(village_code) ON DELETE CASCADE
+-- Satu kecamatan cuma boleh ada di SATU ring per dealer — itu yang dijaga primary
+-- key. Ring yang tumpang tindih membuat satu penjualan terhitung dua kali.
+CREATE TABLE IF NOT EXISTS dealer_rings (
+  dealer_code   VARCHAR(64) NOT NULL,
+  district_code VARCHAR(16) NOT NULL,
+  ring          SMALLINT NOT NULL CHECK (ring BETWEEN 1 AND 3),
+  PRIMARY KEY (dealer_code, district_code),
+  CONSTRAINT fk_dealer_rings_dealer FOREIGN KEY (dealer_code)
+    REFERENCES dealers(dealer_code) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_rings_outlet ON outlet_rings (outlet_code);
+CREATE INDEX IF NOT EXISTS idx_dealer_rings_dealer ON dealer_rings (dealer_code);
+
+-- Coverage pos: kecamatan mana yang masuk coverage 1..8 milik satu pos.
+--
+-- Konsep BARU, bukan penggantian nama dari tabel `coverage` di bawah — itu rasio
+-- jangkauan radius PostGIS lama, dipertahankan terpisah (lihat komentarnya).
+-- Delapan slot, bukan tiga: satu pos bisa melayani kecamatan lebih beragam
+-- daripada satu dealer per ring.
+CREATE TABLE IF NOT EXISTS pos_coverage_district (
+  outlet_code   VARCHAR(32) NOT NULL,
+  district_code VARCHAR(16) NOT NULL,
+  coverage_num  SMALLINT NOT NULL CHECK (coverage_num BETWEEN 1 AND 8),
+  PRIMARY KEY (outlet_code, district_code),
+  CONSTRAINT fk_pos_coverage_outlet FOREIGN KEY (outlet_code)
+    REFERENCES outlets(outlet_code) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_pos_coverage_outlet ON pos_coverage_district (outlet_code);
 
 -- Versi skema. Satu baris saja — kuncinya konstanta, bukan sesuatu yang bertambah.
 CREATE TABLE IF NOT EXISTS schema_version (

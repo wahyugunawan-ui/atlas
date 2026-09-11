@@ -15,30 +15,9 @@
  * baca dan tulis kalau ada yang sedang menyunting manual bersamaan.
  */
 const ExcelJS = require('exceljs');
+const { cellText, parseLongLat } = require('../backend/core/excel-coords');
 const { config: defaultConfig } = require('../backend/server/config');
 const store = require('../backend/server/db');
-
-/** Ambil nilai formula ({formula, result}) atau nilai polos, sebagai teks. */
-function cellText(value) {
-  if (value && typeof value === 'object' && 'result' in value) return value.result;
-  return value;
-}
-
-/**
- * "−7.800178631152708, 110.35219737379504" -> {lat, lng}. Longgar dengan sengaja:
- * satu baris di sumber sekarang diawali tanda baca liar (";-7.51..., 109.29...") —
- * mengekstrak DUA angka desimal pertama yang dipisah koma tetap menemukan pasangan
- * yang benar tanpa perlu tahu bentuk kerusakannya duluan.
- */
-function parseLongLat(raw) {
-  const teks = String(raw == null ? '' : raw).trim();
-  const cocok = /(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/.exec(teks);
-  if (!cocok) return null;
-  const lat = Number(cocok[1]);
-  const lng = Number(cocok[2]);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  return { lat, lng };
-}
 
 /** @return {Array<{rowNumber, outletCode, raw}>} satu per baris data di sheet POS. */
 async function readPosSheet(file) {
