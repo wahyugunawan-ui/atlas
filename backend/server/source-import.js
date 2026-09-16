@@ -23,6 +23,7 @@ const { readTable } = require('./importer');
 const { toDottedCityCode, coreCityName, normalizeName } = require('../core/region');
 const { buildVillageIndex, resolveVillage } = require('../core/village-resolver');
 const { SPECS, findColumns, mapRows, markEngines } = require('../core/source-rows');
+const { recalculate } = require('./fusion-store');
 
 /** Sama dengan importer penjualan: 500 baris per INSERT, jauh di bawah batas 65.535 parameter. */
 const BATCH = 500;
@@ -144,6 +145,18 @@ async function runSourceImport(options) {
           bulk.params);
       }
     });
+
+    // Batch penggolongan langsung menyusul impor — jalur A di docs/FUSION.md 2.2.
+    //
+    // Kegagalannya TIDAK membatalkan impor: barisnya sudah masuk dan sudah benar, dan
+    // penggolongan bisa dijalankan ulang kapan saja lewat rute recalculate. Yang tidak
+    // boleh hilang adalah data yang sudah susah payah dibaca dari Excel.
+    let fusi;
+    try {
+      fusi = await recalculate({ period: options.period, config: options.config });
+    } catch (error) {
+      fusi = { error: String(error.message).slice(0, 200) };
+    }
 
     const terpakai = hitung.ok + hitung.alias + hitung.fuzzy;
     const pesan = `${terpakai} baris bertitik, ${hitung.unmatched} nama belum cocok, ` +

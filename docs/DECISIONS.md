@@ -2630,3 +2630,58 @@ pernah lewat, dan bukti itu tidak datang dua kali.
 dinyalakan ulang sekali setelah pembaruan ini. Belum ada UI-nya — ketiga
 rute baru masih dipanggil lewat alat lain sampai Tahap F. Tahap D (fusi
 dan penggolongan) dan E (API metrik) belum dikerjakan.
+
+## [2026-09-16] FUSION Tahap D: mesin penggolongan dan ringkasannya
+
+**Konteks:** menerapkan tabel keputusan enam golongan atas data yang sudah
+masuk lewat Tahap C, lalu meringkasnya ke `segment_rollup`.
+
+**1. Seluruh KEPUTUSAN di modul murni, seluruh I/O di luar.**
+`backend/core/fusion.js` tidak menyentuh database sama sekali —
+`fuseEngine()` menerima titik-titik dan mengembalikan golongan.
+`backend/server/fusion-store.js` cuma membaca, memanggilnya, dan menulis.
+Karena itu SELURUH tabel keputusan bisa diuji dengan angka tanpa
+PostgreSQL, termasuk ketiga kasus batas di spesifikasi. Ini pola yang
+sama dengan `backend/core/coverage.js` dan alasannya sama.
+
+**2. `segment_rollup.village_code` memakai `''`, bukan NULL — dan itu
+memperbaiki cacat yang nyaris lolos.** Kolomnya bagian dari primary key,
+dan Postgres tidak mengizinkan NULL di primary key. Pelanggan yang desanya
+gagal tergeocode justru GOLONGAN "Tak Terverifikasi" — kalau barisnya
+dibuang karena desanya kosong, dashboard kehilangan persis angka yang jadi
+alasan fitur ini ada. Sekalian ditambahkan kolom `city_code`: kode kota
+datang dari kolom Excel, bukan dari hasil pencocokan nama, jadi pelanggan
+tak terverifikasi tetap terhitung di kotanya yang benar pada Matriks Kota
+× Golongan.
+
+**3. Servis dan ping dibaca LINTAS PERIODE, cakupannya ditentukan KTP.**
+Satu motor bisa servis bulan ini atas pembelian bulan lalu. Membatasi
+keduanya ke periode yang sama akan membuang bukti yang justru paling
+berguna. Yang menentukan "satu pelanggan ada" tetap baris KTP, karena
+dialah titik acuan semua jarak.
+
+**4. Penggolongan dijalankan otomatis sesudah impor, dan kegagalannya
+TIDAK membatalkan impor.** Barisnya sudah masuk dan sudah benar;
+penggolongan bisa diulang kapan saja. Yang tidak boleh hilang adalah data
+yang sudah susah payah dibaca dari Excel.
+
+**5. Micro-batch 60 detik untuk ping realtime DITUNDA, bukan selesai.**
+Spesifikasi 2.2 merancangnya, dan rancangannya tetap berlaku. Yang belum
+dibuat implementasinya. Alasannya: belum ada satu pun produsen ping —
+integrasi sistem lapangan memang ditunda (Tahap C poin 7) — jadi yang akan
+ditambahkan sekarang cuma timer latar yang tidak pernah dijalankan siapa
+pun, sementara timer yang tertinggal hidup adalah sumber bug yang sudah
+pernah menggigit proyek ini (gulir otomatis di panel tersembunyi). Untuk
+sekarang penggolongan ulang dipicu impor bulanan; micro-batch dikerjakan
+bersama integrasinya.
+
+**Konsekuensi:** `npm test` 30/30 hijau. Tabel keputusan diuji mutasi —
+menukar urutan aturan Migran/Tak-Terverifikasi, mengubah ambang `<=` jadi
+`<`, dan memakai servis terjauh alih-alih terdekat, ketiganya jadi merah.
+Satu cacat tertangkap saat menulis tesnya sendiri: versi pertama membangun
+kasus "persis di ambang" dari jarak yang SUDAH DIBULATKAN, sehingga
+ambangnya jatuh di bawah jarak sebenarnya dan yang teruji bukan kesamaan
+persis — diperbaiki memakai jarak mentah. Kolom baru `segment_rollup.city_code`
+diterapkan `schema.sql` saat server start. Tahap E (API metrik) dan F (UI)
+belum dikerjakan; sampai Tahap F belum ada satu pun layar yang menampilkan
+hasil ini.

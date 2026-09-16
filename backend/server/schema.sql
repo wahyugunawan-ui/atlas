@@ -348,9 +348,19 @@ ON CONFLICT (key) DO NOTHING;
 -- dan tetap benar meski dealernya kelak dihapus dari master. FK dengan CASCADE akan
 -- menghapus sejarah diam-diam, dan sejarah yang hilang tanpa jejak justru yang
 -- paling mahal di tabel seperti ini.
+-- village_code MEMAKAI '' (teks kosong), bukan NULL, untuk pelanggan yang desanya
+-- tidak diketahui — dan justru merekalah golongan "Tak Terverifikasi" yang harus
+-- terhitung. Kolom NULL tidak bisa jadi bagian primary key di Postgres, jadi kalau
+-- baris ini dibuang karena desanya kosong, dashboard kehilangan persis angka yang
+-- jadi alasan fitur ini ada.
+--
+-- city_code tetap diisi walau desanya gagal tergeocode: kode kota datang dari kolom
+-- Excel, bukan dari hasil pencocokan nama, jadi pelanggan tak terverifikasi tetap
+-- bisa dihitung di kotanya yang benar pada Matriks Kota x Golongan.
 CREATE TABLE IF NOT EXISTS segment_rollup (
   period         VARCHAR(7) NOT NULL,
-  village_code   VARCHAR(16) NOT NULL,
+  village_code   VARCHAR(16) NOT NULL,     -- '' = desa tidak diketahui
+  city_code      VARCHAR(8),
   dealer_code    VARCHAR(64) NOT NULL,
   segment        VARCHAR(24) NOT NULL,
   customer_count INTEGER NOT NULL,
@@ -358,6 +368,9 @@ CREATE TABLE IF NOT EXISTS segment_rollup (
   computed_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (period, village_code, dealer_code, segment)
 );
+
+-- Untuk database yang tabelnya sudah terlanjur dibuat sebelum kolom ini ada.
+ALTER TABLE segment_rollup ADD COLUMN IF NOT EXISTS city_code VARCHAR(8);
 
 CREATE INDEX IF NOT EXISTS idx_rollup_period ON segment_rollup (period);
 CREATE INDEX IF NOT EXISTS idx_rollup_dealer ON segment_rollup (dealer_code);

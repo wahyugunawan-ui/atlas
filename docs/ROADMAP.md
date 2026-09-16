@@ -54,16 +54,21 @@ Istilah wilayah memakai terjemahan resmi BPS supaya konsisten:
 
 **Penyatuan tiga sumber data (FUSION).** Rancangan lengkap ada di
 `docs/FUSION.md`. Tahap A (fondasi), B (resolver nama desa → koordinat),
-dan C (impor Data KTP & Data Servis, plus rute ping pengiriman) sudah
-selesai. Yang berikutnya Tahap D: `fuseEngine()` — mengukur jarak,
-menerapkan tabel keputusan enam golongan, dan meringkasnya ke
-`segment_rollup`.
+C (impor Data KTP & Data Servis, plus rute ping pengiriman), dan D (mesin
+penggolongan + ringkasan ke `segment_rollup`) sudah selesai. Yang
+berikutnya Tahap E: rute API untuk hasil golongan, metrik per kota dan
+per dealer, perhitungan ulang, dan drill-down per nomor mesin.
 
-Jalur masuknya sudah ada, tapi **belum ada UI-nya**: ketiga rute baru
-masih harus dipanggil lewat alat lain (halaman Import belum diubah, itu
-Tahap F). Dan karena Tahap D belum jadi, tabel `customer_fusion` masih
-kosong — golongan Warlok, metrik, dan halaman Confidence Fusion belum
-bisa menampilkan apa pun.
+Rantainya sudah nyambung dari Excel sampai angka golongan, tapi **belum
+ada satu pun layar yang menampilkannya** — halaman Import belum diubah
+dan halaman Confidence Fusion belum dibuat (keduanya Tahap F), jadi
+ketiga rute impor baru masih harus dipanggil lewat alat lain.
+
+Satu bagian rancangan yang SENGAJA ditunda: micro-batch 60 detik untuk
+ping realtime (2.2 jalur B). Belum ada produsen ping-nya, jadi yang
+ditambahkan sekarang cuma timer latar yang tidak pernah dipakai —
+dikerjakan bersama integrasi sistem lapangan. Penggolongan ulang untuk
+sekarang dipicu impor bulanan.
 
 Selain itu kosong secara kode — ring dealer (1-3)/coverage pos (1-8), impor Master Dealer &
 Pos dari Excel, perbaikan sambungan penjualan bulanan ke dealer, ringkasan
@@ -173,7 +178,7 @@ cuma perluasan ke Sulawesi ke timur.
 Detail rancangan di `docs/FUSION.md`; alasan tiap keputusan arsitekturnya
 di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
 
-**Selesai dan diuji otomatis (29/29 berkas tes):**
+**Selesai dan diuji otomatis (30/30 berkas tes):**
 - Spesifikasi teknis lengkap Tahap 2 (skema, pipeline batch + realtime,
   tabel keputusan 6 golongan, KPI Jarak yang dapat dikustom, rumus CW
   Sales/Confidence Ratio/Retention Index, kontrak API, diagram alur) dan
@@ -200,9 +205,16 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
   ditandai dan dilaporkan berikut nomor barisnya, tidak dibuang diam-diam.
   Kolom `imports.source` ditambahkan supaya Riwayat Impor bisa
   membedakan tiga jenis berkas.
+- Tahap D: `backend/core/fusion.js` (murni) berisi tabel keputusan enam
+  golongan berikut rumus CW Sales dan Confidence Ratio, plus
+  `backend/server/fusion-store.js` yang menjalankannya dan meringkas ke
+  `segment_rollup`. Penggolongan jalan otomatis sesudah tiap impor, dan
+  kegagalannya tidak membatalkan impor. Ketiga kasus batas di
+  spesifikasi diuji; tabel keputusannya diuji mutasi (urutan aturan
+  ditukar, ambang jadi eksklusif, servis terjauh dipakai — ketiganya
+  merah).
 
-**Belum dikerjakan (Tahap D–F, lihat tabel tahapan di `docs/FUSION.md`):**
-- D fusi: `fuseEngine()` + batch + micro-batch + rollup
+**Belum dikerjakan (Tahap E–F, lihat tabel tahapan di `docs/FUSION.md`):**
 - E API: segmentasi, metrik, recalculate, drill-down PII
 - F UI: menu Data, layer peta baru, halaman Confidence Fusion
 
