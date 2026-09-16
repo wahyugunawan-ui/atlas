@@ -20,8 +20,8 @@ $root = Split-Path -Parent $PSScriptRoot
 $startAll = Join-Path $root 'ops\start-all.bat'
 $backup = Join-Path $root 'ops\backup.bat'
 
-$namaApp = 'Astra Command Center'
-$namaBackup = 'Astra Command Center - Backup'
+$namaApp = 'ATLAS'
+$namaBackup = 'ATLAS - Backup'
 
 function Remove-TaskIfExists([string]$name) {
     if (Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue) {
@@ -59,7 +59,7 @@ $setelanApp = New-ScheduledTaskSettingsSet `
     -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) `
     -StartWhenAvailable
 Register-ScheduledTask -TaskName $namaApp -Action $aksiApp -Trigger $pemicuApp `
-    -Settings $setelanApp -Description 'Nyalakan PostgreSQL dan Astra Command Center' | Out-Null
+    -Settings $setelanApp -Description 'Nyalakan PostgreSQL dan ATLAS' | Out-Null
 Write-Host "  dipasang: $namaApp (saat login, dihidupkan ulang kalau mati)"
 
 # --- backup harian ---
@@ -78,7 +78,7 @@ Register-ScheduledTask -TaskName $namaBackup -Action $aksiBackup -Trigger $pemic
 Write-Host "  dipasang: $namaBackup (tiap hari $BackupTime)"
 
 Write-Host ""
-Write-Host "  Periksa:  Get-ScheduledTask -TaskName 'Astra*'"
+Write-Host "  Periksa:  Get-ScheduledTask -TaskName 'ATLAS*'"
 Write-Host "  Coba backup sekarang:  Start-ScheduledTask -TaskName '$namaBackup'"
 Write-Host ""
 Write-Host "  CATATAN: keduanya berjalan saat PENGGUNA INI login, bukan saat komputer"

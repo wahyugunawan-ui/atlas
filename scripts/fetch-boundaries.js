@@ -25,7 +25,7 @@ const PROVINSI = ['33', '34'];
 
 async function daftarBerkas(provinsi) {
   const res = await fetch(`${API}/db/kel/${provinsi}`, {
-    headers: { 'User-Agent': 'astra-command-center' },
+    headers: { 'User-Agent': 'atlas' },
   });
   if (!res.ok) {
     throw new Error(`Tidak bisa membaca daftar berkas provinsi ${provinsi} ` +
@@ -58,7 +58,7 @@ async function main() {
       if (fs.existsSync(file)) { dilewati++; continue; }
 
       const res = await fetch(`${REPO}/db/kel/${provinsi}/${berkas}`, {
-        headers: { 'User-Agent': 'astra-command-center' },
+        headers: { 'User-Agent': 'atlas' },
       });
       if (!res.ok) {
         console.error(`    GAGAL ${berkas}: HTTP ${res.status}`);

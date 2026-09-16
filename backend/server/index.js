@@ -115,7 +115,7 @@ async function main() {
   const server = tls ? https.createServer(tls, app) : http.createServer(app);
 
   server.listen(config.port, '0.0.0.0', () => {
-    console.log('\n  Astra Command Center berjalan.\n');
+    console.log('\n  ATLAS berjalan.\n');
     console.log(`  Buka di laptop ini          : ${skema}://localhost:${config.port}`);
     const addresses = localAddresses();
     if (addresses.length) {

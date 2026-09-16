@@ -57,7 +57,7 @@ function upsert(content, key, value) {
 }
 
 async function main() {
-  console.log('\n  Setel sandi Astra Command Center');
+  console.log('\n  Setel sandi ATLAS');
   console.log('  Sandi ini dipakai bersama seluruh tim.\n');
 
   const password = await askHidden('  Sandi baru          : ');

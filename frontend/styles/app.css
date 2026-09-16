@@ -33,7 +33,7 @@
       --astra-navy-dark: #071c42;
       --astra-navy-light: #123d8c;
       --astra-red: #e2231a;
-      --astra-red-dark: #b91a13;
+      --astra-red-dark: #a3160f;
 
       --ink: #0b1220; --panel: #0f1729; --line: #1e293b;
       --accent: #3b82f6; --accent-2: #22d3ee;
@@ -56,10 +56,12 @@
     .rise-in { animation: riseIn 0.45s cubic-bezier(0.16,1,0.3,1) both; }
 
     /* Top Navbar */
-    #topnav { background: linear-gradient(90deg, var(--astra-navy-dark), var(--astra-navy) 55%, var(--astra-navy-light)); }
-    .nav-btn { color: rgba(255,255,255,0.62); transition: all 0.2s ease; }
+    #topnav { background: linear-gradient(90deg, var(--astra-navy-dark), var(--astra-navy) 55%, var(--astra-navy-light)); border-bottom: 3px solid var(--astra-red); }
+    .nav-btn { color: rgba(255,255,255,0.62); transition: all 0.2s ease; border-bottom: 2px solid transparent; }
     .nav-btn:hover { background: rgba(255,255,255,0.08); color: #fff; transform: translateY(-1px); }
-    .nav-btn.active { background: #ffffff; color: var(--astra-navy); box-shadow: 0 6px 16px rgba(0,0,0,0.18); }
+    .nav-btn.active { background: #ffffff; color: var(--astra-navy); box-shadow: 0 6px 16px rgba(0,0,0,0.18); border-bottom-color: var(--astra-red); }
+    .btn-primary { background: linear-gradient(135deg, var(--astra-navy-light), var(--astra-navy)); color: #fff; transition: filter .15s ease; }
+    .btn-primary:hover { filter: brightness(1.08); }
 
     .tm-btn { color: #64748b; transition: all 0.2s ease; }
     .tm-btn:hover { color: #1e293b; }

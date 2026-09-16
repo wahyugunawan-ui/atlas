@@ -66,7 +66,13 @@ export function setupMap() {
     },
   });
 
-  S.map.addControl(new maplibregl.NavigationControl(), 'top-right');
+  // 'bottom-left', BUKAN 'top-right': pojok kanan-atas sudah ditempati
+  // #opsi-peta-panel (absolute, DOM biasa) — dua kontrol di pojok yang sama
+  // saling menutupi karena #opsi-peta-panel tidak tahu-menahu soal stacking
+  // internal MapLibre. ScaleControl di baris berikutnya (default bottom-left)
+  // dan kontrol atribusi bawaan MapLibre (default bottom-right) sudah pasti
+  // aman menumpuk rapi dengan kontrol MapLibre lain di pojok yang sama.
+  S.map.addControl(new maplibregl.NavigationControl(), 'bottom-left');
   S.map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }));
 
   // Citra satelit datang dari internet. Kalau jaringan kantor menutupnya, petanya
@@ -710,8 +716,19 @@ function moveFilterBar() {
   if (bar && host && bar.parentElement !== host) host.appendChild(bar);
 }
 
+// Sama seperti moveFilterBar() di atas: tombol dipindah, bukan dicerminkan.
+// Di mode biasa dia HARUS balik ke #map-top-buttons (itu tombol MASUK layar
+// penuh) — kalau tidak dipindah balik, tombol masuk layar penuh hilang dari
+// tampilan biasa.
+function moveExitButton() {
+  const btn = $('btn-penuh');
+  const host = S.fullscreen ? $('fs-exit-host') : $('map-top-buttons');
+  if (btn && host && btn.parentElement !== host) host.appendChild(btn);
+}
+
 export function toggleFullscreen(force) {
   S.fullscreen = force === undefined ? !S.fullscreen : Boolean(force);
+  moveExitButton();
   moveFilterBar();
   $('map-shell').classList.toggle('penuh', S.fullscreen);
   $('label-penuh').textContent = S.fullscreen ? 'Keluar' : 'Layar penuh';
@@ -732,8 +749,16 @@ export function toggleFullscreen(force) {
  * dilayaninya — sekali klik langsung kelihatan seberapa jauh pelanggannya menyebar, dan
  * itu justru pertanyaan pokoknya. Zoom ke titik posnya saja malah membuang yang di luar
  * radius keluar layar.
+ *
+ * @param {boolean} [auto] Sejak 2026-09-14: `true` waktu dipanggil OTOMATIS sesudah
+ *   aksi yang mengubah tampilan peta (renderAll(), openVillageDetail() — lihat
+ *   pemanggilnya), BUKAN dari tombol Fit manual. Bedanya dua hal: animasi SENGAJA
+ *   dibuat lebih pelan (900ms vs 700ms manual — permintaan eksplisit user, versi
+ *   pertama 400ms dianggap "terlalu cepat" untuk dinikmati), dan toast "tidak ada
+ *   data" DILEWATI (kalau tidak, kombinasi filter yang kebetulan kosong akan
+ *   menoast di SETIAP render otomatis, bukan cuma sekali waktu ditekan manual).
  */
-export function fitToScope() {
+export function fitToScope(auto) {
   const points = [];
   const perVillage = sumBy(activeRows(), 'village');
   Object.keys(perVillage).forEach((code) => {
@@ -753,8 +778,8 @@ export function fitToScope() {
   if (!points.length) {
     // Peta kosong yang di-zoom ke tempat entah di mana lebih membingungkan daripada
     // peta utuh.
-    S.map.fitBounds(bbox(S.geo), { padding: 40, duration: 700 });
-    toast('Tidak ada data pada filter ini — peta dikembalikan ke seluruh wilayah');
+    S.map.fitBounds(bbox(S.geo), { padding: S.fullscreen ? 90 : 40, duration: auto ? 900 : 700 });
+    if (!auto) toast('Tidak ada data pada filter ini — peta dikembalikan ke seluruh wilayah');
     return;
   }
 
@@ -775,7 +800,11 @@ export function fitToScope() {
   if (maxX - minX < minSpan) { const c = (maxX + minX) / 2; minX = c - minSpan / 2; maxX = c + minSpan / 2; }
   if (maxY - minY < minSpan) { const c = (maxY + minY) / 2; minY = c - minSpan / 2; maxY = c + minSpan / 2; }
 
+  // Peta layar penuh sekarang kotak tersendiri di grid (bukan lagi peta penuh
+  // layar dengan panel melayang di atasnya, lihat komentar #map-shell.penuh di
+  // index.html) — jarak "mekanisme fit" cukup angka tetap seperti sebelumnya,
+  // panel kiri/kanan/atas/bawah sudah otomatis tidak menutupi kotak peta lagi.
   S.map.fitBounds([[minX, minY], [maxX, maxY]],
-    { padding: S.fullscreen ? 90 : 50, duration: 700, maxZoom: 13 });
+    { padding: S.fullscreen ? 90 : 50, duration: auto ? 900 : 700, maxZoom: 13 });
 }
 

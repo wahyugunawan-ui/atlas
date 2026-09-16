@@ -34,7 +34,7 @@ atasnya atau di dalam sub-folder.
 Cek juga apakah path folder ini mengandung `OneDrive`. Kalau ya, beri tahu pengguna:
 folder tersinkron bisa mengunci berkas di tengah proses dan bikin pemasangan gagal
 setengah jalan. Sarankan dia memindahkan folder hasil ekstrak zip ke path lokal
-sederhana, misalnya `C:\astra-command-center`, sebelum lanjut — lalu buka folder itu
+sederhana, misalnya `C:\atlas`, sebelum lanjut — lalu buka folder itu
 lagi di VS Code.
 
 ## Fase 1 — Node.js

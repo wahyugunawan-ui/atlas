@@ -1,5 +1,5 @@
 @echo off
-REM Jalankan Astra Command Center.
+REM Jalankan ATLAS (Astra Motor Geospasial Marketing Intelligence).
 REM
 REM Klik dua kali berkas ini. Jendela hitam yang muncul ADALAH servernya — biarkan
 REM terbuka selama aplikasinya dipakai, dan tutup untuk mematikannya.
@@ -9,7 +9,7 @@ REM pesannya harus terbaca. Server yang mati diam-diam di latar belakang jauh le
 REM sulit ditolong daripada jendela yang menampilkan errornya.
 
 cd /d "%~dp0"
-title Astra Command Center
+title ATLAS
 
 REM Letak folder data dan kredensial. Keduanya HARUS di luar OneDrive: yang pertama
 REM karena berkas geo bisa terkunci di tengah pembacaan, yang kedua karena .env memuat

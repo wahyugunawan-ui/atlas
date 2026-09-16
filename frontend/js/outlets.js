@@ -81,7 +81,19 @@ export function drawDealerMarkers() {
       showDealerTooltip(dealer, perDealer[dealer.code] || 0, e));
     el.addEventListener('mousemove', moveTooltip);
     el.addEventListener('mouseleave', () => $('tooltip').classList.remove('show'));
-    el.addEventListener('click', (e) => { e.stopPropagation(); applyScope('dealer', dealer.code); });
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      applyScope('dealer', dealer.code);
+      // Mode biasa (bukan layar penuh): langsung buka panel rincian per kelurahan
+      // bersama ringkasan dealer di dalamnya — permintaan user, supaya tidak perlu
+      // klik dua kali (dulu: klik marker → cuma kartu ringkas, klik lagi "Rincian
+      // per kelurahan" baru panelnya muncul). Layar penuh TIDAK disentuh — sudah
+      // ada kartu ringkas + panel kiri Performa/Wilayah sendiri di sana.
+      // window.openDealerDetail, bukan import langsung dari tables.js: tables.js
+      // sendiri meng-import dari modul ini (selectOutlet), impor balik akan
+      // membuat lingkaran modul.
+      if (!S.fullscreen) window.openDealerDetail(dealer.code);
+    });
 
     S.dealerMarkers.push(new maplibregl.Marker({ element: el })
       .setLngLat([dealer.lng, dealer.lat]).addTo(S.map));
@@ -125,8 +137,20 @@ export function moveTooltip(event) {
  * itu, bukan sekadar menyorot di atas peta yang lama. Caranya dengan menyalakan filter
  * pos — dengan begitu KPI, peringkat, treemap, tabel, dan legenda ikut berpindah, dan
  * tidak ada satu pun angka di layar yang masih menghitung sesuatu yang lain.
+ *
+ * Sejak 2026-09-14: mode biasa (bukan layar penuh) langsung membuka panel rincian
+ * per kelurahan juga — sama seperti klik marker dealer. Satu pos selalu milik SATU
+ * dealer, dan tidak ada rincian-per-kelurahan versi pos tersendiri, jadi dipakai
+ * openDealerDetail() milik dealer induknya (window.*, bukan import langsung — tables.js
+ * sudah meng-import dari berkas ini, impor balik akan membuat lingkaran modul).
  */
-export function selectOutlet(code) { applyScope('pos', code); }
+export function selectOutlet(code) {
+  applyScope('pos', code);
+  if (!S.fullscreen) {
+    const outlet = S.outletByCode[code];
+    if (outlet) window.openDealerDetail(outlet.dealerCode);
+  }
+}
 
 export function closeSelectionInfo() {
   clearScope('pos');

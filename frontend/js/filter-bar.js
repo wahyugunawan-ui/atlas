@@ -144,9 +144,21 @@ export function fillFilterBar() {
   // Memilih dari daftar berarti "tampilkan yang ini", bukan "nyalakan atau matikan
   // yang ini" — jadi dipaksa, tidak di-toggle. Toggle cuma masuk akal untuk klik di
   // peta, dan itu jalur applyScope().
+  //
+  // Sejak 2026-09-14: memilih Dealer/Pos dari daftar ini JUGA membuka panel rincian
+  // per kelurahan (mode biasa saja) — pola yang sama dengan isiComboKota() di bawah
+  // (memilih Kota sudah lebih dulu membuka openCitySummary() otomatis). window.*,
+  // bukan import langsung: tables.js sudah meng-import dari berkas ini.
   const pilihLingkup = (kind) => (value) => {
     setScope(kind, value, true);
     repaint(false);
+    if (S.filterPage === 'peta' && !S.fullscreen && value !== 'ALL') {
+      if (kind === 'dealer' && window.openDealerDetail) window.openDealerDetail(value);
+      else if (kind === 'pos' && window.openDealerDetail) {
+        const outlet = S.outletByCode[value];
+        if (outlet) window.openDealerDetail(outlet.dealerCode);
+      }
+    }
   };
 
   fillCombo('kares', 'Kares',

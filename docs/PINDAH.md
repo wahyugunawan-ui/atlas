@@ -145,11 +145,11 @@ VPS tidak ada yang menjalankannya. Buat systemd service:
 ```ini
 # /etc/systemd/system/astra.service
 [Unit]
-Description=Astra Command Center
+Description=ATLAS - Astra Motor Geospasial Marketing Intelligence
 After=network.target postgresql.service
 
 [Service]
-WorkingDirectory=/opt/astra-command-center
+WorkingDirectory=/opt/atlas
 ExecStart=/usr/bin/node backend/server/index.js
 Restart=always
 User=astra
@@ -190,12 +190,12 @@ Untuk aplikasinya, Node tidak punya padanannya. Yang biasa dipakai:
 [NSSM](https://nssm.cc) — unduh, lalu:
 
 ```
-nssm install AstraCommandCenter "C:\Program Files
+nssm install Atlas "C:\Program Files
 odejs
 ode.exe" backend\server\index.js
-nssm set AstraCommandCenter AppDirectory C:/astra-command-center
-nssm set AstraCommandCenter AppEnvironmentExtra ACC_ENV_FILE=C:/astra-data/.env
-nssm start AstraCommandCenter
+nssm set Atlas AppDirectory C:/atlas
+nssm set Atlas AppEnvironmentExtra ACC_ENV_FILE=C:/astra-data/.env
+nssm start Atlas
 ```
 
 Setelah keduanya jadi service, buang tugas terjadwalnya supaya tidak ada dua yang

@@ -402,12 +402,15 @@ function test() {
     'tombol melepas kecamatan dari kelompok hilang — sekali salah pilih, tidak ada jalan ' +
     'membatalkannya selain menyimpan yang salah');
 
-  // Tombol quick-access (bilah ruang lingkup + pojok peta) muncul waktu scope DEALER
+  // Tombol quick-access (pojok peta, #map-top-buttons) muncul waktu scope DEALER
   // (buka editor ring) ATAU scope POS (buka editor coverage) — labelnya ikut scope.
+  // Sejak 2026-09-14: kembarannya di bilah "Heatmap dihitung terhadap:" (scope-bar)
+  // dihapus bersama blok itu — btn-ring-peta sudah cukup, dua tombol untuk aksi
+  // yang sama cuma duplikasi.
   assert.match(source['app.js'],
     /const bisaEditGroup = dealerScope \|\| posScope;/,
     'tombol edit ring/coverage tidak lagi dibatasi ke lingkup satu dealer ATAU satu pos');
-  ['btn-edit-ring', 'btn-ring-peta'].forEach((id) => {
+  ['btn-ring-peta'].forEach((id) => {
     assert.ok(html.includes(`id="${id}"`), `tombol ${id} hilang dari markup`);
     assert.ok(new RegExp(`\\$\\('${id}'\\)\\.classList\\.toggle\\('hidden', !bisaEditGroup\\)`)
       .test(source['app.js']),
@@ -430,10 +433,17 @@ function test() {
   const perfPotong = perfBody.slice(0, perfBody.indexOf('\n}'));
   assert.match(perfPotong, /const \{ list, counts \} = performanceByOutlet\(rows\);/,
     'daftar performa tidak lagi dihitung sekali dari performanceByOutlet');
-  ['panel-performa', 'fp-performa'].forEach((id) => {
-    assert.match(perfPotong, new RegExp(`\\$\\('${id}'\\)[^=]*= bodyWide`),
-      `${id} tidak lagi digambar dari daftar wide yang sama`);
-  });
+  assert.match(perfPotong, /\$\('fp-performa'\)[^=]*= bodyWide/,
+    'fp-performa tidak lagi digambar dari daftar wide yang sama');
+  // Sejak 2026-09-14 malam: panel-performa (mode biasa) dipisah dari bodyWide —
+  // ringkasan+sort-by+papan kelompok pindah ke ringkas-jangkauan (tetap diam),
+  // panel-performa cuma dapat baris pos (rowsHtml) supaya bisa gulir sendiri.
+  assert.match(perfPotong, /const rowsHtml = list\.length \? list\.map\(performanceRowWide\)/,
+    'panel-performa (mode biasa) tidak lagi memakai baris performanceRowWide yang sama dengan bodyWide');
+  assert.match(perfPotong, /\$\('panel-performa'\)[^=]*= rowsHtml/,
+    'panel-performa tidak lagi digambar dari rowsHtml (baris saja, tanpa controls/groupBoard)');
+  assert.match(perfPotong, /\$\('ringkas-jangkauan'\)[^=]*= summary \+ controls \+ performanceGroupBoard\(counts\)/,
+    'ringkas-jangkauan tidak lagi menggabung summary+controls+groupBoard (mode biasa)');
   assert.match(perfPotong, /\$\('fs-performa'\)[^=]*= bodyCompact/,
     'fs-performa tidak lagi digambar dari daftar compact yang sama');
 
@@ -538,7 +548,7 @@ function test() {
   // Panel rincian kelurahan tidak boleh menempati sudut yang sama dengan tombol peta.
   // Keduanya `absolute` di dalam #map-shell; waktu top-nya sama, panelnya menutupi
   // tombol Layar penuh dan Fit sampai tidak bisa ditekan sama sekali.
-  const tombolPeta = html.match(/<div class="absolute (top-\d+) left-6 z-20/);
+  const tombolPeta = html.match(/<div id="map-top-buttons" class="absolute (top-\d+) left-6 z-20/);
   const panelKel = html.match(/id="kelurahanDetailPanel"[^>]*absolute (top-\d+) left-6/);
   assert.ok(tombolPeta && panelKel, 'tombol peta atau panel kelurahan hilang dari markup');
   assert.notStrictEqual(panelKel[1], tombolPeta[1],
@@ -597,8 +607,15 @@ function test() {
   assert.match(opsiBlok, /<details[^>]*>\s*<summary[^>]*>Dealer<\/summary>/,
     'bagian Dealer tidak lagi dilipat — panel opsi peta jadi tidak muat dan harus ' +
     'digulir untuk melihat sisanya');
-  assert.ok(!/<details open/.test(opsiBlok),
-    'lipatan legenda terbuka secara bawaan — panelnya kembali tidak muat');
+  // Sejak 2026-09-14: enam grup KENDALI (Tampilan Dasar/Titik/Ring Dealer/
+  // Coverage POS/Mode Heatmap, kecuali Batas Wilayah) SENGAJA <details open>
+  // (dikonfirmasi user) — cuma dua legenda REFERENSI di bawah ini yang harus
+  // tetap terlipat, jadi diperiksa spesifik ke tag pembuka masing-masing,
+  // bukan lagi larangan blanket "<details open>" di seluruh panel.
+  assert.ok(!/<details[^>]*open[^>]*>\s*<summary[^>]*><span id="legend-title">/.test(opsiBlok),
+    'lipatan legenda (atas) terbuka secara bawaan — panelnya kembali tidak muat');
+  assert.ok(!/<details[^>]*open[^>]*>\s*<summary[^>]*>Dealer<\/summary>/.test(opsiBlok),
+    'lipatan legenda Dealer terbuka secara bawaan — panelnya kembali tidak muat');
 
   // Rumah bilah filter di layar penuh TIDAK boleh jadi wadah yang menggulir.
   //
@@ -607,9 +624,17 @@ function test() {
   // untuk rumah bilah filter: dia cuma wadah, dan overflow di situ MEMOTONG dropdown
   // yang membuka ke bawah keluar kotaknya. Itu penyebab "dropdown-nya kepotong" yang
   // sempat dikira masalah z-index dan dikejar dua kali ke arah yang salah.
-  assert.match(html, /#map-shell\.penuh \.map-panel:not\(#fs-filter-host\)/,
-    'rumah bilah filter layar penuh ikut kena aturan overflow panel — dropdown-nya ' +
-    'akan terpotong sebatas kotak bilahnya');
+  //
+  // Sejak 2026-09-14 malam: gaya biru #fs-filter-host DIPINDAH jadi gaya dasar
+  // #filter-bar sendiri (dipakai juga di mode biasa) — #fs-filter-host jadi
+  // wadah polos tanpa kelas `.map-panel` sama sekali, jadi pengecualian `:not()`
+  // tidak perlu lagi: aturan overflow generiknya otomatis TIDAK PERNAH menyentuh
+  // elemen yang bahkan tidak punya kelasnya.
+  assert.match(html, /#map-shell\.penuh \.map-panel \{[^}]*overflow-y: auto/,
+    'aturan overflow panel melayang (layar penuh) tidak ditemukan');
+  assert.doesNotMatch(html, /id="fs-filter-host" class="[^"]*\bmap-panel\b/,
+    'rumah bilah filter layar penuh ikut diberi kelas map-panel lagi — aturan ' +
+    'overflow-y:auto generik akan memotong dropdown yang membuka ke bawah di dalamnya');
 
   // Bilahnya selebar isinya, bukan selebar ruang yang kebetulan tersisa. Karena
   // rumahnya diletakkan di tengah, lebar "tersedia" cuma separuh layar — dan bilahnya

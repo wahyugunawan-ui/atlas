@@ -1,4 +1,4 @@
-# PRD — Astra Command Center
+# PRD — ATLAS: Astra Motor Geospasial Marketing Intelligence
 
 Apa yang produk ini harus bisa, buat siapa, dan angkanya berarti apa.
 

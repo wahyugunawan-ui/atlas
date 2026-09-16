@@ -2,6 +2,11 @@
 
 ## Konteks
 
+Nama resmi produk: **ATLAS — Astra Motor Geospasial Marketing Intelligence**
+(sebelum 2026-09-14 bernama "Astra Command Center"; nama folder proyek dan
+database `astra`/`astra_customers` sengaja TIDAK ikut berganti, lihat
+`docs/DECISIONS.md`).
+
 Dashboard analisis distribusi dealer motor untuk tim channel Astra. Pengguna non-IT,
 5–20 orang, dan **tidak ada tim IT di tim mereka** — itu yang menentukan hampir semua
 keputusan teknis di sini.

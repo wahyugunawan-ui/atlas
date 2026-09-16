@@ -1717,3 +1717,708 @@ kedua scope (dealer-only vs pos dipilih) di kedua mode (`#kartu-dealer`
 normal & `#fs-kartu` layar penuh), grid 70/30 di lebar layar sempit vs
 `xl`, dan flyout Master (buka/tutup, klik-luar, Escape, highlight saat
 salah satu Master aktif).
+
+## [2026-09-14] Peta layar penuh: hilangkan bingkai putih, tambah "kotak fokus" blur, Fit dihitung dari posisi panel sungguhan
+
+**Konteks:** Permintaan pengguna (dengan mockup): peta di mode layar penuh
+terlihat seperti dibatasi "kotak" dengan latar putih kosong di pinggirnya,
+padahal maksudnya peta mengisi seluruh layar dengan panel-panel mengambang
+di atasnya, dan bagian yang tidak tertutup panel tapi juga bukan area utama
+("kotak fokus") tampak sebagai latar blur, bukan peta tajam yang bisa
+diklik penuh. Tombol Fit juga diminta menghitung ulang pas ke kotak fokus
+itu, bukan angka jarak tetap.
+
+**Temuan sebelum membangun apa pun:** `#map-shell.penuh` sudah
+`position:fixed;inset:0` (sudah memenuhi layar), dan panel-panelnya sudah
+memakai `.map-panel` (kaca buram, `backdrop-filter: blur`) — sesuai
+komentar CSS yang sudah ada ("Kaca tetap dipakai panel yang ADA DI DALAM
+peta; yang bermasalah cuma yang di luar", merujuk kasus lain yang sengaja
+dibuat solid karena bug driver GPU). "Bingkai putih" yang dikeluhkan adalah
+BUG murni: kelas Tailwind `bg-white border shadow-sm` milik `#map-shell`
+tidak pernah dilepas untuk state `.penuh`.
+
+**Keputusan:**
+1. **Bug bingkai putih diperbaiki**: `#map-shell.penuh` sekarang eksplisit
+   `background:#0b1220; box-shadow:none; border:none;`, dan
+   `.map-container`-nya `border-radius:0` — tidak ada lagi sisa
+   border/bayangan/sudut membulat yang terlihat sebagai bingkai.
+2. **"Kotak fokus" dihitung dinamis, bukan area tetap.** Fungsi baru
+   `focusBoxInsets()` (`frontend/js/map.js`) mengukur `getBoundingClientRect()`
+   panel yang SEDANG tampil (tombol Fit/bilah filter atas, panel kiri
+   Performa/Wilayah ATAU rincian kelurahan — mana pun yang lebih menjorok,
+   panel Opsi Peta kanan, kartu dealer bawah) dan mengembalikan jarak
+   top/bottom/left/right dari tepi peta ke kotak fokus. Satu fungsi ini
+   dipakai DUA tempat supaya kotak yang terlihat dan yang dipas-kan Fit
+   selalu sama persis:
+   - `syncFocusBleed()` (baru): mengatur ukuran 4 elemen `#bleed-top/bottom/
+     left/right` (kelas baru `.focus-bleed`, `backdrop-filter: blur(6px)
+     brightness(0.82); pointer-events:none`) supaya pas menutupi bagian
+     bebas-panel di luar kotak fokus.
+   - `fitToScope()`: `padding` yang dikirim ke `map.fitBounds()` sekarang
+     objek `{top,bottom,left,right}` hasil `focusBoxInsets()` waktu layar
+     penuh (sebelumnya angka tetap `90`/`40`), tetap angka tetap `50`/`40`
+     di mode normal (bukan layar penuh, jadi tidak relevan).
+3. **Dipanggil ulang** di `toggleFullscreen()`, `renderAll()` (kartu dealer
+   dan grup kiri Performa/Wilayah bisa muncul-hilang mengikuti filter),
+   `showPanel()`/`closeVillageDetail()` (`tables.js`, rincian dealer/
+   kelurahan slide in/out — dipakai bersama, jendela geser 300ms disamakan
+   waktu panggilannya), dan `ResizeObserver` yang sudah ada di `setupMap()`
+   (jendela berubah ukuran).
+
+**Alasan:** Panel-panel di peta ini TIDAK membentuk satu kotak persegi rapi
+di tengah (kiri hampir setinggi layar, kanan juga, atas & bawah cuma
+selebar isinya) — jadi kotak fokus tidak bisa berupa angka tetap; dia harus
+diukur dari kenyataan panel mana yang sedang tampil. Memakai fungsi yang
+SAMA untuk blur visual dan padding Fit mencegah dua "definisi kotak fokus"
+yang bisa diam-diam menyimpang satu sama lain.
+
+**Alternatif yang ditolak:** Menambah lapisan blur/masker tunggal dengan
+`clip-path`/SVG mask berbentuk kotak — ditolak, empat `div` sederhana
+(atas/bawah/kiri/kanan) jauh lebih mudah dipahami dan cukup untuk kotak
+fokus yang bentuknya memang persegi, tanpa perlu menghitung geometri mask
+yang rumit.
+
+**Konsekuensi:** `npm test` tetap 27/27 hijau (tidak ada tes lama yang
+bergantung pada padding `fitBounds` angka tetap atau susunan `#map-shell`).
+Backend tidak disentuh sama sekali, tidak perlu restart server. **Belum
+diverifikasi visual di browser** — terutama transisi ukuran kotak fokus
+waktu panel kiri berganti isi (Performa↔Wilayah↔rincian kelurahan) dan
+waktu jendela diubah ukuran.
+
+## [2026-09-14] Peta layar penuh: dibatalkan jadi grid tetap — mengganti entri "kotak fokus blur" hari yang sama
+
+**Konteks:** Entri sebelumnya hari ini ("Peta layar penuh: hilangkan bingkai
+putih, tambah 'kotak fokus' blur...") membuat peta tetap satu kanvas penuh
+layar dengan panel MELAYANG di atasnya, plus bingkai blur dinamis di celah
+yang bebas panel. Pengguna menilai belum sesuai — mengirim mockup tata
+letak yang eksplisit: kolom kiri/kanan TETAP (bukan melayang), strip info
+dealer di BAWAH peta dengan ukuran TETAP (bukan menyesuaikan isi, bukan
+melayang di tengah), dan tombol Fit/Edit ring pindah ke pojok kiri-atas
+KOTAK PETA itu sendiri (bukan pojok layar). Efek blur di celah dianggap
+tidak perlu lagi begitu tata letaknya benar (tidak ada celah tersisa untuk
+diblur).
+
+**Keputusan: `#map-shell.penuh` diganti total jadi CSS Grid**, bukan lagi
+`position:fixed;inset:0` dengan anak-anak `position:absolute` melayang:
+```css
+#map-shell.penuh {
+  display: grid; padding: 12px; gap: 12px;
+  grid-template-columns: 320px 1fr 240px;
+  grid-template-rows: auto 1fr 130px;
+  grid-template-areas: "topbar topbar topbar" "left map right" "left bottom right";
+}
+```
+`grid-template-areas` mengulang nama `left`/`right` di baris `map` DAN
+`bottom` — itu yang membuat kolom kiri/kanan jadi SATU kolom tinggi penuh
+(menaungi peta dan strip bawah sekaligus), persis acuan mockup.
+
+- `#fs-filter-host` (bilah filter), `#fs-kiri-panel` (Performa/Wilayah),
+  `#opsi-peta-panel` (Opsi Peta), `#fs-kartu` (info dealer) semuanya diberi
+  `position:static` + `grid-area` masing-masing — bukan lagi lapisan
+  `absolute` melayang di atas peta, tapi kolom/baris grid SUNGGUHAN. Kelas
+  Tailwind lama di HTML-nya (`w-80`, `w-60`, `top-20`, dst.) sengaja
+  DIBIARKAN, bukan dihapus — begitu `position:static` kelas-kelas posisi
+  itu otomatis tidak berpengaruh, jadi tidak ada risiko lupa membersihkan.
+- `#fs-kartu` (strip info dealer) sekarang **baris grid ketiga, TETAP
+  130px** — permintaan eksplisit "tidak berubah-ubah lebar panjangnya".
+  Melebar dari batas panel kiri sampai batas panel kanan (kolom "bottom"
+  ada di antara "left" dan "right"), BUKAN lagi `max-w-[calc(100vw-46rem)]`
+  yang melayang di tengah. Isi (`dealerCardHtml()` di render.js) TIDAK
+  disentuh sama sekali.
+- Tombol Fit/Edit ring/Layar penuh (`#map-top-buttons`) dan lapisan
+  `#ring-bar`/`#mapError` TETAP `position:absolute` dengan kelas Tailwind
+  lamanya (`top-6 left-6` dst.) — cukup ditambah `grid-area: map` yang
+  sama dengan peta. Ini memanfaatkan aturan CSS Grid bahwa elemen absolute
+  yang diberi `grid-area` memakai KOTAK AREA ITU sebagai konteks posisinya,
+  bukan seluruh grid — jadi tombolnya otomatis menempel ke pojok KOTAK
+  PETA (bukan pojok layar seperti sebelumnya). Ini "tombol yang dipindahkan"
+  yang diminta, tanpa perlu menulis ulang koordinatnya secara manual.
+- `#kelurahanDetailPanel` (rincian dealer/kelurahan, dipakai DUA mode —
+  bukan `.hanya-penuh`) tetap `position:absolute` + animasi geser
+  `transform` yang sudah ada, cuma ditambah `grid-area: left` dan inset
+  disetel ulang (`top:0;left:0;bottom:0;width:100%`, sebelumnya
+  `top-20 left-6 bottom-6 w-96` yang dirancang untuk melayang di atas
+  SELURUH layar) supaya pas mengisi satu kolom kiri grid, menggantikan
+  `#fs-kiri-panel` di kolom yang sama waktu dibuka.
+
+**Dibatalkan/dihapus dari entri sebelumnya:** `.focus-bleed` (kelas CSS),
+4 elemen `#bleed-top/bottom/left/right`, fungsi `focusBoxInsets()` dan
+`syncFocusBleed()` (`map.js`) beserta semua titik panggilnya
+(`toggleFullscreen()`, `renderAll()`, `showPanel()`/`closeVillageDetail()`
+di `tables.js`, `ResizeObserver` di `setupMap()`) — semuanya dihapus utuh,
+bukan dinonaktifkan, karena grid yang baru tidak menyisakan celah yang
+perlu diblur sama sekali.
+
+**Fit dikembalikan ke angka tetap** (`S.fullscreen ? 90 : 50`, sama seperti
+sebelum sesi hari ini menambahkan `focusBoxInsets()`) — diminta eksplisit
+("mekanisme fit tetap merujuk pada sistem yang ada saat ini"). Ini juga
+memang benar secara teknis: `#map` sekarang kotak grid tersendiri yang
+SUDAH TIDAK ditutupi panel kiri/kanan/bawah sama sekali (dulu perlu
+padding besar untuk mengompensasi tumpang-tindih; sekarang tidak perlu).
+
+**Alasan:** Layout panel di peta ini tidak membentuk satu kotak simetris
+sederhana (kiri/kanan setinggi hampir seluruh layar, atas/bawah cuma
+selebar isinya) — grid CSS dengan `grid-template-areas` adalah cara paling
+langsung mendeklarasikan bentuk begini, dibanding menghitung ulang posisi
+absolute lewat JS tiap ada perubahan (pendekatan yang baru saja dicoba dan
+dianggap belum pas).
+
+**Konsekuensi:** `npm test` 27/27 hijau — satu assertion di
+`test/page.test.js` (memeriksa tombol peta & panel kelurahan tidak
+menumpuk di sudut yang sama) disesuaikan ke selector baru
+(`#map-top-buttons`), tidak mengubah apa yang sebenarnya diperiksa. Server
+backend tidak disentuh, tidak perlu restart. **Belum diverifikasi visual
+di browser** — terutama strip info dealer 130px (apakah kontennya muat
+tanpa terlalu banyak menggulir), dan posisi tombol Fit/Edit ring di pojok
+kotak peta.
+
+## [2026-09-14] Bug transform pada panel grid layar penuh; kartu dealer ringkas jadi satu baris
+
+**Konteks:** Sesudah entri di atas ("dibatalkan jadi grid tetap"), pengguna
+kirim screenshot: bilah filter atas terlihat terpotong dan kartu dealer di
+strip bawah bergeser jauh ke kiri, menumpuk di atas panel kiri.
+
+**Penyebab:** `#fs-filter-host` dan `#fs-kartu` sebelum grid ini dipasang
+memakai pola "melayang di tengah" (`left-1/2` + `-translate-x-1/2`,
+kelas Tailwind). `position:static` yang diberikan grid membuat `left-1/2`
+otomatis tidak berpengaruh (offset posisi cuma berlaku untuk elemen yang
+diposisikan) — TAPI `transform` tetap berlaku pada elemen statis. Dua
+elemen itu jadi bergeser ke kiri sejauh separuh lebarnya sendiri, persis
+gejala di screenshot.
+
+**Keputusan:** Tambah `transform: none` eksplisit di override
+`.penuh`-scoped keduanya.
+
+Sekaligus, kartu dealer ringkas (`dealerCardHtml(true)`, dipakai `#fs-kartu`)
+dirombak jadi **satu baris rata** (avatar+nama, semua sel stat digulir
+sendiri kalau kepanjangan, tombol Tutup) — susunan lama (nama+tombol,
+lalu grid stat, lalu baris chip pos, tiga bagian ditumpuk) butuh jauh
+lebih dari 130px tinggi yang sekarang tetap. Baris chip pos DIHILANGKAN
+dari versi ringkas ini (tetap ada di kartu penuh `#kartu-dealer` — klik pos
+masih bisa lewat panel kiri Performa/Wilayah). Sel dibuat lebih kecil
+(`text-xs`/`text-[8px]`, bukan `summaryGridHtml()` bawaan yang dirancang
+untuk blok/grid, bukan satu baris sempit).
+
+**Konsekuensi:** `npm run css` dijalankan ulang (kelas baru `text-[8px]`).
+`npm test` 27/27 hijau. **Belum diverifikasi visual di browser.**
+
+## [2026-09-14] Bilah filter atas dipusatkan lewat justify-self, bukan flex+width; panel kanan/bawah dipadatkan
+
+**Konteks:** Sesudah perbaikan `transform:none` di entri sebelumnya, screenshot
+berikutnya masih menunjukkan bilah filter menyusut ke kiri (tidak simetris,
+sebagian terlihat terpotong). Kemungkinan besar screenshot itu diambil
+sebelum refresh keras (`Ctrl+Shift+R`) memuat CSS terbaru — tapi karena
+sudah dua laporan berturutan soal properti serupa tidak kepakai, pendekatan
+diganti jadi lebih tegas alih-alih menambah override serupa lagi.
+
+**Keputusan:**
+1. `#fs-filter-host` TIDAK lagi dipaksa `width:100%` + `display:flex` untuk
+   memusatkan isinya — kembali ke lebar menyusut-ke-isi (pil) seperti semula,
+   dipusatkan lewat `justify-self:center` (properti native CSS Grid pada
+   grid item itu sendiri, tidak bergantung pada bagaimana `#filter-bar`
+   kebetulan mengisi ruang di dalamnya — lebih langsung daripada trik flex).
+2. `#fs-filter-host` dan `#fs-kartu` — `position`/`grid-area`/`transform`
+   (dan pada `#fs-kartu` juga `width`/`max-width`/`height`/`padding`)
+   sekarang diberi `!important`. Dipakai sengaja meski biasanya dihindari:
+   dua kali laporan pengguna menunjukkan spesifisitas selector
+   `#map-shell.penuh #id` yang semestinya menang telak atas kelas Tailwind
+   tunggal tidak terlihat berpengaruh di layar mereka — daripada menebak
+   ulang cascade, dipaksa menang.
+3. **Panel kanan (Opsi Peta) dipadatkan**: padding panel 16px → 10px,
+   `.toggle-row` di dalamnya (enam baris sakelar) dipadatkan lagi
+   4px→1px vertikal, khusus dalam mode layar penuh (tidak mengubah
+   tampilan panel yang sama di halaman biasa).
+4. **Strip info dealer dipadatkan**: padding `px-4 py-3` bawaan `.map-panel`
+   diganti `8px 14px` — lebih longgar sedikit untuk baris setinggi 130px
+   yang sudah satu baris ramping sejak entri sebelumnya.
+
+**Alasan:** Permintaan eksplisit pengguna — bilah filter harus simetris di
+tengah-atas, strip bawah harus persis selebar peta (kiri-kanan) dan tetap
+tinggi (atas-bawah), dan panel kanan/bawah harus menampilkan lebih banyak
+info tanpa menggulir berlebihan.
+
+**Konsekuensi:** `npm test` tetap 27/27 hijau, tidak ada kelas Tailwind
+baru (murni CSS custom di `<style>`, tidak perlu `npm run css`). **Belum
+diverifikasi visual di browser** — pengguna diminta refresh KERAS
+(Ctrl+Shift+R) supaya tidak menguji CSS lama yang ter-cache.
+
+## [2026-09-14] Bilah filter & kartu dealer masih bertabrakan setelah 2 putaran override CSS — kelas usang dihapus langsung dari HTML
+
+**Konteks:** Dua putaran perbaikan CSS sebelumnya (entri "Bilah filter atas
+dipusatkan lewat justify-self..." dan sebelumnya) tidak menyelesaikan
+laporan pengguna: bilah filter atas dan kartu dealer di strip bawah tetap
+terlihat terpotong/tertumpuk di atas panel kiri, meski panel kiri
+(`#fs-kiri-panel`) dan kanan (`#opsi-peta-panel`) — yang memakai pola
+override serupa — sudah benar.
+
+**Investigasi sebelum mengubah kode** (agent Explore, dilaporkan lengkap ke
+pengguna): server yang benar dikonfirmasi jadi satu-satunya proses Node di
+port 3000 dan memuat kode terbaru; blok `<style>` diperiksa penuh (113
+pasang kurung, 21 pasang komentar, seimbang sempurna); tidak ada aturan
+CSS lain di seluruh berkas yang menimpa selector-selector ini setelahnya;
+tidak ada JavaScript yang menyetel `style.left/width/transform` pada
+elemen-elemen ini; diuji ulang di jendela Incognito (hasil sama); dan
+pengguna mengonfirmasi mengakses `http://localhost:3000/` langsung (bukan
+salinan offline). Semua penyebab "biasa" tersingkir.
+
+**Pola yang bertahan**: `#fs-filter-host` dan `#fs-kartu` SAMA-SAMA masih
+membawa kelas Tailwind lama `absolute left-1/2 -translate-x-1/2` (sisa
+desain "melayang di tengah" dari sebelum grid dipasang), yang coba
+ditimpa lewat CSS `.penuh`-scoped (termasuk `!important` di putaran
+sebelumnya) — TAPI overridenya tampak tidak berpengaruh di layar
+pengguna, padahal semua audit spesifisitas/cascade lolos di atas kertas.
+Dua panel yang SUDAH BENAR (`#fs-kiri-panel`/`#opsi-peta-panel`) TIDAK
+punya kelas serupa (cuma `absolute top-X left-6`/`right-6`, tanpa
+`-translate-x`).
+
+**Keputusan:** Daripada terus menimpa kelas yang usang lewat CSS, kelasnya
+DIHAPUS LANGSUNG dari HTML:
+- `#fs-filter-host`: `hanya-penuh absolute top-6 left-1/2 -translate-x-1/2 z-20 map-panel`
+  → `hanya-penuh z-20 map-panel`.
+- `#fs-kartu`: `hanya-penuh absolute bottom-6 left-1/2 -translate-x-1/2 z-20 map-panel px-4 py-3 max-w-[calc(100vw-46rem)]`
+  → `hanya-penuh z-20 map-panel`.
+
+Kedua elemen ini CUMA pernah tampil di dalam grid `.penuh` (dijaga kelas
+`hanya-penuh`), jadi kelas posisi lama itu memang sudah sepenuhnya mati —
+bukan cuma kebetulan tidak kepakai. CSS `.penuh`-scoped-nya ikut
+disederhanakan (`!important`/`transform:none`/`position:static` yang jadi
+tidak perlu lagi dihapus, cuma `grid-area` + `justify-self:center` untuk
+`#fs-filter-host`, dan `grid-area`+`width`+`height`+`padding`+`display:flex`
+untuk `#fs-kartu`).
+
+**Alasan:** Menghilangkan kemungkinan interaksi CSS yang tidak dipahami
+sepenuhnya lebih pasti daripada menambah override lagi untuk properti yang
+sama — kalau elemennya tidak lagi PUNYA kelas yang bermasalah, tidak ada
+apa pun yang bisa "menang" secara keliru.
+
+**Konsekuensi:** `npm test` tetap 27/27 hijau. **Belum diverifikasi visual
+di browser oleh siapa pun di sisi developer** (tidak ada akses browser dari
+sini) — pengguna diminta konfirmasi ulang dengan screenshot baru. Kalau
+MASIH bertabrakan setelah perubahan ini, itu sinyal kuat penyebabnya bukan
+CSS/HTML proyek ini sama sekali (kandidat: ekstensi browser yang
+menyuntikkan gaya, zoom browser bukan 100%, atau sesuatu di luar kendali
+kode) — akan perlu diagnosis berbeda (screenshot panel DevTools, atau coba
+browser lain) kalau itu terjadi.
+
+## [2026-09-14] Tujuh perbaikan: hapus scope-bar, kerapatan layout, navbar+flyout hover, Opsi Peta accordion, dealer detail gabungan, bug auto-scroll
+
+**Konteks:** Permintaan pengguna, tujuh bagian sekaligus (direncanakan lewat
+Plan Mode, tiga agen Explore paralel + dua pertanyaan konfirmasi).
+
+**1. Blok "Heatmap dihitung terhadap:" dihapus** (`#scope-bar`,
+`frontend/index.html`) — dua tombolnya di dalam blok itu (`scope-clear`,
+`btn-edit-ring`) ternyata duplikat murni: `resetFilters()` sudah ada tombol
+reset kedua di bilah filter, `startGroupEdit()` sudah ada `#btn-ring-peta` di
+pojok peta. Baris `$('scope-label')`/`$('scope-clear')`/`$('btn-edit-ring')`
+di `renderAll()` (`app.js`) dihapus supaya tidak melempar error ke elemen
+yang sudah tidak ada; `$('btn-ring-peta')` (elemen lain, TIDAK dihapus) tetap
+disinkronkan seperti sebelumnya.
+
+**2. Jarak antar-blok halaman Insight dirapatkan** — `<section id="tab-peta">`
+`p-4 md:p-6 space-y-5` → `p-3 md:p-4 space-y-3`; grid 70/30 Performa/Wilayah
+`gap-4`→`gap-3`; kartu-kartu `p-5`→`p-4`; kartu ringkasan atas `p-4`→`p-3`.
+Murni angka spacing Tailwind, tidak menyentuh isi.
+
+**3. Navbar lebih ramping + flyout Master bisa dibuka lewat hover** — `<nav>`
+dan semua tombolnya `py-2.5`→`py-1.5` (+ `px-4`→`px-3.5` pada tombol nav).
+`toggleMasterMenu()` (`tables.js`) dipecah: logika "buka" jadi
+`openMasterMenu()` tersendiri, dipanggil dari DUA jalur — klik (seperti
+sebelumnya) DAN listener `mouseenter`/`mouseleave` baru pada
+`#nav-master-wrap` (jeda tutup 150ms, dibatalkan kalau mouse balik sebelum
+habis, supaya tidak "kedip" waktu kursor pindah ke daftar di bawah tombol).
+`#master-panel` diberi `z-index:300` (bukan 200 dari `.pilih-panel` biasa —
+sama dengan `#map-shell.penuh`/peta layar penuh, jadi berpotensi tertutup
+kalau tidak dinaikkan).
+
+**4. Opsi Peta jadi 6 grup accordion** (`<details>`/`<summary>` — pola yang
+SUDAH ADA di panel yang sama untuk dua legenda di bagian bawah, dipakai
+ulang, bukan komponen baru): Tampilan Dasar (basemap saja, TERBUKA), Batas
+Wilayah (Kelurahan/Kecamatan/Kota, baru dipisah jadi grup sendiri —
+sebelumnya tercampur tanpa judul grup, TERTUTUP), Tampilan Titik
+(Dealer/Pos/Penjualan, TERBUKA), Tampilan Ring Dealer (TERBUKA), Tampilan
+Coverage POS (TERBUKA), Mode Heatmap (TERBUKA). Status buka/tutup
+dikonfirmasi eksplisit ke pengguna. Tidak ada perubahan JS — semua
+`onclick`/`onchange` tetap menempel ke id yang sama, cuma nesting HTML-nya
+berubah. Berlaku di kedua mode (biasa & layar penuh) karena `#opsi-peta-panel`
+satu elemen dipakai ulang, bukan `.hanya-penuh`.
+
+**5. Klik dealer (mode biasa) langsung tampilkan ringkasan + rincian per
+kelurahan dalam SATU panel** — sebelumnya klik marker cuma menampilkan kartu
+ringkas (`#kartu-dealer`, di bawah peta jauh dari lokasi peta itu sendiri);
+"rincian per kelurahan" (`#kelurahanDetailPanel`, SUDAH melayang di kiri-atas
+peta) baru muncul sesudah klik tombol terpisah. Sekarang: `outlets.js` (klik
+marker dealer) memanggil `window.openDealerDetail(dealer.code)` langsung
+sesudah `applyScope('dealer', ...)`, TAPI HANYA saat `!S.fullscreen` (layar
+penuh tidak disentuh — sudah punya kartu ringkas + panel kiri sendiri).
+`openDealerDetail()` (`tables.js`) diberi elemen baru `#kelurahanDetailSummary`
+(disisipkan antara `kelurahanDetailBack` dan `kelurahanDetailTitle`), diisi
+`dealerCardHtml(true)` (fungsi yang sama dipakai strip `#fs-kartu` layar
+penuh — kini diekspor dari `render.js` supaya bisa dipakai `tables.js`).
+`openVillageDetail()` mengosongkan elemen ini lagi supaya tidak nyasar
+tampil waktu drill-down SATU kelurahan biasa (bukan konteks dealer).
+`window.openDealerDetail` (bukan import langsung) dipakai di `outlets.js`
+untuk menghindari lingkaran modul (`tables.js` sendiri meng-import dari
+`outlets.js`).
+
+**6. Bug auto-scroll diperbaiki (tombol menyala tapi tidak bergerak) +
+Performa Pos: cuma daftarnya yang scroll** — akar masalah: `#fs-performa`/
+`#fs-wilayah` (yang digulir `startLivePerforma()`/`startLiveWilayah()`,
+`render.js`) adalah DIV KONTEN POLOS tanpa `overflow`/tinggi terbatas
+sendiri (tumbuh mengikuti isi, `scrollHeight` selalu sama dengan
+`clientHeight` → kode "berhenti sendiri kalau tidak lebih panjang dari
+wadahnya" SELALU langsung berhenti). Yang punya `overflow-y:auto` cuma
+LELUHURNYA, `#fs-kiri-panel` (satu wadah dipakai bergantian grup
+Performa/Wilayah) — tapi `scrollTop`-nya tidak pernah disentuh. Diperbaiki
+lewat CSS flex (BUKAN ganti target elemen di JS): `#fs-kiri-panel` jadi
+`overflow-hidden flex flex-col` (bingkai saja); `#fs-performa-grup`/
+`#fs-wilayah-grup` jadi `flex flex-col h-full min-h-0` (`min-h-0` WAJIB,
+jebakan flexbox klasik — tanpa ini anak `flex-1` tidak pernah dapat tinggi
+terbatas); judul+ringkasan/tombol Pause diberi `shrink-0` (tetap fix);
+`#fs-performa`/`#fs-wilayah` sendiri jadi `flex-1 overflow-y-auto min-h-0`
+(WADAH GULIR SESUNGGUHNYA sekarang). `panelPerformaAktif()`/
+`panelWilayahAktif()` di `render.js` TIDAK diubah — targetnya SUDAH BENAR
+sejak awal, cuma CSS-nya yang belum memberi elemen itu kemampuan menggulir.
+Sekaligus (permintaan eksplisit): `renderPerformance()` memindahkan
+`performanceControlsHtml()` dari `bodyCompact` (ikut ke `#fs-performa`,
+dulu ikut tergulir) ke `#fs-ringkas` (digabung dengan `summary`, sama-sama
+`shrink-0`) — HANYA jalur `fs-*` (layar penuh); `panel-performa`/
+`fp-performa` (mode biasa & tampilan besar) tidak diminta berubah, tetap
+memakai `controls + list` seperti sebelumnya.
+
+**Konsekuensi:** `npm test` 27/27 hijau — dua assertion di
+`test/page.test.js` disesuaikan (satu memeriksa `btn-edit-ring` yang memang
+sengaja dihapus, satu memeriksa "tidak ada `<details open>`" yang sekarang
+perlu dipersempit ke DUA legenda spesifik karena 5 grup baru sengaja
+`<details open>`) — bukan tanda kerusakan, mengikuti perubahan struktur
+yang disengaja. `npm run css` dijalankan ulang (tidak ada kelas baru yang
+belum ter-build, tapi dicek untuk memastikan). Backend tidak disentuh,
+tidak perlu restart server. **Belum diverifikasi visual di browser** —
+ketujuh perubahan ini murni berdasar audit kode statis + tiga laporan agen
+Explore, belum pernah diklik langsung.
+
+## [2026-09-14] Revisi lanjutan: panel dealer diperluas ke pos/dropdown, auto-Fit, treemap jadi popup, kontras panel, flyout tidak terpotong
+
+**Konteks:** Lima revisi lanjutan dari tujuh perbaikan sebelumnya hari yang
+sama (direncanakan lewat Plan Mode, tiga agen Explore paralel).
+
+**1. Panel gabungan diperluas ke klik POS & dropdown filter**: `selectOutlet()`
+(`outlets.js`, klik marker pos) dan `pilihLingkup()` (`filter-bar.js`, dipakai
+dropdown Dealer & Pos) sekarang JUGA memanggil `window.openDealerDetail()`
+(mode biasa saja) — pola yang sama dengan klik marker dealer (entri
+sebelumnya) dan dengan `isiComboKota()` yang sudah lebih dulu membuka
+`openCitySummary()` otomatis. Klik pos memakai `outlet.dealerCode` (satu pos
+selalu milik satu dealer, tidak ada rincian-per-kelurahan versi pos
+tersendiri di kodebase ini).
+
+**2. Auto-"Fit"**: `fitToScope()` (`map.js`) diberi parameter `auto` — durasi
+animasi lebih pendek (400ms vs 700ms) dan toast "tidak ada data" DILEWATI
+waktu `auto`, supaya tidak terasa menyentak/mengganggu kalau dipanggil
+otomatis berulang kali. Dipanggil `fitToScope(true)` di akhir `renderAll()`
+(`app.js`, mencakup reset/klik marker/semua dropdown — semuanya sudah
+funnel ke sana) dan di akhir `openVillageDetail()` (`tables.js`, mencakup
+klik kelurahan di peta + `jumpFromDealer`/`jumpToVillage`, jalur terpisah
+yang tidak lewat `renderAll()`). Tombol Fit manual tidak berubah.
+
+**3. "Proporsi Penjualan" jadi popup saja**: kartu inline dihapus dari
+halaman, diganti satu tombol ikon di bilah filter (`openTreemapFull()`).
+`#modal-treemap` diubah dari full-layar jadi dialog di tengah layar
+(`bg-slate-900/40` + kartu `max-w-2xl`, klik latar gelap menutup) berisi
+switcher Per Kota/Dealer/Pos yang DIPINDAH (bukan disalin — `setTreemapView()`
+mencari id yang sama, `S.treemapView` satu state bersama) dari kartu lama.
+`renderTreemap()` (`render.js`) disederhanakan: dulu dua chart terpisah
+("kecil" inline selalu digambar tanpa syarat + "besar" modal bersyarat),
+sekarang SATU chart, digambar HANYA waktu `#modal-treemap` terbuka —
+`renderAll()` tetap memanggilnya setiap render tapi keluar lebih awal kalau
+modal tertutup. `S.treemapChartBesar` (state, tidak terpakai lagi) dihapus.
+
+**4. Kontras `.map-panel` ditingkatkan**: opacity latar 0.82→0.94, border
+`rgba(255,255,255,0.6)` (nyaris putih di atas putih) → `rgba(11,47,107,0.18)`
+(navy tipis, terlihat di atas latar apa pun), shadow alpha 0.14→0.28. Kaca
+(backdrop-filter) TETAP dipertahankan (beda alasan dari `.pilih-panel` yang
+sengaja solid — panel ini ADA DI DALAM peta). Berlaku otomatis ke
+`#fs-kiri-panel`/`#opsi-peta-panel`/`#kelurahanDetailPanel` (satu kelas
+bersama).
+
+**5. Flyout Master tidak lagi terpotong**: akar masalah — `#nav-master-wrap`
+ada di dalam `<div class="... overflow-x-auto">` (pembungkus baris tombol
+nav), dan `overflow-x-auto` per spesifikasi CSS memaksa `overflow-y` efektif
+jadi `auto` juga, ikut memotong `#master-panel` yang melayang di bawah
+tombol. Diperbaiki TANPA menyentuh `.pilih-panel` (dipakai bersama combobox
+filter) atau melepas `overflow-x-auto` (mungkin perlu untuk layar sempit):
+`openMasterMenu()` (`tables.js`) sekarang menghitung posisi tombol lewat
+`getBoundingClientRect()` dan menyetel `#master-panel` jadi
+`position:fixed` + `top`/`left` inline saat dibuka — `position:fixed` tidak
+pernah dipotong `overflow` leluhur mana pun.
+
+**Konsekuensi:** `npm test` 27/27 hijau (tidak ada assertion yang perlu
+disesuaikan kali ini). `npm run css` dijalankan ulang (kelas baru
+`max-w-2xl`/`shadow-xl`/`bg-slate-900`, dikonfirmasi masuk build). Backend
+tidak disentuh, tidak perlu restart server. **Belum diverifikasi visual di
+browser** — kelima revisi ini murni dari audit kode + tiga agen Explore.
+
+## [2026-09-14] Revisi lanjutan #2: durasi auto-Fit, kartu pos 2 baris, tombol Keluar, gaya bilah filter, layar penuh responsif, sticky Performa mode biasa
+
+**Konteks:** Enam revisi lanjutan lagi hari yang sama, berdasar screenshot
+mode layar penuh peta dengan POS terpilih (direncanakan lewat Plan Mode,
+satu agen Explore).
+
+**1. Durasi auto-Fit diperlambat**: `fitToScope(auto)` (`map.js`) — kedua
+`fitBounds()` diganti dari `auto ? 400 : 700` jadi `auto ? 900 : 700`.
+Kebalikan dari niat semula (entri sebelumnya: dibuat LEBIH CEPAT dari fit
+manual supaya tidak menyentak waktu filter berganti cepat) — pengguna
+eksplisit bilang malah terasa "terlalu cepat" dan minta diperlambat "agar
+bisa dinikmati". Pelajaran: transisi yang enak dilihat lebih penting
+daripada meminimalkan "jank" dari filter yang berganti cepat.
+
+**2. Kartu ringkas dealer/pos (strip 130px bawah peta layar penuh) jadi 2
+baris**: `dealerCardHtml(compact)` (`render.js`) — sebelumnya satu baris
+sepanjang-panjangnya dengan gulir horizontal (avatar+nama+semua sel
+stat+Tutup sebaris), sekarang baris 1 = avatar + judul (nama POS kalau
+scope pos aktif, kalau tidak nama dealer) + subjudul nama dealer induk
+(cuma muncul kalau judulnya nama pos) + tombol Tutup ikon X; baris 2 = grid
+stat horizontal, sel "Pos" dibuang dari baris 2 kalau sudah jadi judul
+baris 1 (tidak diulang). Alasan: pos butuh info lebih banyak (Coverage 1-8
++ 3 AVG) daripada satu baris muat tanpa gulir jauh, padahal tinggi 130px
+banyak tersisa kosong.
+
+**3. Tombol "Keluar" pindah ke sebelah bilah filter (layar penuh)**: pola
+relokasi node yang sama dengan `moveFilterBar()` diterapkan ke `#btn-penuh`
+lewat `moveExitButton()` baru (`map.js`), dipanggil di awal
+`toggleFullscreen()`. `#btn-penuh` di mode biasa TETAP tombol "Layar penuh"
+di `#map-top-buttons` — waktu keluar dari layar penuh dia dipindah balik ke
+situ, bukan diduplikasi. Host baru `#fs-exit-host` (`index.html`), sama
+`grid-area:topbar` dengan `#fs-filter-host` tapi `justify-self:start` (kiri)
+vs `center` (tengah) — jadi "di samping" dalam baris yang sama.
+
+**4. Bilah filter layar penuh diberi gaya sendiri**: `#fs-filter-host`
+(bukan `.map-panel` global) ditimpa jadi gradasi biru transparan
+(`linear-gradient(135deg, rgba(59,130,246,.28), rgba(29,78,216,.22))`) +
+border biru + shadow lebih tebal — dibedakan dari navy gelap navbar dan
+dari kaca putih panel lain (Opsi Peta, dsb).
+
+**5. Layar penuh responsif di layar sempit**: `@media (max-width: 900px)`
+BARU (media query breakpoint lebar PERTAMA di `index.html` — sebelumnya
+cuma ada `prefers-reduced-motion`) — `#map-shell.penuh` jadi satu kolom
+(`grid-template-columns:1fr`), baris `topbar/map/left/right/bottom`
+bertumpuk vertikal, `#map-shell.penuh` sendiri yang menggulir
+(`overflow-y:auto`), panel kiri/kanan dibatasi `max-height:50vh`. Nama
+grid-area tidak berubah jadi elemen yang sudah punya `grid-area:left/right/
+bottom` otomatis ikut susunan baru. CSS saja — TIDAK ada tombol show/hide
+baru, dikonfirmasi pengguna eksplisit sebelum implementasi.
+
+**6. Mode biasa "ANALISIS PERFORMA POS DEALER": ringkasan+sort+papan
+kelompok tetap diam**: pola yang sama seperti sudah diterapkan untuk versi
+layar penuh (entri 2026-09-14 sebelumnya, item 6) sekarang diterapkan juga
+ke kartu mode biasa. `renderPerformance()` (`render.js`) dipecah:
+`$('panel-performa')` sekarang cuma dapat `rowsHtml` (baris pos saja, tanpa
+controls/groupBoard), `$('ringkas-jangkauan')` dapat gabungan
+`summary + controls + performanceGroupBoard(counts)` (tetap diam). Kartu
+luar (`index.html`) diberi `flex flex-col overflow-hidden` +
+`max-height:640px`, header/helper-text/`#ringkas-jangkauan` diberi
+`shrink-0`, `#panel-performa` ganti dari `max-height:460px` tetap jadi
+`flex-1 overflow-y-auto min-h-0`. `bodyWide` (gabungan lengkap
+controls+groupBoard+rows) DIPERTAHANKAN apa adanya untuk
+`fp-performa`/`fp-ringkas` ("Tampilan lebih besar") — di luar cakupan
+permintaan ini, sengaja tidak disentuh.
+
+**Konsekuensi:** `npm test` — satu assertion di `test/page.test.js` (baris
+~436) perlu disesuaikan: dulu memeriksa `panel-performa` DAN `fp-performa`
+sama-sama pakai `bodyWide`, sekarang `panel-performa` pakai `rowsHtml`
+sendiri (assertion baru memeriksa `rowsHtml` dan gabungan
+`ringkas-jangkauan` secara terpisah), `fp-performa` tetap diperiksa pakai
+`bodyWide`. Hasil akhir 27/27 hijau. `npm run css` dijalankan ulang (tidak
+ada kelas Tailwind baru yang signifikan — styling baru mayoritas lewat
+`<style>` custom, bukan utility class). Backend tidak disentuh. **Belum
+diverifikasi visual di browser** — keenam revisi ini murni dari perencanaan
+lewat Plan Mode + satu agen Explore, belum dites manual di layar sungguhan.
+
+## [2026-09-14] Revisi lanjutan #3: gaya panel biru dipakai juga di mode biasa, kartu pos/dealer tidak lagi menggulir, block summary baru di strip bawah layar penuh
+
+**Konteks:** Tiga revisi lanjutan lagi hari yang sama, dari screenshot mode
+layar penuh peta yang sama dengan revisi #2 (satu agen Explore menelusuri
+struktur styling filter bar/panel kiri/summary sebelum implementasi).
+
+**1. Gaya "panel biru lengkung" (sebelumnya cuma `#fs-filter-host` di layar
+penuh) sekarang jadi gaya DASAR `#filter-bar` itu sendiri**: berlaku
+otomatis di KEDUA mode karena `#filter-bar` adalah satu node DOM yang
+dipindah (bukan dicerminkan) antara `#filter-bar-slot` (mode biasa) dan
+`#fs-filter-host` (layar penuh) lewat `moveFilterBar()`. `#fs-filter-host`
+sekarang jadi wadah polos (kelas `.map-panel` dilepas dari HTML-nya) —
+sebelumnya dia yang mengecat warna dan `#filter-bar` di dalamnya
+distrip balik ke transparan; sekarang terbalik, `#filter-bar` yang mengecat
+warnanya sendiri dan host cuma memposisikan. `#filter-bar-slot` diberi
+padding (`8px 12px 0`) supaya sudut lengkung bilahnya kelihatan (latar
+halaman `--canvas` tampak di tepi) — bilah yang tadinya "rak" penuh lebar
+sekarang tampil sebagai blok mengambang, sama seperti versi layar penuh.
+Konsekuensi tes: `test/page.test.js` yang tadinya memeriksa
+`.map-panel:not(#fs-filter-host)` (pengecualian eksplisit supaya rumah
+bilah filter TIDAK ikut aturan `overflow-y:auto` — kalau ikut, dropdown
+Kota/Dealer/Pos yang membuka ke bawah akan terpotong) diperbarui: aturan
+overflow sekarang generik tanpa pengecualian (`.map-panel { overflow-y:
+auto }` polos), dan yang diperiksa berubah jadi memastikan `#fs-filter-host`
+memang TIDAK LAGI punya kelas `.map-panel` sama sekali — jaminan yang sama
+(dropdown tidak pernah kepotong), mekanismenya saja yang berbeda.
+
+**2. Kartu ringkas dealer/pos (`dealerCardHtml(compact)`, dipakai `#fs-kartu`
+DAN `#kelurahanDetailSummary` di panel kiri w-96 mode biasa) tidak lagi
+menggulir horizontal**: baris 2 (grid stat) diganti dari `flex +
+overflow-x-auto` jadi CSS grid `auto-fit, minmax(56px,1fr)` — di strip
+lebar layar penuh semua sel tetap muat sebaris (tidak ada perubahan
+visual signifikan di sana), tapi di panel kiri w-96 mode biasa yang jauh
+lebih sempit, sel yang tidak muat sekarang TURUN ke baris berikutnya
+sendiri alih-alih dipaksa satu baris yang harus digulir. Satu markup,
+dipakai apa adanya di kedua konteks.
+
+**3. Font di panel kiri (`#kelurahanDetailPanel`) mode biasa dirampingkan**:
+judul `text-lg`→`text-base`, meta `text-[11px]`→`text-[10px]`, empat angka
+ringkasan atas (Total Penjualan/Kelurahan/Kontribusi di ketiga jalur:
+`openDealerDetail`/`openCitySummary`/`openVillageDetail`) `text-xl`→
+`text-lg`, jarak antar-blok `gap-3`/`pb-4`→`gap-2`/`pb-3` — supaya lebih
+banyak informasi muat tanpa menggulir, tanpa mengorbankan keterbacaan
+(field yang sudah kecil seperti baris kelurahan/pos individual TIDAK
+disentuh, sudah cukup padat).
+
+**4. Block summary baru di atas strip info dealer/pos, layar penuh**:
+sebelumnya angka ringkasan (Total Sales/AVG Kontribusi/dst, sama dengan
+`#ringkas-utama` di atas peta mode biasa) HILANG begitu masuk layar penuh
+— cuma ada di halaman biasa. `#fs-ringkas-utama` (baru, `.map-panel`,
+`grid-area: ringkas`, baris `auto` BARU di antara `map` dan `bottom`)
+ditambah, diisi fungsi yang SAMA (`renderTopSummary()` di `render.js`
+sekarang menulis `innerHTML` yang sama ke `#ringkas-utama` DAN
+`#fs-ringkas-utama`, bukan menghitung ulang) — sekaligus sekalian
+mempersempit strip dealer/pos (`#fs-kartu`) dari 130px jadi 100px dan
+padding vertikalnya dari `8px 14px` jadi `6px 14px`, karena kartu 2 baris
+(revisi lanjutan #2 sebelumnya) menyisakan banyak ruang kosong atas-bawah
+di ketinggian 130px yang tadinya dirancang untuk kartu 1-baris lama.
+`grid-template-rows`/`grid-template-areas` `#map-shell.penuh` dan
+`@media(max-width:900px)`-nya diperbarui menyertakan baris/area "ringkas"
+baru ini (kolom sama dengan "map"/"bottom" — lebar kiri-kanan sama persis
+seperti diminta).
+
+**Konsekuensi:** `npm test` — dua assertion di `test/page.test.js` (rumah
+bilah filter/`overflow-y:auto`) disesuaikan mengikuti perubahan arsitektur
+gaya #1 di atas (bukan bug, perubahan struktural yang disengaja). Hasil
+akhir 27/27 hijau. `npm run css` dijalankan ulang (tidak ada kelas Tailwind
+arbitrary baru yang signifikan). Backend tidak disentuh. **Belum
+diverifikasi visual di browser** — ketiga revisi ini murni dari audit kode
++ satu agen Explore, termasuk ukuran pas 100px/gap-2/text-lg yang perlu
+dicek langsung di layar (kalau kurang pas, gampang disetel ulang, angkanya
+bukan hasil pengukuran piksel sungguhan).
+
+## [2026-09-14] Rebranding ke ATLAS + polesan UI/UX korporat Astra Motor
+
+**Konteks:** Lima permintaan (direncanakan lewat Plan Mode, tiga agen
+Explore paralel + dua `AskUserQuestion` untuk memastikan cakupan ganti
+nama folder dan akar masalah panel Opsi Peta sebelum eksekusi): (1) label
+tombol "Fit" → "Fokuskan"; (2) logo motor navbar → ikon + wordmark "ATLAS
+MARKETING INTELLIGENCE"; (3) nama produk "Astra Command Center" → "ATLAS:
+Astra Motor Geospasial Marketing Intelligence" di (hampir) semua tempat;
+(4) panel Opsi Peta menabrak kontrol zoom peta + bayangannya melebihi
+kotak peta; (5) polesan warna korporat memakai identitas Astra Motor
+(navy primer, merah sekunder).
+
+**1-2. "Fokuskan" + wordmark navbar**: `frontend/index.html` — teks tombol
+`#btn-fit` diganti; ikon navbar `ph-motorcycle` → `ph-map-trifold` (ikon
+atlas/peta), ditambah wordmark dua baris "ATLAS" / "Marketing
+Intelligence" (`hidden sm:flex`, disembunyikan duluan di layar sangat
+sempit sebelum tombol tab kepotong — pola sama dengan status pill navbar
+yang sudah ada).
+
+**3. Rename ke ATLAS**: `package.json`+`package-lock.json` (`name`:
+`astra-command-center`→`atlas`), `<title>`/`<h1>` di
+`frontend/index.html`/`login.html`, judul `README.md`/`docs/PRD.md`, nama
+service di `docs/PINDAH.md` (systemd `Description=`, `WorkingDirectory`,
+nssm `AstraCommandCenter`→`Atlas`), contoh path di `docs/TUTOR.md`, nama
+Scheduled Task di `ops/install-tasks.ps1` (termasuk wildcard pencarian
+`'Astra*'`→`'ATLAS*'` di pesan `Write-Host`, supaya saran perintah di
+layar tetap benar sesudah rename), judul jendela `start.bat`, header
+`User-Agent` di `scripts/fetch-boundaries.js`, pesan konsol
+`backend/server/index.js`/`scripts/set-password.js`, `<title>` tiga
+berkas `prototype/*.html`, satu kalimat konteks baru di `CLAUDE.md`, dan
+assertion `test/server-auth.test.js` yang memeriksa teks halaman login.
+**SENGAJA TIDAK disentuh** (dikonfirmasi via `AskUserQuestion`): nama
+folder Windows `astra-command-center` (folder AKTIF tempat sesi ini
+berjalan — ganti nama langsung berisiko memutus sesi; langkah manual
+diberikan ke pengguna untuk dilakukan sendiri nanti), nama database
+`astra`/`astra_customers` (sudah lepas dari nama produk sejak awal), env
+var fungsional `ACC_ENV_FILE` (nama variabel yang benar-benar dibaca
+`config.js` — bukan sekadar teks kosmetik, mengganti nama akan memutus
+resolusi `.env` yang sudah berjalan), `docs/archive/PLAN-2026-08-12.md`
+(arsip historis), dan referensi path di `docs/DECISIONS.md` baris ~1453
+(catatan bertanggal).
+
+**PERINGATAN OPERASIONAL**: `ops/install-tasks.ps1` mencocokkan/menghapus
+tugas terjadwal LAMA lewat namanya (`Remove-TaskIfExists $namaApp`).
+Karena `$namaApp` sekarang `'ATLAS'` (dulu `'Astra Command Center'`),
+menjalankan script ini lagi TIDAK akan menghapus tugas lama yang sudah
+terlanjur terpasang dengan nama lama — dua tugas terjadwal (lama + baru)
+akan berjalan BERDAMPINGAN dan berebut port yang sama. Kalau pengguna
+sudah pernah memasang tugas terjadwal sebelumnya, mereka HARUS menghapus
+tugas lama `'Astra Command Center'`/`'Astra Command Center - Backup'`
+secara manual (`Unregister-ScheduledTask`) sebelum menjalankan
+`install-tasks.ps1` versi baru ini.
+
+**4. Panel Opsi Peta**: dikonfirmasi via `AskUserQuestion` — BUKAN masalah
+tata letak (sudah benar melayang di kotak peta), tapi dua tabrakan
+konkret: (a) `NavigationControl` MapLibre (`frontend/js/map.js`) dipindah
+dari `'top-right'` ke `'bottom-left'` — sebelumnya SAMA PERSIS menempati
+pojok kanan-atas dengan `#opsi-peta-panel` (DOM biasa, bukan kontrol
+MapLibre, jadi tidak ikut mekanisme stacking otomatis MapLibre), membuat
+tombol zoom/kompas tertutup panel; `'bottom-left'` dipilih karena
+`ScaleControl` (default posisi sama) dan atribusi bawaan MapLibre (default
+`bottom-right`) sudah aman menumpuk rapi di situ. (b) `.map-panel` shadow
+diperkecil (lihat poin 5) — bayangan besar (`0 16px 40px`) sebelumnya
+tampak "melebihi rasio" kotak peta membulat waktu panelnya lebih kecil
+dari layar penuh.
+
+**5. Polesan warna korporat**: token `--astra-red-dark` baru ditambah;
+`#topnav` dan `.nav-btn.active` diberi garis aksen merah tipis
+(`border-bottom`, 3px/2px) — SEMUA `.nav-btn` (termasuk yang tidak aktif)
+ikut diberi `border-bottom: 2px solid transparent` supaya tingginya
+konsisten (kalau cuma tab aktif yang dapat border, tab itu jadi 2px lebih
+tinggi dari yang lain, kelihatan seperti bug "jiggle" waktu ganti tab).
+`.map-panel` shadow `0 16px 40px rgba(...,0.28)` → `0 10px 24px
+rgba(...,0.20)` (poin 4b). Class baru `.btn-primary` (gradasi navy +
+`filter: brightness(1.08)` waktu hover) menggantikan pola
+`style="background:var(--astra-navy)"` yang sebelumnya diulang manual di
+12 tombol `index.html` + beberapa template di `tables.js`/`render.js` —
+SATU pengecualian sengaja TIDAK diikutkan: `#imp-bar` (`index.html`
+baris ~772) bukan tombol, itu bilah progres impor yang lebar `%`-nya
+diset JS lewat `style.width` — kalau ikut diganti classnya jadi ambigu
+(warna latar ada di dua tempat, class DAN kemungkinan sisa style). Warna
+status data (`emerald-*`/`amber-*`/`red-600` Tailwind) SENGAJA TIDAK
+disentuh — prinsip pemisahan makna warna didokumentasikan lewat komentar
+baru di `:root`: merah brand cuma untuk elemen dekoratif statis, tidak
+pernah untuk angka/badge/status.
+
+**Temuan sampingan (bukan disengaja, dicatat supaya tidak mengejutkan
+sesi berikutnya)**: `frontend/styles/app.css` (sumber Tailwind) ternyata
+punya salinan DUPLIKAT dari banyak aturan custom yang sama dengan
+`<style>` inline di `frontend/index.html` (`:root`, `#topnav`,
+`.nav-btn`, `.map-panel`, dst) — sudah lama TIDAK SINKRON (mis. opacity
+`.map-panel` di situ masih `0.72`, bukan `0.94` yang sudah dipakai sejak
+sesi sebelumnya) dan praktiknya SUDAH JADI KODE MATI: `<link
+rel="stylesheet" href="/css/app.css">` dimuat LEBIH DULU di `<head>`
+daripada `<style>` inline yang menyusul, jadi untuk selector yang sama
+dengan spesifisitas sama, aturan yang datang BELAKANGAN (inline) selalu
+menang lewat urutan cascade — isi custom CSS di `frontend/styles/app.css`
+tidak pernah benar-benar terlihat di `index.html` selama ini. Sesi ini
+CUMA menyinkronkan token/aturan BARU yang ditambahkan (`--astra-red-dark`,
+aksen merah navbar, `.btn-primary`) ke berkas itu untuk konsistensi kode,
+TIDAK memperbaiki drift lama (`.map-panel` opacity/shadow) karena itu di
+luar cakupan permintaan ini — kalau nanti ingin dibereskan, opsinya cuma
+dua: hapus salinan custom CSS di `frontend/styles/app.css` sepenuhnya
+(biar Tailwind cuma menghasilkan utility class, bukan duplikat custom
+rules), atau samakan isinya persis dengan `index.html` dan terima bahwa
+salah satu tetap jadi "sumber kebenaran" yang harus diubah duluan tiap
+kali.
+
+**Konsekuensi:** `npm test` — satu assertion `test/server-auth.test.js`
+disesuaikan (cek teks "Astra Command Center" di halaman login → "ATLAS").
+Hasil akhir 27/27 hijau. `npm run css` dijalankan ulang. Backend disentuh
+minimal (satu baris pesan konsol startup, satu baris posisi
+`NavigationControl`) — server perlu di-restart supaya perubahan
+`map.js`/`index.js` kepakai. **Belum diverifikasi visual di browser** —
+kelima perubahan ini murni dari audit kode + tiga agen Explore, termasuk
+posisi wordmark navbar di berbagai lebar layar, tampilan aksen merah,
+dan seberapa jauh bayangan panel Opsi Peta sekarang "masuk" ke kotak peta.

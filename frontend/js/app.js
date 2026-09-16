@@ -16,7 +16,7 @@ import {
   startCoverageEdit, startGroupEdit,
 } from './rings.js';
 import { fillFilterBar, onPeriodChange, resetFilters, syncFilterBar } from './filter-bar.js';
-import { activeRows, applyScope, scopeLabel, scopeValue } from './filters.js';
+import { activeRows, applyScope, scopeValue } from './filters.js';
 import {
   addLayers, fitToScope, invalidateSalePoints, paintChoropleth, redrawMap, setBasemap,
   setCoverageViewPos, setHeatmapMode, setRingViewDealer, syncGroupControls,
@@ -138,10 +138,6 @@ export function renderAll() {
   renderDealerCard();
   renderDealerLegend(rows);
 
-  const scope = scopeLabel();
-  $('scope-label').textContent = scope;
-  $('scope-clear').classList.toggle('hidden', scope === 'seluruh penjualan');
-
   // Sejak 2026-08-31 sore: ring milik DEALER, coverage milik POS — tombolnya SATU
   // slot per lokasi, tapi label dan aksinya ikut scope yang sedang aktif. Dealer
   // scope menang kalau kebetulan keduanya aktif (tidak akan terjadi sejak scope
@@ -150,8 +146,6 @@ export function renderAll() {
   const posScope = scopeValue('pos') !== 'ALL';
   const bisaEditGroup = dealerScope || posScope;
   const labelGroup = dealerScope ? 'Edit ring' : 'Edit coverage';
-  $('btn-edit-ring').classList.toggle('hidden', !bisaEditGroup);
-  $('btn-edit-ring').lastChild.textContent = dealerScope ? 'Edit ring dealer ini' : 'Edit coverage pos ini';
   $('btn-ring-peta').classList.toggle('hidden', !bisaEditGroup);
   $('btn-ring-peta').querySelector('span').textContent = labelGroup;
 
@@ -185,6 +179,14 @@ export function renderAll() {
       openVillageDetail(S.selectedVillage);
     }
   }
+
+  // Sejak 2026-09-14: peta ikut "Fit" otomatis (auto=true — animasi 900ms yang
+  // sengaja pelan, tanpa toast "tidak ada data") tiap kali renderAll() jalan — ini funnel bersama
+  // reset filter, klik marker dealer/pos, dan semua pilihan dropdown Kota/Kares/
+  // Dealer/Pos, jadi satu baris di sini sudah mencakup semuanya. Klik kelurahan di
+  // peta funnel-nya beda (lewat openVillageDetail() langsung, TIDAK renderAll()) —
+  // fitToScope(true) untuk jalur itu ditaruh di openVillageDetail() sendiri.
+  if (S.layersReady) fitToScope(true);
 }
 
 /* ==========================================================================

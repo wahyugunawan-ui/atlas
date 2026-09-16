@@ -1,4 +1,4 @@
-# Astra Command Center
+# ATLAS: Astra Motor Geospasial Marketing Intelligence
 
 Dashboard analisis distribusi dealer motor untuk tim channel. Menampilkan sebaran
 penjualan per kelurahan di peta, dan menghitung **berapa persen penjualan tiap pos
@@ -115,9 +115,9 @@ powershell -ExecutionPolicy Bypass -File ops\install-tasks.ps1
 
 Memasang dua tugas terjadwal, **tanpa perlu hak admin**:
 
-- **Astra Command Center** — menyalakan PostgreSQL lalu aplikasinya setiap kali
+- **ATLAS** — menyalakan PostgreSQL lalu aplikasinya setiap kali
   pengguna ini login, dan menghidupkannya ulang (sampai 3x) kalau prosesnya mati.
-- **Astra Command Center - Backup** — `pg_dump` tiap hari jam 19:00 ke
+- **ATLAS - Backup** — `pg_dump` tiap hari jam 19:00 ke
   `C:/astra-data/backup`, disimpan 14 hari, dan tiap hasilnya diperiksa dengan
   `pg_restore --list` supaya berkas yang cacat ketahuan hari itu juga.
 
@@ -284,8 +284,8 @@ hijau, tapi lewat browser perilakunya tidak berubah sama sekali.
 Tutup jendela `start.bat` lalu buka lagi. Kalau memakai tugas terjadwal:
 
 ```
-Stop-ScheduledTask  -TaskName 'Astra Command Center'
-Start-ScheduledTask -TaskName 'Astra Command Center'
+Stop-ScheduledTask  -TaskName 'ATLAS'
+Start-ScheduledTask -TaskName 'ATLAS'
 ```
 
 Pindah ke laptop atau VPS lain: lihat **[PINDAH.md](docs/PINDAH.md)**.

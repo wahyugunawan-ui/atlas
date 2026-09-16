@@ -16,6 +16,8 @@ import {
   activeRows, clearScope, dealerBreakdown, pageFilters, scopeValue, setScope,
 } from './filters.js';
 import { selectOutlet } from './outlets.js';
+import { dealerCardHtml } from './render.js';
+import { fitToScope } from './map.js';
 import {
   contributionPercent, contributionsForRows, groupByCity, referenceGap, referenceRatio,
   relativePosition,
@@ -125,19 +127,29 @@ export function openDealerDetail(dealerCode) {
     : null;
 
   $('kelurahanDetailBack').innerHTML = '';
+  // Ringkasan dealer (avatar, nama, AVG Kontribusi/Posisi Relatif/Acuan Bisnis,
+  // pecahan ring/coverage) digabung ke ATAS rincian per kelurahan yang sudah ada
+  // di sini — permintaan user: satu panel, bukan dua langkah klik. Dipakai versi
+  // compact yang sama dengan strip #fs-kartu (layar penuh), sudah satu baris
+  // ramping. Aman dipanggil di sini: dealerCode yang dikirim ke fungsi ini selalu
+  // sama dengan scope dealer yang sedang aktif di SEMUA titik panggil yang ada
+  // (klik marker, tombol "Rincian per kelurahan" di kartunya sendiri, tombol
+  // kembali antar-kabupaten) — dealerCardHtml() membaca scope aktif, bukan
+  // parameter ini, tapi keduanya selalu selaras.
+  $('kelurahanDetailSummary').innerHTML = dealerCardHtml(true);
   $('kelurahanDetailTitle').textContent = name;
   $('kelurahanDetailMeta').textContent =
     `${formatNumber(cities.length)} kabupaten · ${formatNumber(villageCount)} kelurahan`;
 
   $('kelurahanDetailList').innerHTML =
-    `<div class="grid grid-cols-2 gap-3 pb-4 border-b border-slate-200">` +
+    `<div class="grid grid-cols-2 gap-2 pb-3 border-b border-slate-200">` +
     `<div><div class="text-[10px] uppercase font-bold text-slate-400">Total Penjualan</div>` +
-    `<div class="text-xl font-extrabold text-slate-900 mono">${esc(formatNumber(total))}</div></div>` +
+    `<div class="text-lg font-extrabold text-slate-900 mono">${esc(formatNumber(total))}</div></div>` +
     `<div><div class="text-[10px] uppercase font-bold text-slate-400">Kelurahan Ber-sales</div>` +
-    `<div class="text-xl font-extrabold text-slate-900 mono">${esc(formatNumber(villageCount))}</div></div>` +
+    `<div class="text-lg font-extrabold text-slate-900 mono">${esc(formatNumber(villageCount))}</div></div>` +
     `<div><div class="text-[10px] uppercase font-bold text-slate-400" ` +
     'title="Rata-rata Kontribusi Penjualan seluruh kelurahan yang dilayani dealer ini, terhadap total dealer ini per kota.">Rata-rata Kontribusi</div>' +
-    `<div class="text-xl font-extrabold text-slate-900 mono">${esc(formatPercent(avgContribution))}</div></div>` +
+    `<div class="text-lg font-extrabold text-slate-900 mono">${esc(formatPercent(avgContribution))}</div></div>` +
     `<div><div class="text-[10px] uppercase font-bold text-slate-400">Mode Heatmap</div>` +
     `<div class="text-sm font-bold text-slate-700 mt-0.5">${esc(heatmapModeLabel())}</div></div>` +
     '</div>' +
@@ -197,19 +209,19 @@ export function openCitySummary(cityCode) {
   $('kelurahanDetailMeta').textContent = `${formatNumber(villageCount)} kelurahan berpenjualan · ${cityCode}`;
 
   $('kelurahanDetailList').innerHTML =
-    `<div class="grid grid-cols-2 gap-3 pb-4 border-b border-slate-200">` +
+    `<div class="grid grid-cols-2 gap-2 pb-3 border-b border-slate-200">` +
     `<div><div class="text-[10px] uppercase font-bold text-slate-400">Total Penjualan</div>` +
-    `<div class="text-xl font-extrabold text-slate-900 mono">${esc(formatNumber(kota.total))}</div></div>` +
+    `<div class="text-lg font-extrabold text-slate-900 mono">${esc(formatNumber(kota.total))}</div></div>` +
     `<div><div class="text-[10px] uppercase font-bold text-slate-400">Jumlah Kelurahan</div>` +
-    `<div class="text-xl font-extrabold text-slate-900 mono">${esc(formatNumber(villageCount))}</div></div>` +
+    `<div class="text-lg font-extrabold text-slate-900 mono">${esc(formatNumber(villageCount))}</div></div>` +
     `<div><div class="text-[10px] uppercase font-bold text-slate-400" ` +
     'title="Rata-rata Kontribusi Penjualan seluruh kelurahan berpenjualan di kota ini.">Rata-rata Kontribusi</div>' +
-    `<div class="text-xl font-extrabold text-slate-900 mono">${esc(formatPercent(avgContribution))}</div></div>` +
+    `<div class="text-lg font-extrabold text-slate-900 mono">${esc(formatPercent(avgContribution))}</div></div>` +
     `<div><div class="text-[10px] uppercase font-bold text-slate-400">Mode Heatmap</div>` +
     `<div class="text-sm font-bold text-slate-700 mt-0.5">${esc(heatmapModeLabel())}</div></div>` +
     '</div>' +
 
-    `<div class="pb-4">` +
+    `<div class="pb-3">` +
     `<div class="text-[11px] uppercase font-bold text-slate-400 mb-2">Distribusi Posisi Relatif</div>` +
     (villageCount
       ? Object.entries(distribusi).map(([label, n]) =>
@@ -412,18 +424,21 @@ export function openVillageDetail(code, fromDealer) {
       `class="text-[11px] font-bold text-slate-500 hover:text-slate-800">` +
       `&lsaquo; kembali ke ${esc(S.dealerNames[fromDealer] || fromDealer)}</button>`
     : '';
+  // Drill-down kelurahan biasa bicara soal SATU kelurahan, bukan dealer — ringkasan
+  // dealer (diisi openDealerDetail()) dikosongkan supaya tidak nyasar tampil di sini.
+  $('kelurahanDetailSummary').innerHTML = '';
   $('kelurahanDetailTitle').textContent = village.name || code;
   $('kelurahanDetailMeta').textContent =
     `${village.district || ''} · ${village.cityName || ''} · ${code}`;
 
   $('kelurahanDetailList').innerHTML =
     // --- Blok 1: OVERVIEW ---
-    `<div class="grid grid-cols-2 gap-3 pb-4 border-b border-slate-200">` +
+    `<div class="grid grid-cols-2 gap-2 pb-3 border-b border-slate-200">` +
     `<div><div class="text-[10px] uppercase font-bold text-slate-400">Total Penjualan</div>` +
-    `<div class="text-xl font-extrabold text-slate-900 mono">${esc(formatNumber(total))}</div></div>` +
+    `<div class="text-lg font-extrabold text-slate-900 mono">${esc(formatNumber(total))}</div></div>` +
     `<div><div class="text-[10px] uppercase font-bold text-slate-400" ` +
     `title="Kontribusi penjualan kelurahan terhadap total penjualan kotanya.">Kontribusi Penjualan</div>` +
-    `<div class="text-xl font-extrabold text-slate-900 mono">${esc(formatPercent(stats.contribution))}</div></div>` +
+    `<div class="text-lg font-extrabold text-slate-900 mono">${esc(formatPercent(stats.contribution))}</div></div>` +
     `<div><div class="text-[10px] uppercase font-bold text-slate-400">Posisi Relatif</div>` +
     `<div class="mt-0.5">${posisiBadgeHtml(stats.posisi)}</div></div>` +
     `<div><div class="text-[10px] uppercase font-bold text-slate-400" ` +
@@ -434,7 +449,7 @@ export function openVillageDetail(code, fromDealer) {
     }</div></div></div>` +
 
     // --- Blok 2: SALES ---
-    `<div class="pb-4 border-b border-slate-200">` +
+    `<div class="pb-3 border-b border-slate-200">` +
     `<div class="text-[11px] uppercase font-bold text-slate-400 mb-2">Tren Bulanan</div>` +
     (trend
       ? '<div id="village-trend-chart"></div>'
@@ -442,7 +457,7 @@ export function openVillageDetail(code, fromDealer) {
     '</div>' +
 
     // --- Blok 3: DISTRIBUTION ---
-    `<div class="pb-4 border-b border-slate-200">` +
+    `<div class="pb-3 border-b border-slate-200">` +
     `<div class="text-[11px] uppercase font-bold text-slate-400 mb-2">Distribusi</div>` +
     `<div class="grid grid-cols-2 gap-2 text-xs text-slate-600">` +
     `<div>Peringkat: <b class="text-slate-800">${
@@ -471,7 +486,7 @@ export function openVillageDetail(code, fromDealer) {
       : '<p class="text-xs text-slate-400 text-center py-4">Tidak ada penjualan pada filter ini.</p>') +
 
     // --- Blok 4: BUSINESS REFERENCE ---
-    `<div class="pt-4 pb-4 border-b border-slate-200">` +
+    `<div class="pt-3 pb-3 border-b border-slate-200">` +
     `<div class="text-[11px] uppercase font-bold text-slate-400 mb-2" ` +
     'title="Acuan bisnis dari Marketing/Head Department, bukan hasil statistik.">Business Reference</div>' +
     `<div class="text-xs text-slate-600 space-y-1">` +
@@ -491,6 +506,11 @@ export function openVillageDetail(code, fromDealer) {
   showPanel();
 
   if (S.hasCustomers) loadVillageCustomers(code);
+
+  // Sejak 2026-09-14: klik kelurahan di peta (dan jumpFromDealer()/jumpToVillage()
+  // yang berujung ke fungsi ini) ikut auto-Fit — jalur ini TIDAK lewat renderAll(),
+  // jadi tidak tercakup hook auto-Fit di sana, perlu baris sendiri di sini.
+  if (S.layersReady) fitToScope(true);
 }
 
 /**
@@ -658,7 +678,7 @@ export function renderOutletTable() {
     `<td class="px-3 py-2 text-center whitespace-nowrap">` +
     (o.lat == null
       ? `<button onclick="promptPin('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-map-pin"></i> Pin</button> `
-      : `<button onclick="showOnMap('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-white" style="background:var(--astra-navy)"><i class="ph-fill ph-map-trifold"></i> Lihat di peta</button> `) +
+      : `<button onclick="showOnMap('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-white btn-primary"><i class="ph-fill ph-map-trifold"></i> Lihat di peta</button> `) +
     `<button onclick="editPosCoverageFromTable('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-target"></i> Coverage</button> ` +
     `<button onclick="openOutletEditor('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-pencil-simple"></i> Edit</button>` +
     `</td></tr>`).join('')
@@ -1311,8 +1331,8 @@ function renderMatchList() {
       `<div class="text-[11px] text-slate-400">${esc(u.districtName)} · ${esc(formatNumber(u.rowCount))} baris</div></div>` +
       `<select id="mc-pilih-${i}" class="px-2 py-1.5 rounded-lg border border-slate-200 text-xs bg-white max-w-[16rem] shrink-0"` +
       (u.suggestions.length ? '' : ' disabled') + `>${pilihan}</select>` +
-      `<button onclick="confirmMatch(${i})" style="background:var(--astra-navy)"` +
-      ` class="px-3 py-1.5 rounded-lg text-white text-xs font-bold hover:opacity-90 shrink-0"` +
+      `<button onclick="confirmMatch(${i})"` +
+      ` class="px-3 py-1.5 rounded-lg text-white text-xs font-bold hover:opacity-90 shrink-0 btn-primary"` +
       (u.suggestions.length ? '' : ' disabled') + `>Cocokkan</button></div>`;
   }).join('');
 }
@@ -1527,14 +1547,37 @@ export function switchTab(name) {
  * lewat combobox.js: `terbuka`/`host()`/`_combo` di sana terikat erat ke semantik
  * filter (pairs, onPick, kotak cari) yang tidak relevan di sini — tiga isi panelnya
  * cuma tombol switchTab() biasa, bukan pilihan yang menyaring data.
+ *
+ * Sejak 2026-09-14: bisa dibuka lewat hover JUGA, bukan cuma klik (permintaan
+ * user) — openMasterMenu() dipisah dari toggleMasterMenu() supaya dua jalur
+ * (klik & hover) pakai satu logika "buka" yang sama, tidak dobel ditulis.
+ *
+ * Sejak 2026-09-14 malam: panelnya diberi `position:fixed` + top/left dihitung
+ * dari posisi tombol, BUKAN lagi murni `position:absolute` bawaan `.pilih-panel`.
+ * Sebabnya: `#nav-master-wrap` ada di dalam <div class="... overflow-x-auto">
+ * (pembungkus baris tombol nav) — `overflow-x-auto` memaksa `overflow-y` efektif
+ * jadi `auto` juga (bukan `visible`), jadi panel yang melayang DI BAWAH tombol
+ * ikut terpotong div itu. `position:fixed` tidak pernah dipotong overflow leluhur
+ * mana pun (cuma tepi viewport) — jalan pintas paling kecil risikonya, tidak
+ * perlu menyentuh `.pilih-panel` (dipakai bersama combobox filter) atau
+ * melepas `overflow-x-auto` (mungkin memang perlu untuk layar sempit).
  */
+function openMasterMenu() {
+  const panel = $('master-panel');
+  if (!panel || !panel.hidden) return;
+  const tombol = document.getElementById('nav-master').getBoundingClientRect();
+  panel.style.position = 'fixed';
+  panel.style.top = (tombol.bottom + 6) + 'px';
+  panel.style.left = tombol.left + 'px';
+  panel.hidden = false;
+  $('nav-master-wrap').classList.add('buka');
+}
+
 export function toggleMasterMenu() {
   const panel = $('master-panel');
   if (!panel) return;
-  const buka = !panel.hidden;
-  if (buka) { closeMasterMenu(); return; }
-  panel.hidden = false;
-  $('nav-master-wrap').classList.add('buka');
+  if (!panel.hidden) { closeMasterMenu(); return; }
+  openMasterMenu();
 }
 
 export function closeMasterMenu() {
@@ -1550,6 +1593,24 @@ document.addEventListener('click', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeMasterMenu();
 });
+
+// Hover, di samping klik yang sudah ada di atas. `#nav-master-wrap` markup
+// statis di index.html (bukan dibuat JS), jadi sudah ada di DOM begitu modul
+// ini (type="module", jalan sesudah HTML diparse) dieksekusi — tidak perlu
+// menunggu DOMContentLoaded. Jeda tutup 150ms waktu mouse keluar — dibatalkan
+// kalau mouse balik ke tombol ATAU ke panelnya sebelum jeda habis, supaya
+// tidak "kedip" waktu kursor pindah dari tombol Master ke daftar di bawahnya.
+let masterHoverTimer = null;
+const navMasterWrap = document.getElementById('nav-master-wrap');
+if (navMasterWrap) {
+  navMasterWrap.addEventListener('mouseenter', () => {
+    clearTimeout(masterHoverTimer);
+    openMasterMenu();
+  });
+  navMasterWrap.addEventListener('mouseleave', () => {
+    masterHoverTimer = setTimeout(closeMasterMenu, 150);
+  });
+}
 
 // Kolom nomor mesin dan bukti foto belum dinyalakan karena datanya memang tidak ada
 // di berkas bulanan Astra. Dibaca di sini supaya lint tidak menganggapnya tak terpakai

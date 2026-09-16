@@ -1,8 +1,8 @@
 {
-  "name": "astra-command-center",
+  "name": "atlas",
   "version": "0.1.0",
   "private": true,
-  "description": "Dashboard analisis distribusi dealer motor - tim channel Astra",
+  "description": "ATLAS: Astra Motor Geospasial Marketing Intelligence - dashboard analisis distribusi dealer motor tim channel Astra",
   "engines": {
     "node": ">=20.11.0"
   },

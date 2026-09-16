@@ -155,6 +155,206 @@ cuma perluasan ke Sulawesi ke timur.
 
 ## Selesai
 
+### Rebranding ke ATLAS + polesan UI/UX korporat Astra Motor (2026-09-14 malam)
+
+Detail penuh di DECISIONS.md entri "[2026-09-14] Rebranding ke ATLAS +
+polesan UI/UX korporat Astra Motor".
+
+**Selesai dan diuji otomatis (27/27 berkas tes):**
+- Nama produk resmi berganti dari "Astra Command Center" jadi "ATLAS:
+  Astra Motor Geospasial Marketing Intelligence" — package.json, judul
+  halaman, README/PRD, dokumen operasional, script, dan pesan konsol.
+- Navbar: ikon motor → ikon peta + wordmark "ATLAS / Marketing
+  Intelligence"; tombol "Fit" → "Fokuskan".
+- Kontrol zoom peta (MapLibre) dipindah dari pojok kanan-atas ke kiri-
+  bawah — sebelumnya tertutup panel Opsi Peta yang menempati pojok yang
+  sama; bayangan panel-panel di atas peta diperkecil supaya tidak lagi
+  terasa "melebihi" kotak peta.
+- Aksen merah Astra Motor ditambahkan di navbar (garis bawah) dan tab
+  aktif; tombol navy yang sebelumnya diulang manual di 12+ tempat
+  disatukan jadi satu class `.btn-primary`.
+
+**SENGAJA TIDAK diganti** (dikonfirmasi user): nama folder Windows
+`astra-command-center` (langkah manual diberikan untuk dilakukan sendiri
+nanti), nama database `astra`/`astra_customers`, env var `ACC_ENV_FILE`.
+
+**PERINGATAN**: kalau Scheduled Task Windows sudah pernah dipasang dengan
+nama lama, harus dihapus manual dulu sebelum menjalankan
+`ops/install-tasks.ps1` versi baru — lihat DECISIONS.md untuk detail,
+supaya tidak ada dua tugas berjalan berdampingan berebut port.
+
+**Belum:**
+- **Verifikasi visual di browser** — kelima perubahan ini murni dari
+  audit kode + tiga agen Explore, belum pernah dicoba langsung di layar
+  sungguhan.
+- **Rekonsiliasi drift lama** antara `<style>` inline `index.html` dan
+  duplikatnya di `frontend/styles/app.css` (yang belakangan diketahui
+  sudah jadi kode mati untuk aturan custom-nya) — dicatat di DECISIONS.md,
+  di luar cakupan sesi ini.
+
+### Revisi lanjutan #3: gaya panel biru di mode biasa, kartu pos/dealer tidak lagi menggulir, block summary baru di strip bawah layar penuh (2026-09-14 malam lanjutan #3)
+
+Detail penuh di DECISIONS.md entri "[2026-09-14] Revisi lanjutan #3: gaya
+panel biru dipakai juga di mode biasa, kartu pos/dealer tidak lagi
+menggulir, block summary baru di strip bawah layar penuh".
+
+**Selesai dan diuji otomatis (27/27 berkas tes):**
+- Gaya "panel biru lengkung" bilah filter (sebelumnya cuma layar penuh)
+  sekarang jadi gaya dasar bilah filter di KEDUA mode — satu node DOM yang
+  dipindah, bukan dua rule warna terpisah yang harus disamakan.
+- Kartu ringkas dealer/pos (strip bawah layar penuh & panel kiri w-96 mode
+  biasa) tidak lagi menggulir horizontal — grid sel statnya turun ke baris
+  berikutnya sendiri di ruang sempit, bukan dipaksa satu baris.
+- Font di panel kiri (rincian dealer/kota/kelurahan) mode biasa dirampingkan
+  supaya lebih banyak informasi muat tanpa perlu menggulir.
+- Block summary baru ditambahkan di atas strip info dealer/pos (layar
+  penuh) — angka yang sama dengan ringkasan atas peta mode biasa,
+  sebelumnya hilang begitu masuk layar penuh. Strip info dealer/pos sendiri
+  dipersempit (130px→100px) karena kartu 2 barisnya (revisi sebelumnya)
+  menyisakan banyak ruang kosong di tinggi lama.
+
+**Belum:**
+- **Verifikasi visual di browser** — ketiga revisi ini murni dari audit
+  kode + satu agen Explore, termasuk ukuran pas (100px, gap, ukuran font)
+  yang belum diukur langsung di layar sungguhan.
+
+### Revisi lanjutan #2: durasi auto-Fit, kartu pos 2 baris, tombol Keluar, gaya bilah filter, layar penuh responsif, sticky Performa mode biasa (2026-09-14 malam lanjutan #2)
+
+Detail penuh di DECISIONS.md entri "[2026-09-14] Revisi lanjutan #2: durasi
+auto-Fit, kartu pos 2 baris, tombol Keluar, gaya bilah filter, layar penuh
+responsif, sticky Performa mode biasa".
+
+**Selesai dan diuji otomatis (27/27 berkas tes):**
+- Animasi auto-"Fit" diperlambat (900ms, sebelumnya 400ms) — sengaja
+  dibalik dari niat semula, permintaan eksplisit pengguna supaya "bisa
+  dinikmati".
+- Kartu ringkas dealer/pos di strip bawah layar penuh (130px) jadi 2 baris
+  (judul+subjudul+Tutup di baris 1, semua sel stat di baris 2) — sebelumnya
+  satu baris dengan gulir horizontal panjang, khusus pos yang datanya
+  banyak (Coverage 1-8 + 3 AVG).
+- Tombol "Keluar" (layar penuh) dipindah ke sebelah bilah filter lewat
+  relokasi node (`moveExitButton()`), bukan duplikasi — di mode biasa
+  tombol yang sama balik jadi "Layar penuh" di posisi semula.
+- Bilah filter layar penuh diberi gaya gradasi biru transparan sendiri,
+  dibedakan dari kaca putih panel lain dan navy navbar.
+- Tata letak layar penuh jadi responsif (satu kolom bertumpuk, CSS `@media
+  (max-width: 900px)`) di layar sempit/HP — tanpa tombol show/hide baru.
+- Mode BIASA "ANALISIS PERFORMA POS DEALER": ringkasan+sort-by+papan 5
+  kelompok sekarang tetap diam, cuma daftar pos yang bergulir — pola yang
+  sama seperti sudah diterapkan lebih dulu untuk versi layar penuhnya.
+
+**Belum:**
+- **Verifikasi visual di browser** — keenam revisi ini murni dari
+  perencanaan Plan Mode + satu agen Explore, belum pernah diklik langsung
+  di layar sungguhan (termasuk cek lebar HP untuk item responsif).
+
+### Revisi lanjutan: panel dealer diperluas, auto-Fit, treemap jadi popup, kontras panel, flyout tidak terpotong (2026-09-14 malam lanjutan)
+
+Detail penuh di DECISIONS.md entri "[2026-09-14] Revisi lanjutan: panel
+dealer diperluas ke pos/dropdown, auto-Fit, treemap jadi popup, kontras
+panel, flyout tidak terpotong".
+
+**Selesai dan diuji otomatis (27/27 berkas tes):**
+- Klik marker POS & pilih Dealer/Pos dari dropdown filter (mode biasa)
+  sekarang JUGA langsung membuka panel gabungan (sebelumnya cuma klik
+  marker dealer).
+- Peta auto-"Fit" ke tampilan baru tiap kali filter/scope berubah (reset,
+  klik titik, dropdown Kota/Kares/Kabupaten/Dealer/Pos, klik kelurahan) —
+  animasi lebih pendek & tanpa toast dibanding tombol Fit manual.
+- "Proporsi Penjualan" jadi popup saja (dialog tengah layar, bukan penuh
+  layar), dipicu satu tombol di bilah filter — kartu inline dihapus.
+- Kontras panel yang melayang di atas peta (Opsi Peta, panel kiri layar
+  penuh, rincian kelurahan) dipertegas — sebelumnya nyaris menyatu dengan
+  basemap terang.
+- **Bug diperbaiki**: flyout "Master" di navbar terpotong oleh pembungkus
+  `overflow-x-auto` baris tombol nav — diperbaiki lewat `position:fixed`
+  dihitung dari posisi tombol, tanpa menyentuh combobox filter lain.
+
+**Belum:**
+- **Verifikasi visual di browser** — kelima revisi murni dari audit kode +
+  tiga agen Explore, belum pernah diklik langsung.
+
+### Tujuh perbaikan: scope-bar, kerapatan, navbar+flyout hover, Opsi Peta accordion, dealer detail gabungan, bug auto-scroll (2026-09-14 malam)
+
+Detail penuh di DECISIONS.md entri "[2026-09-14] Tujuh perbaikan: hapus
+scope-bar, kerapatan layout, navbar+flyout hover, Opsi Peta accordion,
+dealer detail gabungan, bug auto-scroll".
+
+**Selesai dan diuji otomatis (27/27 berkas tes):**
+- Blok "Heatmap dihitung terhadap:" dihapus (dua tombolnya duplikat dari
+  tempat lain).
+- Jarak antar-blok halaman Insight dirapatkan (padding/gap Tailwind).
+- Navbar lebih ramping; flyout "Master" bisa dibuka lewat hover (di samping
+  klik yang sudah ada), z-index dinaikkan supaya tidak tertutup peta layar
+  penuh.
+- Opsi Peta jadi 6 grup accordion (`<details>`) dengan status buka/tutup
+  awal yang dikonfirmasi user; Batas Wilayah jadi grup sendiri (baru).
+- Klik marker dealer di mode BIASA langsung membuka ringkasan + rincian per
+  kelurahan dalam satu panel (`#kelurahanDetailPanel`) — sebelumnya perlu
+  dua klik. Mode layar penuh tidak berubah.
+- **Bug diperbaiki**: auto-scroll Analisis Penjualan Wilayah & daftar
+  Analisis Performa Pos (layar penuh) yang tombolnya menyala tapi tidak
+  bergerak — akar masalah CSS (elemen yang digulir tidak pernah punya
+  tinggi terbatas), diperbaiki lewat struktur flex, bukan ganti target di
+  JS. Sekaligus: ringkasan+sort-by Performa Pos sekarang tetap diam,
+  cuma daftarnya yang bergulir.
+
+**Belum:**
+- **Verifikasi visual di browser** — ketujuh perubahan di atas murni dari
+  audit kode statis + tiga agen Explore, belum pernah diklik langsung.
+  Perlu dicek terutama: flyout hover (tidak "kedip"), 6 grup accordion
+  (status awal benar, semua kontrol masih berfungsi), panel dealer gabungan
+  di mode biasa, dan auto-scroll dua panel di layar penuh benar-benar
+  bergerak sekarang.
+
+### Peta layar penuh: grid tata letak tetap (kiri/kanan/strip bawah), bukan lagi panel melayang + blur (2026-09-14 sore)
+
+Menggantikan pendekatan entri di bawah ("kotak fokus dinamis" + blur) di
+hari yang sama — pengguna kirim mockup eksplisit dan minta tata letak grid
+tetap: kolom kiri/kanan tidak melayang, strip info dealer di bawah peta
+ukuran TETAP 130px (bukan menyesuaikan isi), tombol Fit/Edit ring pindah
+ke pojok kotak peta. Detail penuh di DECISIONS.md entri "[2026-09-14] Peta
+layar penuh: dibatalkan jadi grid tetap...".
+
+**Selesai dan diuji otomatis (27/27 berkas tes):** `#map-shell.penuh` jadi
+CSS Grid 3 kolom x 3 baris (`grid-template-areas`), panel kiri/kanan/atas/
+bawah jadi kolom/baris grid sungguhan (bukan lagi `position:absolute`
+melayang), strip info dealer tetap 130px melebar sekolom peta, tombol
+Fit/Edit ring/Layar penuh + `#ring-bar`/`#mapError` diberi `grid-area:map`
+supaya kotak konteks absolute-nya jadi kotak peta (bukan seluruh layar).
+Seluruh sistem blur ("kotak fokus" + `focusBoxInsets()`/`syncFocusBleed()`)
+dari entri sebelumnya DIHAPUS. Fit dikembalikan ke padding angka tetap.
+
+**Belum:** Verifikasi visual di browser — terutama strip 130px (muat tanpa
+kepotong?) dan posisi tombol di pojok kotak peta.
+
+### Peta layar penuh: kotak fokus dinamis, bug bingkai putih diperbaiki (2026-09-14)
+
+Permintaan pengguna dengan mockup: peta layar penuh dianggap punya "kotak
+kosong putih" di pinggir, dan diminta jadi peta penuh layar dengan area
+blur ("kotak fokus") di bagian yang bebas panel. Detail penuh di
+DECISIONS.md entri "[2026-09-14] Peta layar penuh: hilangkan bingkai
+putih, tambah 'kotak fokus' blur, Fit dihitung dari posisi panel
+sungguhan".
+
+**Selesai dan diuji otomatis (27/27 berkas tes):**
+- Bug bingkai putih di `#map-shell.penuh` diperbaiki (sisa `bg-white
+  border shadow-sm` Tailwind yang tidak pernah dilepas untuk state layar
+  penuh).
+- `focusBoxInsets()` baru (`map.js`) — hitung jarak top/bottom/left/right
+  dari posisi panel yang SEDANG tampil, dipakai bareng oleh:
+  - `syncFocusBleed()` baru — 4 elemen blur (`.focus-bleed`) menutupi
+    bagian bebas-panel di luar kotak fokus.
+  - `fitToScope()` — padding `fitBounds()` sekarang objek
+    `{top,bottom,left,right}` sungguhan di layar penuh, bukan angka tetap.
+- Dipanggil ulang di semua titik yang bisa mengubah panel mana yang
+  tampil: `toggleFullscreen()`, `renderAll()`, buka/tutup panel rincian
+  dealer/kelurahan, dan resize jendela.
+
+**Belum:**
+- **Verifikasi visual di browser** — terutama transisi kotak fokus waktu
+  panel kiri berganti isi dan waktu jendela diubah ukuran.
+
 ### Kartu dealer/pos di peta diganti metrik kontribusi; navbar 4 tombol + flyout Master (2026-08-31 malam)
 
 Empat permintaan sekaligus, direncanakan lewat Plan Mode (tiga agen Explore

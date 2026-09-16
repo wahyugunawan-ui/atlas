@@ -313,8 +313,8 @@ function performanceRowWide(item) {
     `<span class="text-slate-400">Luar ${esc(item.percentLuarCoverage.toFixed(0))}%</span>` +
     `</div>` +
     `<div class="flex items-center gap-1.5 shrink-0" onclick="event.stopPropagation()">` +
-    `<button onclick="showOnMap('${esc(item.code)}')" class="px-2 py-1.5 rounded-lg text-[11px] font-bold text-white" ` +
-    `style="background:var(--astra-navy)"><i class="ph-fill ph-map-trifold"></i></button>` +
+    `<button onclick="showOnMap('${esc(item.code)}')" class="px-2 py-1.5 rounded-lg text-[11px] font-bold text-white btn-primary">` +
+    `<i class="ph-fill ph-map-trifold"></i></button>` +
     `<button onclick="editPosCoverageFromTable('${esc(item.code)}')" class="px-2 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50">` +
     `<i class="ph ph-target"></i></button>` +
     `</div></div>` +
@@ -496,7 +496,11 @@ function topScopeSummary(rows) {
 }
 
 export function renderTopSummary(rows) {
-  $('ringkas-utama').innerHTML = topScopeSummary(rows);
+  const html = topScopeSummary(rows);
+  $('ringkas-utama').innerHTML = html;
+  // #fs-ringkas-utama (strip di atas kartu dealer/pos, layar penuh) menampilkan
+  // ringkasan yang SAMA — sebelumnya angka ini hilang begitu masuk layar penuh.
+  if ($('fs-ringkas-utama')) $('fs-ringkas-utama').innerHTML = html;
 }
 
 export function renderPerformance(rows) {
@@ -518,13 +522,25 @@ export function renderPerformance(rows) {
   // lebih ringkas supaya lebar panel tidak berubah.
   const bodyWide = controls + performanceGroupBoard(counts) +
     (list.length ? list.map(performanceRowWide).join('') : kosong);
-  const bodyCompact = controls + (list.length ? list.map(performanceRowCompact).join('') : kosong);
+  // Sejak 2026-09-14: jalur fs-* (layar penuh) TIDAK lagi menaruh `controls` di
+  // #fs-performa — panel itu sekarang wadah gulir SENDIRI (lihat CSS
+  // #fs-kiri-panel di index.html), dan ringkasan+sort-by harus tetap diam di
+  // atas sementara cuma daftarnya yang bergulir. `controls` pindah ke
+  // #fs-ringkas, digabung dengan summary (satu blok tetap, sama-sama shrink-0).
+  const bodyCompact = list.length ? list.map(performanceRowCompact).join('') : kosong;
   const summary = scopeSummary(rows);
+  // Sejak 2026-09-14 malam: mode BIASA (bukan layar penuh peta) dapat perlakuan
+  // sama seperti fs-* di atas — ringkasan+sort-by+papan kelompok tetap diam
+  // (#ringkas-jangkauan, shrink-0 lewat CSS di index.html), cuma baris pos
+  // (rowsHtml, TANPA controls/groupBoard) yang masuk ke #panel-performa yang
+  // bergulir sendiri. `bodyWide` (gabungan lengkap) dipertahankan apa adanya
+  // untuk fp-performa/fp-ringkas ("Tampilan lebih besar", di luar cakupan).
+  const rowsHtml = list.length ? list.map(performanceRowWide).join('') : kosong;
 
-  $('panel-performa').innerHTML = bodyWide;
-  $('ringkas-jangkauan').innerHTML = summary;
+  $('panel-performa').innerHTML = rowsHtml;
+  $('ringkas-jangkauan').innerHTML = summary + controls + performanceGroupBoard(counts);
   if ($('fs-performa')) $('fs-performa').innerHTML = bodyCompact;
-  if ($('fs-ringkas')) $('fs-ringkas').innerHTML = summary;
+  if ($('fs-ringkas')) $('fs-ringkas').innerHTML = summary + controls;
   if ($('fp-performa')) $('fp-performa').innerHTML = bodyWide;
   if ($('fp-ringkas')) $('fp-ringkas').innerHTML = summary;
 
@@ -788,7 +804,7 @@ function activeDealerCode() {
  * dipakai di panel lain, plus pecahan ring (scope dealer) atau coverage (scope pos)
  * — permintaan eksplisit user, dikonfirmasi lewat pertanyaan field "Pos".
  */
-function dealerCardHtml(compact) {
+export function dealerCardHtml(compact) {
   const code = activeDealerCode();
   if (!code) return '';
 
@@ -856,28 +872,58 @@ function dealerCardHtml(compact) {
     ];
   }
 
-  const stats = summaryGridHtml(
-    [{ label: 'Pos', value: posValue }, kontribusi, posisiRelatif, acuanBisnis, ...cabang]);
+  const cells = [{ label: 'Pos', value: posValue }, kontribusi, posisiRelatif, acuanBisnis, ...cabang];
 
+  // Kartu ringkas (strip di bawah peta layar penuh, DAN #kelurahanDetailSummary
+  // di panel kiri w-96 mode biasa) — dua baris: Baris 1 = avatar + JUDUL (nama
+  // pos kalau scope pos aktif, kalau tidak nama dealer) + subjudul nama dealer
+  // induk (cuma muncul kalau judulnya nama pos — dealer scope saja tidak perlu
+  // subjudul) + tombol Tutup (ikon X, pojok kanan). Baris 2 = grid stat, sel
+  // "Pos" DIBUANG kalau sudah jadi judul baris 1 (supaya tidak diulang), TETAP
+  // ADA kalau scope dealer saja. Chip daftar pos TETAP DIHILANGKAN dari versi
+  // ini (ada di kartu penuh `#kartu-dealer`).
+  //
+  // Baris 2 sengaja CSS GRID auto-fit (bukan flex + overflow-x-auto seperti
+  // sebelumnya): di strip layar penuh yang lebar, semua sel muat sebaris; di
+  // panel kiri w-96 mode biasa yang sempit, sel yang tidak muat TURUN ke baris
+  // berikutnya sendiri — tidak ada lagi yang perlu digulir horizontal di kedua
+  // konteks, satu markup dipakai apa adanya untuk keduanya.
+  if (compact) {
+    const headerTitle = activePos !== 'ALL' ? posValue : name;
+    const headerSubtitle = activePos !== 'ALL' ? name : '';
+    const baris2 = activePos !== 'ALL' ? cells.slice(1) : cells;
+    const statCell = (c) => `<div class="text-center px-1">` +
+      `<div class="text-xs font-extrabold text-slate-800 mono leading-tight">${esc(c.value)}</div>` +
+      `<div class="text-[8px] uppercase font-bold text-slate-400 tracking-wide leading-tight whitespace-nowrap">${esc(c.label)}</div></div>`;
+    return `<div class="flex flex-col justify-center gap-1 w-full min-w-0">` +
+      `<div class="flex items-center gap-2">` +
+      `<div class="w-7 h-7 text-xs rounded-lg flex items-center justify-center text-white font-extrabold shrink-0" ` +
+      `style="background:${esc(color)}">${esc(headerTitle.slice(0, 1))}</div>` +
+      `<div class="min-w-0 flex-1">` +
+      `<div class="font-extrabold text-slate-800 truncate text-sm leading-tight">${esc(headerTitle)}</div>` +
+      (headerSubtitle ? `<div class="text-[10px] text-slate-400 truncate leading-tight">${esc(headerSubtitle)}</div>` : '') +
+      `</div>` +
+      `<button onclick="closeDealerCard()" title="Tutup" class="shrink-0 w-6 h-6 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"><i class="ph ph-x"></i></button>` +
+      `</div>` +
+      `<div class="grid gap-1" style="grid-template-columns:repeat(auto-fit,minmax(56px,1fr))">${baris2.map(statCell).join('')}</div>` +
+      `</div>`;
+  }
+
+  const stats = summaryGridHtml(cells);
   return `<div>` +
-    `<div class="flex items-center gap-${compact ? '3' : '4'} justify-between"><div class="flex items-center gap-${compact ? '3' : '4'} min-w-0">` +
-    `<div class="${compact ? 'w-8 h-8 text-sm' : 'w-10 h-10'} rounded-xl flex items-center justify-center text-white font-extrabold shrink-0" ` +
+    `<div class="flex items-center gap-4 justify-between"><div class="flex items-center gap-4 min-w-0">` +
+    `<div class="w-10 h-10 rounded-xl flex items-center justify-center text-white font-extrabold shrink-0" ` +
     `style="background:${esc(color)}">${esc(name.slice(0, 1))}</div>` +
-    `<div class="font-extrabold text-slate-800 truncate ${compact ? 'text-sm' : ''}">${esc(name)}</div>` +
+    `<div class="font-extrabold text-slate-800 truncate">${esc(name)}</div>` +
     `</div>` +
     `<div class="flex items-center gap-2 shrink-0">` +
-    // Tombolnya cuma di kartu penuh. Kartu ringkas di atas peta memang dibuat sependek
-    // mungkin supaya tidak menutupi wilayah yang justru sedang dilihat.
-    (compact ? '' :
-      `<button onclick="openDealerDetail('${esc(code)}')" style="background:var(--astra-navy)" ` +
-      `class="px-3 py-2 rounded-xl text-white text-xs font-bold hover:opacity-90 whitespace-nowrap">` +
-      `<i class="ph ph-list-magnifying-glass mr-1"></i>Rincian per kelurahan</button>`) +
+    `<button onclick="openDealerDetail('${esc(code)}')" ` +
+    `class="px-3 py-2 rounded-xl text-white text-xs font-bold hover:opacity-90 whitespace-nowrap btn-primary">` +
+    `<i class="ph ph-list-magnifying-glass mr-1"></i>Rincian per kelurahan</button>` +
     `<button onclick="closeDealerCard()" class="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50">Tutup</button>` +
     `</div></div>` +
     `<div class="mt-3">${stats}</div>` +
-    (compact
-      ? `<div class="flex gap-2 mt-2.5 pt-2.5 border-t border-slate-200 overflow-x-auto pb-1">${chips}</div>`
-      : `<div class="flex flex-wrap gap-2 mt-4 pt-4 border-t border-slate-100">${chips}</div>`) +
+    `<div class="flex flex-wrap gap-2 mt-4 pt-4 border-t border-slate-100">${chips}</div>` +
     `</div>`;
 }
 
@@ -977,26 +1023,28 @@ function treemapOptions(mode, codes, totals, height) {
   };
 }
 
+/**
+ * Sejak 2026-09-14: "Proporsi Penjualan" tidak lagi kartu inline di halaman —
+ * cuma popup (`#modal-treemap`), dipicu tombol di bilah filter. `#treemap-chart`
+ * sekarang SATU-SATUNYA container (dulu ada versi "kecil" inline + "besar" di
+ * modal, dua ApexCharts terpisah dari `codes`/`totals` yang sama) — digambar
+ * HANYA waktu modalnya sungguh terbuka, sama seperti pola `panelPerformaAktif()`
+ * dkk.: `renderTreemap()` dipanggil TANPA SYARAT dari `renderAll()` tiap render,
+ * jadi kalau modalnya tertutup, keluar lebih awal daripada membuang waktu
+ * menghitung ulang treemap yang tidak terlihat siapa pun.
+ */
 export function renderTreemap(rows) {
+  const modal = $('modal-treemap');
+  if (!modal || modal.classList.contains('hidden')) return;
+
   const mode = S.treemapView;
   const totals = totalsByMode(rows, mode);
   const codes = Object.keys(totals).sort((a, b) => totals[b] - totals[a]).slice(0, 24);
   S.treemapCodes = codes;
 
   if (S.treemapChart) S.treemapChart.destroy();
-  S.treemapChart = new ApexCharts($('treemap-chart'), treemapOptions(mode, codes, totals, 330));
+  S.treemapChart = new ApexCharts($('treemap-chart'), treemapOptions(mode, codes, totals, 420));
   S.treemapChart.render();
-
-  // Popup treemap (Bagian C): render ulang ke container KEDUA cuma waktu modalnya
-  // sungguh terbuka — sama seperti panel Performa, dari `codes`/`totals` yang SAMA,
-  // bukan dihitung ulang terpisah.
-  const besar = $('modal-treemap');
-  if (besar && !besar.classList.contains('hidden')) {
-    if (S.treemapChartBesar) S.treemapChartBesar.destroy();
-    S.treemapChartBesar = new ApexCharts(
-      $('treemap-chart-besar'), treemapOptions(mode, codes, totals, window.innerHeight - 160));
-    S.treemapChartBesar.render();
-  }
 }
 
 export function selectEntity(mode, code) { applyScope(mode, code); }
@@ -1012,6 +1060,6 @@ export function openTreemapFull() {
 
 export function closeTreemapFull() {
   $('modal-treemap').classList.add('hidden');
-  if (S.treemapChartBesar) { S.treemapChartBesar.destroy(); S.treemapChartBesar = null; }
+  if (S.treemapChart) { S.treemapChart.destroy(); S.treemapChart = null; }
 }
 

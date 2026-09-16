@@ -107,8 +107,10 @@ export const S = {
   liveWilayah: null,
   liveWilayahPaused: false,
   treemapView: 'dealer',
+  // Sejak 2026-09-14: "Proporsi Penjualan" cuma popup (bukan lagi kartu inline +
+  // versi "besar" modal terpisah) — satu chart, satu state, lihat renderTreemap()
+  // di render.js.
   treemapChart: null,
-  treemapChartBesar: null, // popup treemap (Bagian C), null waktu modalnya tertutup
   treemapCodes: [],
   villageTrendChart: null, // grafik tren bulanan di panel Blok 2 (Sales)
   // 'relative' (persentil, bawaan) | 'fixed' (interval tetap). Ditulis di sini dari

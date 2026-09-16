@@ -99,7 +99,7 @@ async function test() {
     // Halaman login sendiri harus bisa dibuka tanpa login.
     const loginPage = await request(port, 'GET', '/login');
     assert.strictEqual(loginPage.status, 200);
-    assert.ok(loginPage.text.includes('Astra Command Center'));
+    assert.ok(loginPage.text.includes('ATLAS'));
 
     // Daftar putihnya harus cocok PERSIS, bukan berawalan. '/login' yang dibuka
     // dengan startsWith() akan ikut membuka '/logs', '/login-lama', dan apa pun yang

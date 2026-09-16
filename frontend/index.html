@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Astra Command Center</title>
+  <title>ATLAS: Astra Motor Geospasial Marketing Intelligence</title>
   <!-- Ikon ditanam sebagai data URI, bukan berkas. Tanpa ini browser meminta
        /favicon.ico sendiri dan mendapat 404 di tiap muat halaman — tidak merusak
        apa pun, tapi mengotori konsol dan menyamarkan error yang sungguhan. -->
@@ -30,8 +30,18 @@
   <style>
 :root {
     --astra-navy: #0b2f6b; --astra-navy-dark: #071c42; --astra-navy-light: #123d8c;
-    --astra-red: #e2231a; --canvas: #f2f4f9;
+    --astra-red: #e2231a; --astra-red-dark: #a3160f; --canvas: #f2f4f9;
   }
+  /* Aturan pemisahan warna (identitas Astra Motor, biru primer + merah sekunder):
+     --astra-red HANYA untuk elemen dekoratif statis (garis aksen navbar, aksen
+     tab aktif, ikon brand) — TIDAK PERNAH untuk angka/badge/status data. Kodebase
+     ini sudah punya sistem warna status sendiri (emerald=baik, amber=perhatian,
+     red-600 Tailwind=buruk/error/hapus) dipakai puluhan tempat; red-600 satu
+     rumpun warna dengan --astra-red, jadi mencampur keduanya bikin pengguna bisa
+     salah baca aksen brand sebagai peringatan. */
+  .btn-primary { background: linear-gradient(135deg, var(--astra-navy-light), var(--astra-navy));
+    color: #fff; transition: filter .15s ease; }
+  .btn-primary:hover { filter: brightness(1.08); }
   * { box-sizing: border-box; }
   body { font-family: 'Manrope', sans-serif; background: var(--canvas); }
   .mono { font-family: 'JetBrains Mono', monospace; }
@@ -40,13 +50,28 @@
   ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
 
-  #topnav { background: linear-gradient(90deg, var(--astra-navy-dark), var(--astra-navy) 55%, var(--astra-navy-light)); }
-  .nav-btn { color: rgba(255,255,255,0.62); transition: all 0.2s ease; }
+  /* Garis aksen merah tipis di bawah navbar navy — sentuhan dua-warna identitas
+     Astra Motor, dekoratif statis saja (lihat aturan pemisahan warna di :root). */
+  #topnav { background: linear-gradient(90deg, var(--astra-navy-dark), var(--astra-navy) 55%, var(--astra-navy-light));
+    border-bottom: 3px solid var(--astra-red); }
+  .nav-btn { color: rgba(255,255,255,0.62); transition: all 0.2s ease; border-bottom: 2px solid transparent; }
   .nav-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
-  .nav-btn.active { background: #fff; color: var(--astra-navy); box-shadow: 0 6px 16px rgba(0,0,0,0.18); }
+  .nav-btn.active { background: #fff; color: var(--astra-navy); box-shadow: 0 6px 16px rgba(0,0,0,0.18);
+    border-bottom-color: var(--astra-red); }
 
   .map-container { height: calc(100vh - 290px); min-height: 460px; }
-  .map-panel { background: rgba(255,255,255,0.82); backdrop-filter: blur(14px) saturate(160%); border: 1px solid rgba(255,255,255,0.6); border-radius: 16px; box-shadow: 0 16px 40px rgba(11,47,107,0.14); }
+  /* Sejak 2026-09-14: opacity latar dinaikkan (0.82→0.94), border diganti navy
+     tipis (dulu nyaris-putih di atas putih, tidak kelihatan) — keluhan pengguna:
+     panel ini nyaris menyatu dengan basemap Lokal/Polos/citra satelit yang terang.
+     Kaca (backdrop-filter) TETAP dipakai, tidak diganti solid — beda alasan dari
+     .pilih-panel (lihat komentar di sana): panel ini ADA DI DALAM peta, bukan
+     navbar/dropdown filter di luar peta.
+     Shadow diperkecil lagi malam yang sama (0.28 alpha/40px blur → 0.20/24px):
+     keluhan baru — bayangannya terasa "melebihi rasio" kotak peta yang membulat
+     waktu panel (mis. Opsi Peta) ada DI DALAM kotak #map-shell yang lebih kecil
+     dari layar penuh. Blur lebih pendek supaya sebarannya tidak menabrak/melewati
+     tepi kotak peta. */
+  .map-panel { background: rgba(255,255,255,0.94); backdrop-filter: blur(14px) saturate(160%); border: 1px solid rgba(11,47,107,0.18); border-radius: 16px; box-shadow: 0 10px 24px rgba(11,47,107,0.20); }
   .float-tooltip { position: fixed; z-index: 400; pointer-events: none; background: rgba(7,28,66,0.9); backdrop-filter: blur(10px); color: #e2e8f0; border-radius: 10px; padding: 10px 12px; font-size: 12.5px; box-shadow: 0 14px 34px rgba(0,0,0,0.3); transform: translate(-50%,-120%); max-width: 260px; opacity: 0; transition: opacity 0.15s; border: 1px solid rgba(255,255,255,0.12); }
   .float-tooltip.show { opacity: 1; }
 
@@ -83,16 +108,103 @@
   .rise-in { animation: riseIn .4s cubic-bezier(0.16,1,0.3,1) both; }
 
   /* Layar penuh pakai posisi tetap, bukan Fullscreen API browser: hasilnya sama tapi
-     tanpa banner browser yang muncul di tengah presentasi. */
-  #map-shell.penuh { position: fixed; inset: 0; z-index: 200; border-radius: 0; padding: 0; margin: 0; }
-  #map-shell.penuh .map-container { height: 100vh; min-height: 0; }
+     tanpa banner browser yang muncul di tengah presentasi.
+
+     Sejak 2026-09-14 sore: BUKAN LAGI peta penuh layar dengan panel MELAYANG di
+     atasnya + bingkai blur di celah kosong (percobaan sesi ini sebelumnya,
+     dibatalkan — lihat DECISIONS.md, dianggap belum sesuai acuan tata letak yang
+     diminta). Sekarang grid tetap 3 kolom x 3 baris: baris atas bilah filter
+     (selebar penuh), baris tengah kiri/kanan panel + tengah peta, baris bawah
+     strip info dealer (lebar cuma sekolom peta, TETAP tinggi 130px — tidak lagi
+     menyesuaikan isi). Kolom kiri & kanan "menyatu" dua baris karena
+     grid-template-areas mengulang nama yang sama di baris map & bottom, sehingga
+     jadi satu kolom tinggi penuh — persis acuan yang diberikan.
+
+     `bg-white`/`border`/`shadow-sm` milik #map-shell (tampilan normal, dipakai
+     waktu peta masih jadi kartu di halaman) SENGAJA dilepas di sini — tanpa ini
+     sisa border/bayangan/putih itu tetap kelihatan sebagai bingkai tipis. */
+  #map-shell.penuh { position: fixed; inset: 0; z-index: 200; border-radius: 0; margin: 0;
+    background: #0b1220; box-shadow: none; border: none;
+    display: grid; padding: 12px; gap: 12px;
+    grid-template-columns: 320px 1fr 240px;
+    grid-template-rows: auto 1fr auto 100px;
+    grid-template-areas: "topbar topbar topbar" "left map right" "left ringkas right" "left bottom right"; }
   #map-shell.penuh .hanya-penuh { display: block; }
-  /* Panel melayang di layar penuh boleh menggulir isinya sendiri — KECUALI rumah bilah
-     filter. Dia bukan panel berisi daftar; dia cuma wadah, dan overflow di situ
-     memotong dropdown yang membuka ke bawah keluar dari kotaknya. Itu penyebab
-     "dropdown-nya kepotong" yang lama dikira masalah z-index. */
-  #map-shell.penuh .map-panel:not(#fs-filter-host) { max-height: calc(100vh - 3rem); overflow-y: auto; }
+  #map-shell.penuh #map { grid-area: map; height: auto; width: auto; border-radius: 12px; }
+  /* Tombol Fit/Edit ring/Layar penuh dan lapisan ring-bar/mapError TETAP posisi
+     `absolute` (kelas Tailwind top-6/left-6/dst tidak disentuh) — cukup diberi
+     grid-area yang sama dengan peta. Aturan CSS Grid: item absolute yang punya
+     grid-area memakai KOTAK AREA ITU sebagai acuan posisinya, bukan seluruh grid —
+     jadi tombolnya otomatis menempel ke pojok KOTAK PETA, bukan pojok layar
+     seperti sebelum grid ini ada. Ini "tombol yang dipindahkan" yang diminta. */
+  #map-shell.penuh #map-top-buttons, #map-shell.penuh #ring-bar,
+  #map-shell.penuh #mapError { grid-area: map; }
+  /* Panel kiri/kanan/atas/bawah bukan lagi lapisan melayang (position:absolute) —
+     jadi kolom/baris grid sungguhan, lebar-tingginya ikut kolom/barisnya. Kelas
+     Tailwind w-80/w-60/top-20/dst di HTML-nya sengaja dibiarkan, tidak berpengaruh
+     lagi begitu position:static (tidak perlu dihapus, cuma jadi tidak aktif). */
+  /* Sejak 2026-09-14 malam: #fs-filter-host dan #fs-kartu dibersihkan
+     LANGSUNG di HTML-nya dari kelas Tailwind usang peninggalan desain
+     "melayang di tengah" (`absolute`, `top-6`/`bottom-6`, `left-1/2`,
+     `-translate-x-1/2`) — dua putaran sebelumnya cuma MENIMPA kelas itu
+     lewat override CSS (termasuk `!important`) dan pengguna tetap melihat
+     keduanya tertumpuk di panel kiri. Daripada terus menebak kenapa
+     override itu tidak kepakai di layar pengguna, kelas usangnya dihapus
+     sekalian — sekarang tidak ada apa pun yang perlu dikalahkan. Kedua
+     elemen ini CUMA pernah tampil di dalam grid `.penuh` (dijaga
+     `hanya-penuh`), jadi kelas posisi lama itu memang sudah sepenuhnya
+     mati, bukan sekadar kebetulan tidak kepakai. */
+  #map-shell.penuh #fs-filter-host { grid-area: topbar; justify-self: center; }
+  /* Tombol Keluar dipindah ke sini waktu layar penuh (moveExitButton() di
+     map.js, pola sama dengan moveFilterBar()) — grid-area "topbar" yang sama
+     dengan bilah filter, tapi rata kiri, jadi "di samping" bilah filter,
+     bukan menumpuk di tengah. */
+  #map-shell.penuh #fs-exit-host { grid-area: topbar; justify-self: start; }
+  #map-shell.penuh #fs-kiri-panel { grid-area: left; position: static; width: 100%; height: 100%; }
+  /* Panel kanan dipadatkan (permintaan user): padding lebih tipis supaya
+     opsi/legenda yang sama tetap muat tanpa terlalu banyak digulir. */
+  #map-shell.penuh #opsi-peta-panel { grid-area: right; position: static; width: 100%;
+    height: 100%; padding: 10px; }
+  #map-shell.penuh #opsi-peta-panel .toggle-row { padding: 1px 2px; }
+  /* Strip info dealer: sejak kartu ringkasnya jadi 2 baris (bukan 1 baris + gulir
+     horizontal), 130px menyisakan banyak ruang kosong atas-bawah — dipersempit ke
+     100px, lebih pas untuk tinggi konten 2 barisnya. Melebar PERSIS sekolom peta
+     (grid-area "bottom" ada di kolom yang sama dengan "map") — dari batas panel
+     kiri sampai batas panel kanan. Isinya sendiri (dealerCardHtml() compact,
+     render.js) sudah 2 baris ramping. */
+  #map-shell.penuh #fs-kartu { grid-area: bottom; width: 100%; height: 100%;
+    padding: 6px 14px; display: flex; align-items: center; }
+  /* Block summary BARU, ditambah di atas strip info dealer/pos (permintaan user):
+     lebar sama persis (kolom "map" yang sama), isinya SAMA dengan #ringkas-utama
+     yang muncul di atas peta mode biasa — renderTopSummary() (render.js) menulis
+     ke dua elemen sekaligus. Baris "auto": tingginya ikut konten (satu baris pil
+     ringkasan), bukan angka tetap seperti strip dealer di bawahnya. */
+  #map-shell.penuh #fs-ringkas-utama { grid-area: ringkas; width: 100%; padding: 8px 14px; }
+  /* Rincian dealer/kelurahan (SELALU ada di dua mode, bukan .hanya-penuh) tetap
+     position:absolute + animasi geser transform yang sudah ada — grid-area saja
+     yang ditambah supaya "kotak konteks" absolute-nya jadi kolom kiri grid ini,
+     bukan seluruh layar. Insetnya diset ulang penuh satu kolom (top-20/bottom-6
+     lama dirancang melayang di atas seluruh layar, bukan satu kolom saja). */
+  #map-shell.penuh #kelurahanDetailPanel { grid-area: left; top: 0; left: 0; bottom: 0; width: 100%; }
+  #map-shell.penuh .map-panel { max-height: none; overflow-y: auto; }
   .hanya-penuh { display: none; }
+
+  /* Layar penuh di layar sempit (atau HP): 3 kolom sesak jadi tidak terbaca.
+     Satu kolom bertumpuk, gulir gabungan di #map-shell sendiri (bukan tiap
+     panel gulir sendiri-sendiri) — CSS saja, TANPA tombol show/hide baru
+     (dikonfirmasi pengguna). Nama grid-area tidak berubah, jadi elemen yang
+     sudah diberi grid-area:left/right/bottom otomatis ikut susunan baru ini. */
+  @media (max-width: 900px) {
+    #map-shell.penuh {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto minmax(280px, 45vh) auto auto auto auto;
+      grid-template-areas: "topbar" "map" "left" "right" "ringkas" "bottom";
+      overflow-y: auto;
+    }
+    #map-shell.penuh #fs-kiri-panel,
+    #map-shell.penuh #opsi-peta-panel { height: auto; max-height: 50vh; }
+    #map-shell.penuh #fs-kartu { height: auto; }
+  }
 
   .marker-outlet.abu { background: #b8bcc4 !important; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
   .marker-outlet.sedang { width: 18px; height: 18px; font-size: 10px; }
@@ -105,19 +217,18 @@
   .live-nyala { background: var(--astra-navy) !important; border-color: transparent !important; color: #fff !important; }
 
   /* --- BILAH FILTER -------------------------------------------------------
-     Bilahnya rak, bukan sambungan. Putih rata di bawah nav navy tidak terbaca
-     sebagai apa-apa; gradien setipis ini plus garis rambut sudah cukup memberinya
-     bidang sendiri tanpa menambah satu pun elemen. */
-  #filter-bar { background: linear-gradient(180deg, #ffffff, #f6f8fc);
-    border-bottom: 1px solid #dfe5ef;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 1px 3px rgba(11,47,107,.05); }
-  /* Di layar penuh bilahnya masuk ke panel kaca, jadi latarnya sendiri dilepas. */
-  #fs-filter-host #filter-bar { background: none; border: 0; box-shadow: none; }
-  /* Selebar isinya, bukan selebar ruang yang kebetulan tersisa.
-     Karena rumahnya diletakkan di tengah (left-1/2 + translate), lebar yang "tersedia"
-     cuma separuh layar — dan bilahnya melipat jadi dua baris padahal layarnya luas.
-     max-content memberi lebar satu baris penuh; max-width menjaganya tetap melipat
-     dengan sendirinya kalau layarnya memang sempit. */
+     Sejak 2026-09-14 malam: gaya "panel biru lengkung" yang sebelumnya cuma
+     dipakai layar penuh (#fs-filter-host) sekarang jadi gaya DASAR #filter-bar
+     itu sendiri — berlaku otomatis di kedua mode, satu bilah, satu gaya,
+     bukan dua rule warna yang harus disamakan terus-menerus. Radius+gradasi
+     dipasang di sini; #filter-bar-slot (bukan #filter-bar) yang diberi padding
+     supaya sudut lengkungnya kelihatan (latar halaman `--canvas` terlihat di
+     tepi) — di layar penuh host-nya (`#fs-filter-host`) sudah punya posisinya
+     sendiri lewat grid, jadi tidak perlu padding tambahan di situ. */
+  #filter-bar { background: linear-gradient(135deg, rgba(59,130,246,0.28), rgba(29,78,216,0.22));
+    border: 1px solid rgba(59,130,246,0.45); border-radius: 16px;
+    box-shadow: 0 16px 40px rgba(11,47,107,0.25); }
+  #filter-bar-slot { padding: 8px 12px 0; }
   #fs-filter-host { width: max-content; max-width: calc(100vw - 3rem); }
   .bar-pisah { width: 1px; height: 18px; background: #dfe5ef; }
 
@@ -238,24 +349,34 @@
   <p class="text-sm font-semibold text-slate-500">Memuat data...</p>
 </div>
 
-<nav id="topnav" class="shrink-0 px-4 py-2.5 flex items-center gap-2 shadow-lg z-50">
+<nav id="topnav" class="shrink-0 px-4 py-1.5 flex items-center gap-2 shadow-lg z-50">
   <div class="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-white text-lg shrink-0">
-    <i class="ph-fill ph-motorcycle"></i>
+    <i class="ph-fill ph-map-trifold"></i>
+  </div>
+  <div class="hidden sm:flex flex-col leading-none mr-1 shrink-0">
+    <span class="text-white font-extrabold text-sm tracking-wide">ATLAS</span>
+    <span class="text-white/60 text-[9px] font-bold uppercase tracking-wider">Marketing Intelligence</span>
   </div>
   <div class="flex items-center gap-1 overflow-x-auto">
-    <button onclick="switchTab('peta')" id="nav-peta" class="nav-btn active whitespace-nowrap flex items-center px-4 py-2.5 rounded-xl text-sm font-semibold"><i class="ph ph-squares-four text-lg mr-2"></i> Insight &amp; Peta</button>
-    <button onclick="switchTab('import')" id="nav-import" class="nav-btn whitespace-nowrap flex items-center px-4 py-2.5 rounded-xl text-sm font-semibold"><i class="ph ph-upload-simple text-lg mr-2"></i> Import Data</button>
-    <button onclick="switchTab('konsumen')" id="nav-konsumen" class="nav-btn whitespace-nowrap flex items-center px-4 py-2.5 rounded-xl text-sm font-semibold"><i class="ph ph-users-three text-lg mr-2"></i> Data Konsumen</button>
+    <button onclick="switchTab('peta')" id="nav-peta" class="nav-btn active whitespace-nowrap flex items-center px-3.5 py-1.5 rounded-xl text-sm font-semibold"><i class="ph ph-squares-four text-lg mr-2"></i> Insight &amp; Peta</button>
+    <button onclick="switchTab('import')" id="nav-import" class="nav-btn whitespace-nowrap flex items-center px-3.5 py-1.5 rounded-xl text-sm font-semibold"><i class="ph ph-upload-simple text-lg mr-2"></i> Import Data</button>
+    <button onclick="switchTab('konsumen')" id="nav-konsumen" class="nav-btn whitespace-nowrap flex items-center px-3.5 py-1.5 rounded-xl text-sm font-semibold"><i class="ph ph-users-three text-lg mr-2"></i> Data Konsumen</button>
     <!-- Sejak 2026-08-31 malam: Master Dealer/Master Pos Dealer/Master Kelurahan
          dipindah dari tiga tombol datar ke satu flyout "Master" (permintaan user,
          navbar disederhanakan jadi 4 tombol). Gaya `.pilih`/`.pilih-panel`/`.pilih-opsi`
          dipakai ulang dari combobox filter yang sudah ada; logika buka/tutupnya
-         sendiri — lihat toggleMasterMenu()/closeMasterMenu() di tables.js. -->
+         sendiri — lihat toggleMasterMenu()/closeMasterMenu() di tables.js. Sejak
+         2026-09-14: bisa dibuka lewat hover JUGA (bukan cuma klik) — lihat
+         listener mouseenter/mouseleave dekat toggleMasterMenu(). -->
     <div class="pilih" id="nav-master-wrap">
-      <button onclick="toggleMasterMenu()" id="nav-master" class="nav-btn whitespace-nowrap flex items-center px-4 py-2.5 rounded-xl text-sm font-semibold">
+      <button onclick="toggleMasterMenu()" id="nav-master" class="nav-btn whitespace-nowrap flex items-center px-3.5 py-1.5 rounded-xl text-sm font-semibold">
         <i class="ph ph-database text-lg mr-2"></i> Master<i class="ph ph-caret-down pilih-caret ml-1.5"></i>
       </button>
-      <div id="master-panel" class="pilih-panel" hidden style="width:220px">
+      <!-- z-index 300, BUKAN 200 dari .pilih-panel biasa: #map-shell.penuh (peta
+           layar penuh) SAMA-SAMA 200, jadi tanpa ini flyout bisa tertutup peta
+           kalau kebetulan lagi terbuka bersamaan. Ditulis di sini (bukan
+           .pilih-panel global) supaya combobox filter lain tidak ikut naik. -->
+      <div id="master-panel" class="pilih-panel" hidden style="width:220px; z-index:300">
         <button onclick="switchTab('dealer')" id="nav-dealer" class="pilih-opsi"><i class="ph ph-buildings mr-2"></i>Master Dealer</button>
         <button onclick="switchTab('pos')" id="nav-pos" class="pilih-opsi"><i class="ph ph-storefront mr-2"></i>Master Pos Dealer</button>
         <button onclick="switchTab('kelurahan')" id="nav-kelurahan" class="pilih-opsi"><i class="ph ph-map-pin-line mr-2"></i>Master Kelurahan</button>
@@ -267,7 +388,7 @@
       <span id="sidebar-status">memuat...</span>
     </div>
     <form method="post" action="/logout" onsubmit="event.preventDefault(); fetch('/logout',{method:'POST'}).then(()=>location.replace('/login'))">
-      <button type="submit" title="Keluar" class="nav-btn px-3 py-2.5 rounded-xl text-sm"><i class="ph ph-sign-out text-lg"></i></button>
+      <button type="submit" title="Keluar" class="nav-btn px-3 py-1.5 rounded-xl text-sm"><i class="ph ph-sign-out text-lg"></i></button>
     </form>
   </div>
 </nav>
@@ -292,29 +413,22 @@
     <div class="pilih shrink-0" id="pilih-kota"></div>
     <div class="pilih shrink-0" id="pilih-dealer"></div>
     <div class="pilih shrink-0" id="pilih-pos"></div>
-    <button onclick="resetFilters()" title="Kembali ke seluruh penjualan" class="ml-auto shrink-0 text-slate-400 hover:text-slate-700 px-2"><i class="ph ph-arrow-counter-clockwise text-lg"></i></button>
+    <!-- Sejak 2026-09-14: "PROPORSI PENJUALAN" tidak lagi kartu inline di halaman —
+         cuma tombol ini, buka popup (openTreemapFull(), lihat #modal-treemap). -->
+    <button onclick="openTreemapFull()" title="Proporsi Penjualan" class="ml-auto shrink-0 text-slate-400 hover:text-slate-700 px-2"><i class="ph-fill ph-chart-bar text-lg"></i></button>
+    <button onclick="resetFilters()" title="Kembali ke seluruh penjualan" class="shrink-0 text-slate-400 hover:text-slate-700 px-2"><i class="ph ph-arrow-counter-clockwise text-lg"></i></button>
   </div>
 </div>
 
 <main class="flex-1 overflow-y-auto">
-<section id="tab-peta" class="p-4 md:p-6 space-y-5">
-
-  <!-- Ruang lingkup: apa yang sedang dihitung. Ini yang membuat heatmap relatif
-       tidak menyesatkan — orang selalu tahu 100%-nya siapa. -->
-  <div id="scope-bar" class="flex items-center gap-2 text-sm bg-white rounded-xl border border-slate-100 px-4 py-2.5 shadow-sm">
-    <i class="ph-fill ph-target text-slate-400"></i>
-    <span class="text-slate-500">Heatmap dihitung terhadap:</span>
-    <span id="scope-label" class="font-bold text-slate-800">seluruh penjualan</span>
-    <button id="scope-clear" onclick="resetFilters()" class="hidden ml-1 text-xs font-bold px-2 py-1 rounded-lg text-white" style="background:var(--astra-navy)">kembali ke semua</button>
-    <button id="btn-edit-ring" onclick="startGroupEdit()" class="hidden ml-auto text-xs font-bold px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-target mr-1"></i>Edit ring dealer ini</button>
-  </div>
+<section id="tab-peta" class="p-3 md:p-4 space-y-3">
 
   <!-- Ringkasan utama — sejak 2026-08-31 malam ikut scope (Kota/Semua, Dealer, Pos)
        alih-alih 4 KPI statis yang sebelumnya selalu sama nilainya berapa pun
        filternya. Isinya dirender renderTopSummary() di render.js, satu baris grid,
        sama seperti ringkas-jangkauan di panel Performa (field-nya beda: scope
        dealer di sini TANPA pecahan Ring/Coverage, rinciannya cukup di satu tempat). -->
-  <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+  <div class="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
     <div id="ringkas-utama"></div>
   </div>
 
@@ -324,14 +438,17 @@
   <div id="map-shell" class="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 relative">
     <div id="map" class="map-container rounded-xl overflow-hidden"></div>
 
-    <div class="absolute top-6 left-6 z-20 flex items-center gap-2">
+    <!-- id ditambah supaya CSS #map-shell.penuh #map-top-buttons bisa memberinya
+         grid-area:map — lihat komentar di blok <style> — inilah "tombol yang
+         dipindahkan" ke pojok kotak peta, bukan pojok layar. -->
+    <div id="map-top-buttons" class="absolute top-6 left-6 z-20 flex items-center gap-2">
       <button onclick="toggleFullscreen()" id="btn-penuh" title="Layar penuh (Esc untuk keluar)"
               class="map-panel px-3 py-2 text-xs font-bold text-slate-700 flex items-center gap-1.5">
         <i class="ph-fill ph-arrows-out"></i><span id="label-penuh">Layar penuh</span>
       </button>
       <button onclick="fitToScope()" id="btn-fit" title="Perbesar peta pas ke data yang sedang tampil"
               class="map-panel px-3 py-2 text-xs font-bold text-slate-700 flex items-center gap-1.5">
-        <i class="ph-fill ph-crop"></i><span>Fit</span>
+        <i class="ph-fill ph-crop"></i><span>Fokuskan</span>
       </button>
       <!-- Di ATAS peta, bukan cuma di bilah ruang lingkup jauh di atas halaman.
            Orang yang baru mengklik marker sedang melihat peta; tombol yang ada di
@@ -345,7 +462,12 @@
     <!-- Layar penuh menutupi bilah filter di atas, jadi bilah ASLINYA yang dipindah
          ke sini (lihat toggleFullscreen di map.js). Bukan cermin kedua: dua daftar
          yang harus disamakan terus-menerus pasti menyimpang suatu hari. -->
-    <div id="fs-filter-host" class="hanya-penuh absolute top-6 left-1/2 -translate-x-1/2 z-20 map-panel"></div>
+    <div id="fs-filter-host" class="hanya-penuh z-20"></div>
+
+    <!-- Tombol "Keluar" (btn-penuh) pindah ke sini waktu layar penuh — lihat
+         moveExitButton() di map.js. Di mode biasa dia balik sendiri ke
+         #map-top-buttons sebagai tombol "Layar penuh". -->
+    <div id="fs-exit-host" class="hanya-penuh z-20"></div>
 
     <!-- Edit ring dealer / coverage pos. Di dalam #map-shell supaya ikut terbawa waktu
          peta dibuat layar penuh — menyunting justru paling enak di layar penuh.
@@ -359,67 +481,105 @@
       <div id="ring-kotak-list" class="flex items-center gap-2 flex-wrap"></div>
       <span id="ring-bantuan" class="text-[11px] text-slate-400 max-w-[150px] leading-tight">Klik satu kecamatan di peta, lalu pilih kelompoknya.</span>
       <span id="ring-pesan" class="text-[11px] text-red-600"></span>
-      <button id="ring-simpan" onclick="saveRingEdit()" class="px-3 py-1.5 rounded-lg text-xs font-bold text-white" style="background:var(--astra-navy)">Simpan</button>
+      <button id="ring-simpan" onclick="saveRingEdit()" class="px-3 py-1.5 rounded-lg text-xs font-bold text-white btn-primary">Simpan</button>
       <button onclick="cancelRingEdit()" class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 text-slate-600">Batal</button>
     </div>
 
     <!-- Satu slot, dua grup yang saling toggle hidden (syncFullscreenPanels() di
          render.js): Performa Pos waktu filter Semua/Kota, Penjualan Wilayah waktu
          filter Dealer/Pos aktif — permintaan Pakbos, putaran ketiga. -->
-    <div class="hanya-penuh absolute top-20 left-6 bottom-6 w-80 map-panel p-4 z-20 overflow-y-auto">
-      <div id="fs-performa-grup">
-        <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Analisis Performa Pos</div>
-        <div id="fs-ringkas" class="mb-3"></div>
-        <div id="fs-performa" class="space-y-2"></div>
+    <!-- Sejak 2026-09-14: #fs-kiri-panel sendiri BUKAN LAGI wadah gulir (overflow-
+         hidden, flex kolom) — dia cuma bingkai. #fs-performa-grup/#fs-wilayah-grup
+         di dalamnya masing-masing flex kolom setinggi penuh (h-full min-h-0, WAJIB
+         supaya anak flex-1 di bawahnya benar-benar dapat tinggi terbatas, jebakan
+         flexbox klasik), dengan judul (+ ringkasan/tombol Pause) shrink-0 di atas
+         dan #fs-performa/#fs-wilayah (flex-1 overflow-y-auto) yang jadi wadah
+         gulir SESUNGGUHNYA. Sebelum ini, panelWilayahAktif()/panelPerformaAktif()
+         (render.js) menggulir #fs-wilayah/#fs-performa — div konten polos yang
+         selalu setinggi isinya sendiri (scrollHeight===clientHeight) — jadi
+         "berhenti sendiri kalau tidak lebih panjang dari wadahnya" SELALU
+         langsung berhenti; tombol Live tampak menyala tapi tidak pernah benar-
+         benar menggulir. -->
+    <div id="fs-kiri-panel" class="hanya-penuh absolute top-20 left-6 bottom-6 w-80 map-panel p-4 z-20 overflow-hidden flex flex-col">
+      <div id="fs-performa-grup" class="flex flex-col h-full min-h-0">
+        <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 shrink-0">Analisis Performa Pos</div>
+        <div id="fs-ringkas" class="mb-3 shrink-0"></div>
+        <div id="fs-performa" class="flex-1 overflow-y-auto min-h-0 space-y-2"></div>
       </div>
-      <div id="fs-wilayah-grup" class="hidden">
-        <div class="flex items-center justify-between mb-2">
+      <div id="fs-wilayah-grup" class="hidden flex flex-col h-full min-h-0">
+        <div class="flex items-center justify-between mb-2 shrink-0">
           <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Analisis Penjualan Wilayah</div>
           <button id="btn-live-wilayah-fs" onclick="toggleLiveWilayah()" title="Jeda gulir otomatis"
                   class="live-nyala flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-pause"></i></button>
         </div>
-        <div id="fs-wilayah" class="space-y-2"></div>
+        <div id="fs-wilayah" class="flex-1 overflow-y-auto min-h-0 space-y-2"></div>
       </div>
     </div>
 
-    <div id="fs-kartu" class="hanya-penuh absolute bottom-6 left-1/2 -translate-x-1/2 z-20 map-panel px-4 py-3 max-w-[calc(100vw-46rem)]"></div>
+    <!-- Block summary baru di atas strip info dealer/pos — isi sama persis dengan
+         #ringkas-utama di atas peta mode biasa (renderTopSummary() menulis ke
+         keduanya). Diminta user: melihat ruang kosong di strip dealer/pos sejak
+         jadi 2 baris, dan angka ringkasan sebelumnya cuma ada di halaman biasa
+         (hilang begitu masuk layar penuh). -->
+    <div id="fs-ringkas-utama" class="hanya-penuh z-20 map-panel"></div>
+    <div id="fs-kartu" class="hanya-penuh z-20 map-panel"></div>
     <div id="mapError" class="hidden absolute inset-3 z-30 flex items-center justify-center bg-white/95 rounded-xl p-6"></div>
 
-    <div class="map-panel absolute top-6 right-6 p-4 w-60 z-10 max-h-[calc(100%-2rem)] overflow-y-auto">
+    <div id="opsi-peta-panel" class="map-panel absolute top-6 right-6 p-4 w-60 z-20 max-h-[calc(100%-2rem)] overflow-y-auto">
       <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Opsi Peta</div>
 
-      <div class="text-[10px] font-bold text-slate-400 uppercase mb-1">Tampilan Dasar</div>
-      <div class="flex bg-slate-100 rounded-lg p-0.5 text-[11px] font-bold mb-3">
-        <button onclick="setBasemap('lokal')" id="bm-lokal" class="flex-1 px-2 py-1.5 rounded-md text-slate-500">Lokal</button>
-        <button onclick="setBasemap('satelit')" id="bm-satelit" class="flex-1 px-2 py-1.5 rounded-md bg-white text-slate-800 shadow-sm">Satelit</button>
-        <button onclick="setBasemap('polos')" id="bm-polos" class="flex-1 px-2 py-1.5 rounded-md text-slate-500">Polos</button>
-      </div>
+      <!-- Sejak 2026-09-14: enam grup di bawah dijadikan accordion <details> —
+           pola yang sama dipakai dua legenda di bagian bawah panel ini
+           (sengaja dipakai ulang, bukan komponen baru). Status buka/tutup
+           awal tiap grup DIKONFIRMASI eksplisit ke user: Tampilan Dasar,
+           Tampilan Titik, Ring Dealer, Coverage POS, dan Mode Heatmap
+           terbuka; Batas Wilayah (kelurahan/kecamatan/kota, dulu tercampur
+           tanpa judul grup di sini) tertutup. -->
+      <details open>
+        <summary class="text-[10px] font-bold text-slate-400 uppercase mb-1 cursor-pointer select-none">Tampilan Dasar</summary>
+        <div class="flex bg-slate-100 rounded-lg p-0.5 text-[11px] font-bold mt-1">
+          <button onclick="setBasemap('lokal')" id="bm-lokal" class="flex-1 px-2 py-1.5 rounded-md text-slate-500">Lokal</button>
+          <button onclick="setBasemap('satelit')" id="bm-satelit" class="flex-1 px-2 py-1.5 rounded-md bg-white text-slate-800 shadow-sm">Satelit</button>
+          <button onclick="setBasemap('polos')" id="bm-polos" class="flex-1 px-2 py-1.5 rounded-md text-slate-500">Polos</button>
+        </div>
+      </details>
 
-      <label class="toggle-row"><span class="text-xs font-semibold text-slate-600">Batas dan Nama Kelurahan/Desa</span><span class="switch"><input type="checkbox" id="opt-kelurahan" checked onchange="redrawMap()"><span class="track"></span></span></label>
-      <label class="toggle-row"><span class="text-xs font-semibold text-slate-600">Batas dan Nama Kecamatan</span><span class="switch"><input type="checkbox" id="opt-kecamatan" onchange="toggleDistrictNames()"><span class="track"></span></span></label>
-      <label class="toggle-row"><span class="text-xs font-semibold text-slate-600">Batas dan Nama Kota</span><span class="switch"><input type="checkbox" id="opt-kota" onchange="redrawMap()"><span class="track"></span></span></label>
-      <label class="toggle-row"><span class="text-xs font-semibold text-slate-600">Titik Dealer</span><span class="switch"><input type="checkbox" id="opt-titik-dealer" checked onchange="redrawMap()"><span class="track"></span></span></label>
-      <label class="toggle-row"><span class="text-xs font-semibold text-slate-600">Titik Pos</span><span class="switch"><input type="checkbox" id="opt-titik-pos" checked onchange="redrawMap()"><span class="track"></span></span></label>
-      <label class="toggle-row"><span class="text-xs font-semibold text-slate-600">Titik Penjualan</span><span class="switch"><input type="checkbox" id="opt-jual" checked onchange="redrawMap()"><span class="track"></span></span></label>
+      <details class="mt-2 pt-2 border-t border-slate-200">
+        <summary class="text-[10px] font-bold text-slate-400 uppercase mb-1 cursor-pointer select-none">Batas Wilayah</summary>
+        <div class="mt-1">
+          <label class="toggle-row"><span class="text-xs font-semibold text-slate-600">Batas dan Nama Kelurahan/Desa</span><span class="switch"><input type="checkbox" id="opt-kelurahan" checked onchange="redrawMap()"><span class="track"></span></span></label>
+          <label class="toggle-row"><span class="text-xs font-semibold text-slate-600">Batas dan Nama Kecamatan</span><span class="switch"><input type="checkbox" id="opt-kecamatan" onchange="toggleDistrictNames()"><span class="track"></span></span></label>
+          <label class="toggle-row"><span class="text-xs font-semibold text-slate-600">Batas dan Nama Kota</span><span class="switch"><input type="checkbox" id="opt-kota" onchange="redrawMap()"><span class="track"></span></span></label>
+        </div>
+      </details>
+
+      <details class="mt-2 pt-2 border-t border-slate-200" open>
+        <summary class="text-[10px] font-bold text-slate-400 uppercase mb-1 cursor-pointer select-none">Tampilan Titik</summary>
+        <div class="mt-1">
+          <label class="toggle-row"><span class="text-xs font-semibold text-slate-600">Titik Dealer</span><span class="switch"><input type="checkbox" id="opt-titik-dealer" checked onchange="redrawMap()"><span class="track"></span></span></label>
+          <label class="toggle-row"><span class="text-xs font-semibold text-slate-600">Titik Pos</span><span class="switch"><input type="checkbox" id="opt-titik-pos" checked onchange="redrawMap()"><span class="track"></span></span></label>
+          <label class="toggle-row"><span class="text-xs font-semibold text-slate-600">Titik Penjualan</span><span class="switch"><input type="checkbox" id="opt-jual" checked onchange="redrawMap()"><span class="track"></span></span></label>
+        </div>
+      </details>
 
       <!-- Pengganti Radius jangkauan (3/5/7/10 km) + Lingkaran Radius sejak
            2026-08-31 pagi. Sejak sore itu juga, ring pindah ke DEALER (kecamatan) dan
            pos mendapat coverage baru (kecamatan, 1-8) — dua grup terpisah, aktif
            bergantian menurut scope (lihat syncGroupControls() di map.js). -->
-      <div class="mt-2 pt-2 border-t border-slate-200">
-        <div class="text-[10px] font-bold text-slate-400 uppercase mb-1">Tampilan Ring Dealer</div>
-        <div class="flex bg-slate-100 rounded-lg p-0.5 text-[11px] font-bold" id="pilihan-ring-dealer">
+      <details class="mt-2 pt-2 border-t border-slate-200" open>
+        <summary class="text-[10px] font-bold text-slate-400 uppercase mb-1 cursor-pointer select-none">Tampilan Ring Dealer</summary>
+        <div class="flex bg-slate-100 rounded-lg p-0.5 text-[11px] font-bold mt-1" id="pilihan-ring-dealer">
           <button onclick="setRingViewDealer('lokasi')" id="rv-lokasi" class="flex-1 px-2 py-1.5 rounded-md text-slate-500">Lokasi</button>
           <button onclick="setRingViewDealer(1)" id="rv-1" class="flex-1 px-2 py-1.5 rounded-md text-slate-500">Ring 1</button>
           <button onclick="setRingViewDealer(2)" id="rv-2" class="flex-1 px-2 py-1.5 rounded-md text-slate-500">Ring 2</button>
           <button onclick="setRingViewDealer(3)" id="rv-3" class="flex-1 px-2 py-1.5 rounded-md text-slate-500">Ring 3</button>
         </div>
         <p class="text-[10px] text-slate-400 mt-1 leading-snug">Menyorot kecamatan ring milik dealer yang sedang dipilih. Aktif hanya saat scope Dealer dipilih.</p>
-      </div>
+      </details>
 
-      <div class="mt-2 pt-2 border-t border-slate-200">
-        <div class="text-[10px] font-bold text-slate-400 uppercase mb-1">Tampilan Coverage POS</div>
-        <div class="flex flex-wrap gap-0.5 bg-slate-100 rounded-lg p-0.5 text-[10px] font-bold" id="pilihan-coverage-pos">
+      <details class="mt-2 pt-2 border-t border-slate-200" open>
+        <summary class="text-[10px] font-bold text-slate-400 uppercase mb-1 cursor-pointer select-none">Tampilan Coverage POS</summary>
+        <div class="flex flex-wrap gap-0.5 bg-slate-100 rounded-lg p-0.5 text-[10px] font-bold mt-1" id="pilihan-coverage-pos">
           <button onclick="setCoverageViewPos('lokasi')" id="cv-lokasi" class="px-2 py-1.5 rounded-md text-slate-500">Lokasi</button>
           <button onclick="setCoverageViewPos(1)" id="cv-1" class="px-2 py-1.5 rounded-md text-slate-500">Cov 1</button>
           <button onclick="setCoverageViewPos(2)" id="cv-2" class="px-2 py-1.5 rounded-md text-slate-500">Cov 2</button>
@@ -431,15 +591,15 @@
           <button onclick="setCoverageViewPos(8)" id="cv-8" class="px-2 py-1.5 rounded-md text-slate-500">Cov 8</button>
         </div>
         <p class="text-[10px] text-slate-400 mt-1 leading-snug">Menyorot kecamatan coverage milik pos yang sedang dipilih. Aktif hanya saat scope Pos dipilih.</p>
-      </div>
+      </details>
 
-      <div class="mt-3 pt-3 border-t border-slate-200">
-        <div class="text-[10px] font-bold text-slate-400 uppercase mb-1">Mode Heatmap</div>
-        <div class="flex bg-slate-100 rounded-lg p-1 text-[10px] font-bold">
+      <details class="mt-3 pt-3 border-t border-slate-200" open>
+        <summary class="text-[10px] font-bold text-slate-400 uppercase mb-1 cursor-pointer select-none">Mode Heatmap</summary>
+        <div class="flex bg-slate-100 rounded-lg p-1 text-[10px] font-bold mt-1">
           <button onclick="setHeatmapMode('relative')" id="hm-relative" class="flex-1 px-2 py-1.5 rounded-md bg-white text-slate-800 shadow-sm">Per Peringkat Relatif</button>
           <button onclick="setHeatmapMode('fixed')" id="hm-fixed" class="flex-1 px-2 py-1.5 rounded-md text-slate-500">Per Nilai Kontribusi</button>
         </div>
-      </div>
+      </details>
 
       <!-- Dua legenda ini yang membuat panelnya tidak muat: isinya 887 px sementara
            yang terlihat cuma 462 px, jadi 427 px harus digulir. Dilipat dengan
@@ -465,40 +625,28 @@
     <div id="kelurahanDetailPanel" class="hidden translate-x-full absolute top-20 left-6 bottom-6 w-96 map-panel p-5 z-20 overflow-y-auto">
       <button onclick="closeVillageDetail()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-700"><i class="ph ph-x text-lg"></i></button>
       <div id="kelurahanDetailBack" class="mb-1"></div>
-      <div id="kelurahanDetailTitle" class="text-lg font-extrabold text-slate-900 pr-8"></div>
-      <div id="kelurahanDetailMeta" class="text-[11px] mono text-slate-400 mb-3"></div>
+      <!-- Ringkasan dealer (dealerCardHtml compact) — DIISI HANYA oleh openDealerDetail(),
+           dikosongkan lagi waktu drill-down kelurahan biasa supaya tidak nyasar
+           tampil di konteks yang salah. Sejak 2026-09-14: klik marker dealer di
+           mode biasa langsung mengisi ini + kelurahanDetailList sekaligus. -->
+      <div id="kelurahanDetailSummary" class="mb-3 pb-3 border-b border-slate-100"></div>
+      <div id="kelurahanDetailTitle" class="text-base font-extrabold text-slate-900 pr-8 leading-tight"></div>
+      <div id="kelurahanDetailMeta" class="text-[10px] mono text-slate-400 mb-2"></div>
       <div id="kelurahanDetailList"></div>
     </div>
-  </div>
-
-  <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-    <div class="flex items-center justify-between mb-3">
-      <div class="flex items-center gap-2 text-sm font-bold text-slate-700"><i class="ph-fill ph-chart-bar"></i> PROPORSI PENJUALAN</div>
-      <div class="flex items-center gap-1.5">
-        <div class="flex bg-slate-100 rounded-xl p-1 text-xs font-bold">
-          <button onclick="setTreemapView('kota')" id="tm-kota" class="px-3 py-1.5 rounded-lg text-slate-500">Per Kota</button>
-          <button onclick="setTreemapView('dealer')" id="tm-dealer" class="px-3 py-1.5 rounded-lg bg-white text-slate-800 shadow-sm">Per Dealer</button>
-          <button onclick="setTreemapView('pos')" id="tm-pos" class="px-3 py-1.5 rounded-lg text-slate-500">Per Pos</button>
-        </div>
-        <button onclick="openTreemapFull()" title="Tampilkan lebih besar"
-                class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-arrows-out"></i></button>
-      </div>
-    </div>
-    <p class="text-xs text-slate-400 mb-2">Klik salah satu blok untuk memfilter peta dan tabel.</p>
-    <div id="treemap-chart" style="height:330px"></div>
   </div>
 
   <!-- Sejak 2026-08-31 malam: dua blok di bawah ini sebaris 2 kolom, porsi 70/30
        (permintaan user) — pola grid-cols-1 xl:grid-cols-N + xl:col-span-M yang sama
        dipakai split 66/33 tab Import, basis 10 kolom di sini supaya rasionya pas.
        Stack 1 kolom di layar sempit (di bawah breakpoint xl). -->
-  <div class="grid grid-cols-1 xl:grid-cols-10 gap-4">
+  <div class="grid grid-cols-1 xl:grid-cols-10 gap-3">
   <!-- Sejak 2026-08-31: baris penuh di bawah Proporsi Penjualan, satu baris satu pos
        (permintaan Pakbos) — sebelumnya kartu ringkas di sisi treemap. Field per baris
        sekarang lebih banyak (kontribusi, kelompok posisi relatif, kelompok acuan
        bisnis, %ring 1/2/3) dan butuh lebar penuh supaya tidak terpotong. -->
-  <div class="xl:col-span-7 bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-    <div class="flex items-center justify-between gap-2 flex-wrap">
+  <div class="xl:col-span-7 bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex flex-col overflow-hidden" style="max-height:640px">
+    <div class="flex items-center justify-between gap-2 flex-wrap shrink-0">
       <div class="flex items-center gap-2 text-sm font-bold text-slate-700"><i class="ph-fill ph-target"></i> ANALISIS PERFORMA POS DEALER</div>
       <div class="flex items-center gap-1.5">
         <button id="btn-urut-performa" onclick="togglePerformanceSort()" title="Balik arah urutan"
@@ -511,10 +659,14 @@
                 class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 whitespace-nowrap"><i class="ph ph-arrows-out"></i></button>
       </div>
     </div>
-    <p class="text-xs text-slate-400 mt-0.5 mb-3">Total sales, kontribusi, kelompok posisi relatif dan acuan bisnis, serta bagian penjualan per ring layanan (ditetapkan manual, lihat Edit ring). Klik baris untuk memfilter peta.</p>
-    <div id="ringkas-jangkauan" class="mb-3"></div>
-    <div id="panel-performa" class="overflow-y-auto space-y-2 pr-1" style="max-height:460px"></div>
-    <p class="text-[10px] text-slate-400 leading-snug mt-3 pt-2 border-t border-slate-100">
+    <p class="text-xs text-slate-400 mt-0.5 mb-3 shrink-0">Total sales, kontribusi, kelompok posisi relatif dan acuan bisnis, serta bagian penjualan per ring layanan (ditetapkan manual, lihat Edit ring). Klik baris untuk memfilter peta.</p>
+    <!-- Ringkasan + sort-by + papan 5 kelompok TETAP DIAM (shrink-0), cuma daftar
+         pos di bawahnya yang bergulir — pola sama seperti versi layar penuh
+         (#fs-ringkas / #fs-performa). Lihat renderPerformance() di render.js:
+         ketiganya digabung ke sini, panel-performa cuma dapat baris pos. -->
+    <div id="ringkas-jangkauan" class="mb-3 shrink-0"></div>
+    <div id="panel-performa" class="flex-1 overflow-y-auto min-h-0 space-y-2 pr-1"></div>
+    <p class="text-[10px] text-slate-400 leading-snug mt-3 pt-2 border-t border-slate-100 shrink-0">
       Ringkasan di atas berganti isi mengikuti filter yang aktif: Kota/Semua
       menampilkan jumlah desa dan rata-rata kontribusi/posisi relatif, Dealer
       menambahkan jumlah pos dan rata-rata acuan bisnis, Pos menampilkan bagian
@@ -525,7 +677,7 @@
   <!-- Blok baru (permintaan Pakbos, putaran ketiga): satu baris satu DESA, SELALU
        tampil (tidak bergantung filter). Auto-loop sendiri begitu ada isinya, tombol
        Pause bukan Live — beda dari blok Performa Pos Dealer di atas. -->
-  <div class="xl:col-span-3 bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+  <div class="xl:col-span-3 bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
     <div class="flex items-center justify-between gap-2 flex-wrap">
       <div class="flex items-center gap-2 text-sm font-bold text-slate-700"><i class="ph-fill ph-map-pin-area"></i> ANALISIS PENJUALAN WILAYAH</div>
       <button id="btn-live-wilayah" onclick="toggleLiveWilayah()" title="Jeda gulir otomatis"
@@ -572,7 +724,7 @@
           <i class="ph-fill ph-warning shrink-0 text-base"></i>
           <span id="imp-warning-text"></span>
         </div>
-        <button onclick="importStep(2)" class="mt-5 px-5 py-2.5 rounded-xl text-white text-sm font-bold" style="background:var(--astra-navy)">Lanjut</button>
+        <button onclick="importStep(2)" class="mt-5 px-5 py-2.5 rounded-xl text-white text-sm font-bold btn-primary">Lanjut</button>
       </div>
 
       <!-- langkah 2 -->
@@ -594,7 +746,7 @@
             <div id="imp-file-name" class="text-sm font-bold text-slate-700 truncate"></div>
             <div id="imp-file-size" class="text-xs text-slate-400"></div>
           </div>
-          <button onclick="runUpload()" class="px-4 py-2 rounded-xl text-white text-xs font-bold shrink-0" style="background:var(--astra-navy)">Proses</button>
+          <button onclick="runUpload()" class="px-4 py-2 rounded-xl text-white text-xs font-bold shrink-0 btn-primary">Proses</button>
         </div>
 
         <!-- Dulu di sini ada centang untuk memilih. Dibuang 2026-08-18 atas keputusan
@@ -638,7 +790,7 @@
           </div>
           <div id="imp-new-outlets"></div>
 
-          <button onclick="reviewImport()" class="mt-4 px-5 py-2.5 rounded-xl text-white text-sm font-bold" style="background:var(--astra-navy)">Tinjau hasil</button>
+          <button onclick="reviewImport()" class="mt-4 px-5 py-2.5 rounded-xl text-white text-sm font-bold btn-primary">Tinjau hasil</button>
         </div>
       </div>
 
@@ -675,7 +827,7 @@
       <p class="text-sm text-slate-500 mt-0.5"><span id="pos-count">0</span> pos dari <span id="pos-dealer-count">0</span> dealer</p>
     </div>
     <div class="flex gap-2">
-      <button onclick="openNewOutlet()" style="background:var(--astra-navy)" class="px-4 py-2 rounded-xl text-white text-sm font-semibold hover:opacity-90 whitespace-nowrap"><i class="ph ph-plus mr-1"></i>Tambah Pos</button>
+      <button onclick="openNewOutlet()" class="px-4 py-2 rounded-xl text-white text-sm font-semibold hover:opacity-90 whitespace-nowrap btn-primary"><i class="ph ph-plus mr-1"></i>Tambah Pos</button>
       <button onclick="openPosImport()" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 whitespace-nowrap"><i class="ph ph-file-xls mr-1"></i>Impor dari Excel</button>
       <button onclick="askResetOutlets()" title="Kosongkan master pos dan dealer" class="px-4 py-2 rounded-xl border border-red-200 text-red-700 text-sm font-semibold hover:bg-red-50 whitespace-nowrap"><i class="ph ph-arrow-counter-clockwise mr-1"></i>Reset</button>
       <input id="mpos-search" oninput="renderOutletTable()" type="text" placeholder="Cari nama atau kode pos..." class="px-3 py-2 rounded-xl border border-slate-200 text-sm w-64">
@@ -706,7 +858,7 @@
       <p class="text-sm text-slate-500 mt-0.5"><span id="dealer-count">0</span> dealer</p>
     </div>
     <div class="flex gap-2">
-      <button onclick="openNewDealer()" style="background:var(--astra-navy)" class="px-4 py-2 rounded-xl text-white text-sm font-semibold hover:opacity-90 whitespace-nowrap"><i class="ph ph-plus mr-1"></i>Tambah Dealer</button>
+      <button onclick="openNewDealer()" class="px-4 py-2 rounded-xl text-white text-sm font-semibold hover:opacity-90 whitespace-nowrap btn-primary"><i class="ph ph-plus mr-1"></i>Tambah Dealer</button>
       <input id="mdeal-search" oninput="renderDealerTable()" type="text" placeholder="Cari nama atau kode dealer..." class="px-3 py-2 rounded-xl border border-slate-200 text-sm w-64">
     </div>
   </div>
@@ -769,7 +921,7 @@
       <p class="text-sm text-slate-500 mt-0.5">Urut provinsi &rarr; kabupaten &rarr; kecamatan &rarr; kelurahan</p>
     </div>
     <div class="flex gap-2">
-      <button onclick="openMatchNames()" style="background:var(--astra-navy)" class="px-4 py-2 rounded-xl text-white text-sm font-semibold hover:opacity-90 whitespace-nowrap"><i class="ph ph-link mr-1"></i>Cocokkan Nama<span id="mkel-pending" class="hidden ml-1.5 px-1.5 py-0.5 rounded-md bg-white/25 text-[11px] mono"></span></button>
+      <button onclick="openMatchNames()" class="px-4 py-2 rounded-xl text-white text-sm font-semibold hover:opacity-90 whitespace-nowrap btn-primary"><i class="ph ph-link mr-1"></i>Cocokkan Nama<span id="mkel-pending" class="hidden ml-1.5 px-1.5 py-0.5 rounded-md bg-white/25 text-[11px] mono"></span></button>
       <input id="mkel-search" oninput="renderVillageTable()" type="text" placeholder="Cari kelurahan atau kode..." class="px-3 py-2 rounded-xl border border-slate-200 text-sm w-56">
     </div>
   </div>
@@ -821,7 +973,7 @@
 
     <div id="np-pesan" class="text-xs mb-3"></div>
     <div class="flex gap-2">
-      <button id="np-simpan" onclick="saveNewOutlet()" style="background:var(--astra-navy)" class="flex-1 px-4 py-2.5 rounded-xl text-white text-sm font-bold hover:opacity-90">Tambah</button>
+      <button id="np-simpan" onclick="saveNewOutlet()" class="flex-1 px-4 py-2.5 rounded-xl text-white text-sm font-bold hover:opacity-90 btn-primary">Tambah</button>
       <button onclick="closeNewOutlet()" class="px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600">Batal</button>
     </div>
   </div>
@@ -849,7 +1001,7 @@
 
     <div id="nd-pesan" class="text-xs mb-3"></div>
     <div class="flex gap-2">
-      <button id="nd-simpan" onclick="saveNewDealer()" style="background:var(--astra-navy)" class="flex-1 px-4 py-2.5 rounded-xl text-white text-sm font-bold hover:opacity-90">Tambah</button>
+      <button id="nd-simpan" onclick="saveNewDealer()" class="flex-1 px-4 py-2.5 rounded-xl text-white text-sm font-bold hover:opacity-90 btn-primary">Tambah</button>
       <button onclick="closeNewDealer()" class="px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600">Batal</button>
     </div>
   </div>
@@ -873,7 +1025,7 @@
     <p class="text-[11px] text-slate-400 mt-1.5 mb-3">Boleh dikosongkan. Kantor dealer boleh di luar wilayah peta.</p>
 
     <div id="sd-pesan" class="text-xs mb-3"></div>
-    <button onclick="saveDealerEditor()" id="sd-simpan" class="w-full px-4 py-2.5 rounded-xl text-white text-sm font-bold" style="background:var(--astra-navy)">Simpan</button>
+    <button onclick="saveDealerEditor()" id="sd-simpan" class="w-full px-4 py-2.5 rounded-xl text-white text-sm font-bold btn-primary">Simpan</button>
   </div>
 </div>
 
@@ -907,7 +1059,7 @@
           </table>
         </div>
       </div>
-      <button id="pimp-terapkan" onclick="applyPosImport()" class="mt-3 w-full px-4 py-2.5 rounded-xl text-white text-sm font-bold shrink-0 disabled:opacity-40" style="background:var(--astra-navy)">Terapkan Perubahan</button>
+      <button id="pimp-terapkan" onclick="applyPosImport()" class="mt-3 w-full px-4 py-2.5 rounded-xl text-white text-sm font-bold shrink-0 disabled:opacity-40 btn-primary">Terapkan Perubahan</button>
     </div>
   </div>
 </div>
@@ -955,15 +1107,27 @@
   <div id="fp-performa" class="flex-1 min-h-0 overflow-y-auto space-y-2 pr-2"></div>
 </div>
 
-<!-- Proporsi Penjualan versi besar (Bagian C) — chart treemap KEDUA, digambar
-     renderTreemap() yang sama dari codes/totals yang sama, cuma tinggi beda. -->
-<div id="modal-treemap" class="hidden fixed inset-0 z-[310] bg-white flex flex-col p-6">
-  <div class="shrink-0 flex items-center gap-3 mb-4">
-    <i class="ph-fill ph-chart-bar text-2xl" style="color:var(--astra-navy)"></i>
-    <div class="text-xl font-extrabold text-slate-800">Proporsi Penjualan</div>
-    <button onclick="closeTreemapFull()" class="ml-auto px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-x mr-1"></i>Tutup</button>
+<!-- Proporsi Penjualan — sejak 2026-09-14 SATU-SATUNYA cara melihat blok ini
+     (tidak ada lagi kartu inline di halaman, cuma tombol di bilah filter yang
+     memanggil openTreemapFull()). Dialog di TENGAH layar, ukurannya sengaja
+     dijaga sama seperti kartu lama (max-w-2xl, bukan penuh layar seperti
+     modal-performa) — klik latar gelap ATAU tombol Tutup menutupnya. -->
+<div id="modal-treemap" class="hidden fixed inset-0 z-[310] bg-slate-900/40 flex items-center justify-center p-6" onclick="if (event.target === this) closeTreemapFull()">
+  <div class="bg-white rounded-2xl shadow-xl p-5 w-full max-w-2xl">
+    <div class="flex items-center justify-between mb-3">
+      <div class="flex items-center gap-2 text-sm font-bold text-slate-700"><i class="ph-fill ph-chart-bar"></i> PROPORSI PENJUALAN</div>
+      <div class="flex items-center gap-1.5">
+        <div class="flex bg-slate-100 rounded-xl p-1 text-xs font-bold">
+          <button onclick="setTreemapView('kota')" id="tm-kota" class="px-3 py-1.5 rounded-lg text-slate-500">Per Kota</button>
+          <button onclick="setTreemapView('dealer')" id="tm-dealer" class="px-3 py-1.5 rounded-lg bg-white text-slate-800 shadow-sm">Per Dealer</button>
+          <button onclick="setTreemapView('pos')" id="tm-pos" class="px-3 py-1.5 rounded-lg text-slate-500">Per Pos</button>
+        </div>
+        <button onclick="closeTreemapFull()" title="Tutup" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-x"></i></button>
+      </div>
+    </div>
+    <p class="text-xs text-slate-400 mb-2">Klik salah satu blok untuk memfilter peta dan tabel.</p>
+    <div id="treemap-chart" style="height:420px"></div>
   </div>
-  <div id="treemap-chart-besar" class="flex-1 min-h-0"></div>
 </div>
 
 <!-- Pemilih kecamatan: dipakai KEDUA editor (ring dealer 3 slot, coverage pos 8
@@ -1061,7 +1225,7 @@
 
     <div id="sp-pesan" class="hidden mt-3 text-xs px-3 py-2 rounded-xl"></div>
 
-    <button onclick="saveOutletEditor()" id="sp-simpan" class="mt-4 w-full px-4 py-2.5 rounded-xl text-white text-sm font-bold" style="background:var(--astra-navy)">Simpan</button>
+    <button onclick="saveOutletEditor()" id="sp-simpan" class="mt-4 w-full px-4 py-2.5 rounded-xl text-white text-sm font-bold btn-primary">Simpan</button>
     <p class="text-[11px] text-slate-400 mt-3 leading-snug border-t border-slate-100 pt-3">
       Memindahkan koordinat membuat jangkauan pos ini dihitung ulang otomatis di server.
     </p>
