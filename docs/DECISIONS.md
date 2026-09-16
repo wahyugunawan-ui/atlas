@@ -3275,3 +3275,52 @@ dan itu keadaan yang benar. 3.403 kelurahan, ketiga ribuannya punya padanan
 poligon — jadi tidak ada titik yang diam-diam tidak tergambar.
 
 **Caveat:** belum dilihat di browser.
+
+## [2026-09-17] Checkbox pilih-sumber + pencarian di panel Cakupan Sumber
+
+### Kendalinya di LUAR bagian yang digambar ulang
+
+Ini bukan penghematan, ini syarat supaya fiturnya bisa dipakai. Kalau seluruh
+panel dibangun ulang tiap ketikan, kotak carinya ikut lahir kembali dan
+**fokus beserta posisi kursornya hilang setiap huruf** — orang mengetik "sle"
+dan hanya huruf pertama yang sampai. Jadi checkbox dan kotak cari duduk di
+header panel, dan hanya `#cakupan-isi` yang digambar ulang.
+
+Jawaban terakhir dari `/v1/cakupan-sumber` disimpan di `cakupanTerakhir`, jadi
+mencentang checkbox tidak menembak lima permintaan baru ke server. Yang berubah
+cara menggambarnya, bukan datanya.
+
+### Yang ini memperbaiki keputusan saya sendiri
+
+Sebelumnya saya sengaja TIDAK menggambar bar C · KTP, dengan alasan barnya akan
+100% di setiap baris dan tidak membedakan apa pun. Alasannya masih benar, tapi
+bentuknya salah: itu keputusan diam-diam saya atas nama pembaca. Sekarang KTP
+jadi checkbox yang mati secara bawaan, dan begitu dinyalakan, alasannya ikut
+tertulis di bawah daftar. Pembaca boleh tidak setuju dengan saya.
+
+### Dua hal yang saya temukan tentang tesnya sendiri
+
+**`page.test.js` mengumpulkan id dari template literal di dalam modul, bukan
+cuma dari index.html.** Saya semula menghindari wadah id baru karena mengira
+tesnya akan menyalak. Ternyata tidak — dan itu membalik keputusannya: wadah id
+sendiri justru yang BENAR, karena dialah yang memungkinkan kendali tetap di
+luar bagian yang digambar ulang.
+
+**`fusion.js` ternyata bisa di-import di Node.** Itu berarti logika ini bisa
+benar-benar diuji, bukan cuma diperiksa secara statis. Tesnya memasang
+`document` tiruan seadanya (cukup untuk `getElementById`) lalu menjalankan
+handler yang SUNGGUHAN — `toggleSumberCakupan()` dan `cariCakupan()` — bukan
+salinan logikanya. Menguji salinan tidak menjaga apa pun; itu persis kegagalan
+`test_halaman.js` versi lama yang dicatat di CLAUDE.md.
+
+Satu tes yang layak disebut: pencarian harus mencocokkan **nama yang TAMPIL**,
+bukan `r.name` mentah. Kalau memakai yang mentah, baris "Kota tidak diketahui"
+dan "Luar cakupan (31.75)" tidak akan pernah bisa ditemukan — mereka tidak
+punya `name`. Mutasi yang menggantinya jadi `r.name` tertangkap.
+
+35/35 berkas tes lolos. Baseline diperiksa hijau LEBIH DULU, baru lima mutasi
+dijalankan; semuanya merah dengan benar — checkbox diabaikan, penjaga "semua
+centang lepas" dimatikan, pencarian tidak menyaring, pencarian memakai nama
+mentah, dan pemotongan 25 dilonggarkan.
+
+**Caveat:** belum dilihat di browser.

@@ -208,7 +208,73 @@ function venn(data) {
  * Judulnya memakai `groupBy` dari server, bukan tebakan sendiri, supaya judul panel
  * tidak pernah bisa berbeda dari isi daftarnya.
  */
-function cakupanSumber(data) {
+/**
+ * Sumber mana yang sedang dicentang di panel Cakupan Sumber, dan teks pencariannya.
+ *
+ * KTP mati secara bawaan, dan itu bukan kelalaian: tiap pelanggan yang sampai ke panel
+ * ini menurut definisi punya KTP, jadi barnya 100% di SETIAP baris. Bar yang selalu
+ * penuh tidak membedakan apa pun — tapi sekarang itu pilihan pembaca, bukan keputusan
+ * diam-diam saya. Sampai 2026-09-17 bar KTP memang tidak pernah digambar sama sekali.
+ */
+const sumberAktif = { ktp: false, servis: true, kirim: true };
+let cariCakupanTeks = '';
+
+/**
+ * Jawaban Cakupan Sumber yang terakhir diterima.
+ *
+ * Disimpan supaya mencentang checkbox atau mengetik di kotak cari TIDAK menembak lima
+ * permintaan baru ke server — yang berubah cuma cara menggambarnya, bukan datanya.
+ */
+let cakupanTerakhir = null;
+
+/** Gambar ulang HANYA daftar Cakupan Sumber, dari data yang sudah ada di tangan. */
+function gambarCakupan() {
+  const kotak = $('cakupan-isi');
+  if (kotak) kotak.innerHTML = cakupanSumber(cakupanTerakhir);
+}
+
+/**
+ * Nyalakan/matikan satu sumber.
+ *
+ * Kendalinya SENGAJA di luar bagian yang digambar ulang. Kalau kotak cari ikut
+ * dibangun ulang tiap ketikan, fokus dan posisi kursornya hilang tiap huruf.
+ */
+export function toggleSumberCakupan(kunci) {
+  if (!(kunci in sumberAktif)) return;
+  sumberAktif[kunci] = !sumberAktif[kunci];
+  gambarCakupan();
+}
+
+/** Saring daftar per nama. Penyaringannya lokal, jadi tidak perlu ditunda. */
+export function cariCakupan() {
+  cariCakupanTeks = ($('cs-cari') ? $('cs-cari').value : '').trim().toLowerCase();
+  gambarCakupan();
+}
+
+/** Baris kendali panel: tiga checkbox + kotak cari. Di LUAR `#cakupan-isi`. */
+function kendaliCakupan() {
+  const kotakCentang = Object.keys(SUMBER).map((k) =>
+    `<label class="flex items-center gap-1 text-[10px] text-slate-600 cursor-pointer">` +
+      `<input type="checkbox" id="cs-${esc(k)}"${sumberAktif[k] ? ' checked' : ''} ` +
+      `onchange="toggleSumberCakupan('${esc(k)}')" class="w-3 h-3">` +
+      `<span class="inline-block w-2 h-2 rounded-full" style="background:${
+        SUMBER[k].color}"></span>${esc(SUMBER[k].label)}</label>`).join('');
+
+  return `<div class="flex items-center gap-2 flex-wrap mb-1">${kotakCentang}` +
+    `<input id="cs-cari" oninput="cariCakupan()" type="text" placeholder="Cari…" ` +
+    `value="${esc(cariCakupanTeks)}" ` +
+    `class="ml-auto px-2 py-0.5 rounded-lg border border-slate-200 text-[10px] w-24"></div>`;
+}
+
+/**
+ * DIEKSPOR khusus untuk tes (`test/fusion-cakupan.test.js`).
+ *
+ * Fungsinya murni — data masuk, teks HTML keluar, tidak menyentuh DOM sama sekali —
+ * jadi ia bisa diuji apa adanya. Yang dijaga tesnya adalah keputusan yang TIDAK
+ * kelihatan salah di layar: sumber yang tidak dicentang tetap tergambar, pencarian
+ * yang diam-diam tidak menyaring, atau daftar yang terpotong tanpa memberi tahu.
+ */
+export function cakupanSumber(data) {
   const rows = (data && data.rows) || [];
   const total = Number(data && data.total) || 0;
   if (!rows.length || !total) {
@@ -246,28 +312,60 @@ function cakupanSumber(data) {
     return `Luar cakupan (${r.code})`;
   };
 
-  const daftar = rows.slice(0, 25).map((r) => {
+  // Semua checkbox dilepas: daftarnya akan jadi deretan nama tanpa satu pun bar, dan
+  // itu terbaca seperti data yang hilang. Dikatakan apa yang terjadi, bukan dibiarkan.
+  const aktif = Object.keys(SUMBER).filter((k) => sumberAktif[k]);
+  if (!aktif.length) {
+    return '<p class="text-[11px] text-slate-400 py-4 text-center">Centang minimal satu ' +
+      'sumber untuk melihat cakupannya.</p>';
+  }
+
+  const cocok = cariCakupanTeks
+    ? rows.filter((r) => namaBaris(r).toLowerCase().includes(cariCakupanTeks))
+    : rows;
+
+  if (!cocok.length) {
+    return `<p class="text-[11px] text-slate-400 py-4 text-center">Tidak ada yang cocok ` +
+      `dengan “${esc(cariCakupanTeks)}”.</p>`;
+  }
+
+  const daftar = cocok.slice(0, 25).map((r) => {
     const n = Number(r.total) || 0;
     // city_code '' = kota yang tidak diketahui (source_overlap memakainya sebagai
     // sentinel, kolomnya NOT NULL). Dikatakan apa adanya, bukan dibuang diam-diam.
     const nama = namaBaris(r);
+    // KTP memakai totalnya sendiri: tiap baris di sini menurut definisi punya KTP,
+    // jadi nilainya = pembaginya, dan barnya selalu penuh.
+    const nilai = { ktp: n, servis: r.servis, kirim: r.kirim };
     return `<div class="py-1 border-b border-slate-50 last:border-0">` +
       `<div class="flex items-center gap-2">` +
         `<span class="text-[11px] text-slate-700 truncate flex-1">${esc(nama)}</span>` +
         `<span class="text-[11px] mono text-slate-500">${esc(formatNumber(n))}</span>` +
-      `</div>` + bar('servis', r.servis, n) + bar('kirim', r.kirim, n) + `</div>`;
+      `</div>` + aktif.map((k) => bar(k, nilai[k], n)).join('') + `</div>`;
   }).join('');
 
-  // Kirim kosong sama sekali itu keadaan yang BENAR sekarang (belum ada produsen ping),
-  // bukan cacat gambar. Deretan bar ungu yang kosong di tiap baris akan terbaca sebagai
-  // "dealer ini tidak pernah mengirim" kalau tidak dikatakan.
-  const catatan = Number(sumber.kirim) ? '' :
-    `<p class="text-[10px] text-slate-400 mt-2 leading-snug">Bar <b>A · Kirim</b> kosong ` +
-    `di semua baris karena belum ada satu pun data pengiriman yang masuk — bukan karena ` +
-    `pengirimannya nol.</p>`;
+  const sisa = cocok.length > 25
+    ? `<p class="text-[10px] text-slate-400 mt-1">Menampilkan 25 teratas dari ${
+      esc(String(cocok.length))}.</p>`
+    : '';
 
-  return `<p class="text-[10px] text-slate-400 mb-1">C · KTP tidak digambar: semua ` +
-    `pelanggan di sini pasti punya KTP (100%).</p>` + daftar + catatan;
+  // Kirim kosong sama sekali itu keadaan yang BENAR sekarang (belum ada produsen ping),
+  // bukan cacat gambar. Deretan bar kosong di tiap baris akan terbaca sebagai "dealer
+  // ini tidak pernah mengirim" kalau tidak dikatakan. Hanya relevan kalau barnya
+  // memang sedang ditampilkan.
+  const catatan = (sumberAktif.kirim && !Number(sumber.kirim))
+    ? `<p class="text-[10px] text-slate-400 mt-2 leading-snug">Bar <b>${
+      esc(SUMBER.kirim.label)}</b> kosong di semua baris karena belum ada satu pun data ` +
+      `pengiriman yang masuk — bukan karena pengirimannya nol.</p>`
+    : '';
+
+  const catatanKtp = sumberAktif.ktp
+    ? `<p class="text-[10px] text-slate-400 mt-2 leading-snug">Bar <b>${
+      esc(SUMBER.ktp.label)}</b> selalu 100%: tiap pelanggan di panel ini menurut ` +
+      `definisi punya data KTP — itu syarat masuk penggolongan.</p>`
+    : '';
+
+  return daftar + sisa + catatan + catatanKtp;
 }
 
 function panelBelum(judul, keterangan) {
@@ -369,6 +467,10 @@ export async function renderFusion() {
     return;
   }
 
+  // Disimpan supaya checkbox dan kotak cari bisa menggambar ulang tanpa meminta
+  // apa pun lagi ke server.
+  cakupanTerakhir = cakupan;
+
   const meta = hasil.meta || {};
   const counts = meta.counts || {};
   const total = Number(meta.total) || 0;
@@ -420,7 +522,8 @@ export async function renderFusion() {
           `<span class="text-[10px] text-slate-400">per ${
             esc(cakupan && cakupan.groupBy === 'dealer' ? 'dealer' : 'kota')}</span>` +
         `</div>` +
-        cakupanSumber(cakupan) +
+        kendaliCakupan() +
+        `<div id="cakupan-isi">${cakupanSumber(cakupan)}</div>` +
       `</div>` +
     `</div>` +
     `<div class="flex gap-2 mt-2">` +

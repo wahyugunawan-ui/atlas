@@ -300,9 +300,17 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
   servis 1.291, kirim 0. Lihat `docs/DECISIONS.md` untuk dua penyimpangan
   dari spesifikasi yang disengaja.
 
+- **Checkbox pilih-sumber + pencarian di panel Cakupan Sumber.** Tiga
+  checkbox (A · Kirim, B · Servis, C · KTP) dan kotak cari. Kendalinya duduk
+  di LUAR bagian yang digambar ulang — kalau ikut dibangun ulang tiap
+  ketikan, fokus kotak cari hilang setiap huruf. Jawaban server yang terakhir
+  disimpan, jadi mencentang tidak menembak permintaan baru. Sekalian
+  memperbaiki keputusan diam-diam sebelumnya: bar KTP dulu saya sembunyikan
+  sendiri, sekarang jadi pilihan pembaca (mati secara bawaan, dengan alasan
+  tertulis). Diuji lewat handler yang sungguhan dengan `document` tiruan;
+  5 mutasi, semuanya merah.
+
 **Belum dikerjakan (sisa Tahap F, lihat tabel tahapan di `docs/FUSION.md`):**
-- Checkbox pilih-sumber + pencarian di panel Cakupan Sumber (daftarnya sudah
-  jalan; bagian interaktifnya belum)
 - Telusur per Nomor Mesin: lingkaran KPI Jarak di sekitar titik KTP-nya +
   garis penghubung ke titik Servis/Kirim (sekarang lingkarannya dipusatkan
   di pos/dealer terpilih, karena layar telusurnya belum ada)
