@@ -52,7 +52,14 @@ Istilah wilayah memakai terjemahan resmi BPS supaya konsisten:
 
 ## Sedang dikerjakan
 
-Kosong secara kode — ring dealer (1-3)/coverage pos (1-8), impor Master Dealer &
+**Penyatuan tiga sumber data (FUSION).** Rancangan lengkap sudah ditulis
+di `docs/FUSION.md` dan fondasinya (Tahap A) sudah berdiri: modul geo
+bersama, tabel konfigurasi, tabel agregat, dan empat tabel penyatuan di
+database PII. Yang berikutnya Tahap B (konversi nama desa → koordinat),
+lalu C sampai F. Tidak ada satu pun jalur data baru yang sudah hidup —
+tabelnya ada, pengisinya belum.
+
+Selain itu kosong secara kode — ring dealer (1-3)/coverage pos (1-8), impor Master Dealer &
 Pos dari Excel, perbaikan sambungan penjualan bulanan ke dealer, ringkasan
 atas Insight jadi kontekstual + grid responsif, perbaikan `offline-html`,
 bawaan Opsi Peta (Satelit + live dashboard Performa Pos), DAN kartu
@@ -154,6 +161,32 @@ cuma perluasan ke Sulawesi ke timur.
 ---
 
 ## Selesai
+
+### Spesifikasi FUSION (penyatuan 3 sumber) + fondasi Tahap A (2026-09-16)
+
+Detail rancangan di `docs/FUSION.md`; alasan tiap keputusan arsitekturnya
+di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
+
+**Selesai dan diuji otomatis (27/27 berkas tes):**
+- Spesifikasi teknis lengkap Tahap 2 (skema, pipeline batch + realtime,
+  tabel keputusan 6 golongan, KPI Jarak yang dapat dikustom, rumus CW
+  Sales/Confidence Ratio/Retention Index, kontrak API, diagram alur) dan
+  Tahap 3 (peta multi-layer, halaman Confidence Fusion, peringkat,
+  drill-down per Nomor Mesin, mode Live).
+- Tahap A fondasi: `backend/core/geo.js` diekstrak dari `coverage.js`
+  (haversine tidak lagi punya dua salinan tanpa penjaga), tabel
+  `app_config` + `segment_rollup` di database `astra`, dan empat tabel
+  penyatuan di database PII `astra_customers`.
+- Uji baru: dua salinan haversine (frontend ESM dan backend CJS)
+  dibandingkan pada empat pasang koordinat — diuji mutasi, mengganti
+  jari-jari bola ke WGS84 menggeser hasil 148 m, jauh di atas ambang.
+
+**Belum dikerjakan (Tahap B–F, lihat tabel tahapan di `docs/FUSION.md`):**
+- B konversi nama desa → koordinat (pembungkus resolver + endpoint)
+- C ingest: importer KTP template baru, importer Servis, endpoint ping
+- D fusi: `fuseEngine()` + batch + micro-batch + rollup
+- E API: segmentasi, metrik, recalculate, drill-down PII
+- F UI: menu Data, layer peta baru, halaman Confidence Fusion
 
 ### Rebranding ke ATLAS + polesan UI/UX korporat Astra Motor (2026-09-14 malam)
 

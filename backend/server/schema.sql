@@ -290,7 +290,74 @@ CREATE TABLE IF NOT EXISTS pos_coverage_district (
 
 CREATE INDEX IF NOT EXISTS idx_pos_coverage_outlet ON pos_coverage_district (outlet_code);
 
+-- ============================================================================
+-- PENYATUAN TIGA SUMBER (docs/FUSION.md) — bagian yang BEBAS PII
+-- ============================================================================
+--
+-- Tabel staging dan tabel fusinya ada di database `astra_customers`, bukan di sini:
+-- Data KTP membawa nama+alamat, Data Servis membawa alamat, dan Data Pengiriman
+-- membawa titik GPS rumah. Ketiganya PII. Yang boleh menyeberang ke database ini
+-- cuma hasil agregatnya — cukup untuk seluruh angka di dashboard, tidak cukup untuk
+-- mengenali siapa pun.
+
+-- Ambang dan bobot yang boleh diubah operator tanpa deploy ulang.
+--
+-- KPI Jarak (pemisah "berdekatan" dari "berjauhan") sengaja TIDAK jadi konstanta di
+-- kode: mengubahnya adalah keputusan bisnis, bukan keputusan teknis, dan orang yang
+-- berhak mengubahnya tidak punya akses ke kode maupun cara men-deploy.
+CREATE TABLE IF NOT EXISTS app_config (
+  key        VARCHAR(64) NOT NULL PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_by VARCHAR(64)
+);
+
+-- Nilai bawaan. ON CONFLICT DO NOTHING supaya menjalankan ulang skema tidak pernah
+-- menimpa angka yang sudah disetel operator.
+INSERT INTO app_config (key, value) VALUES
+  ('kpi_jarak_m',           '50000'),
+  ('confidence_solid_min',  '0.65'),
+  ('confidence_rapuh_max',  '0.50'),
+  ('retention_sehat_min',   '0.50'),
+  ('retention_risiko_max',  '0.30'),
+  ('weight_loyal_verified', '1.00'),
+  ('weight_service_near',   '0.80'),
+  ('weight_delivery_near',  '0.75'),
+  ('weight_registered_only','0.55'),
+  ('weight_nomad',          '0.20'),
+  ('weight_unverified',     '0.05')
+ON CONFLICT (key) DO NOTHING;
+
+-- Hasil penggolongan, sudah diringkas per desa x dealer x golongan.
+--
+-- Tidak ada nomor mesin, nama, alamat, atau titik di sini — itu yang membuat
+-- dashboard tetap hidup setelah `DROP DATABASE astra_customers`, persis seperti
+-- panel lain yang tidak bergantung PII.
+--
+-- Sengaja TANPA foreign key. Ini potret historis: baris bulan lalu harus tetap ada
+-- dan tetap benar meski dealernya kelak dihapus dari master. FK dengan CASCADE akan
+-- menghapus sejarah diam-diam, dan sejarah yang hilang tanpa jejak justru yang
+-- paling mahal di tabel seperti ini.
+CREATE TABLE IF NOT EXISTS segment_rollup (
+  period         VARCHAR(7) NOT NULL,
+  village_code   VARCHAR(16) NOT NULL,
+  dealer_code    VARCHAR(64) NOT NULL,
+  segment        VARCHAR(24) NOT NULL,
+  customer_count INTEGER NOT NULL,
+  weight_sum     NUMERIC(10,2) NOT NULL,   -- sumbangan golongan ini ke CW Sales
+  computed_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (period, village_code, dealer_code, segment)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rollup_period ON segment_rollup (period);
+CREATE INDEX IF NOT EXISTS idx_rollup_dealer ON segment_rollup (dealer_code);
+
 -- Versi skema. Satu baris saja — kuncinya konstanta, bukan sesuatu yang bertambah.
+--
+-- TIDAK dinaikkan waktu tabel penyatuan di atas ditambahkan: semuanya CREATE TABLE
+-- IF NOT EXISTS yang tidak menyentuh tabel lama, jadi aplikasi versi lama masih bisa
+-- membuka database ini dengan selamat — dia cuma tidak tahu tabel barunya. Menaikkan
+-- versi justru akan membuat aplikasi lama MENOLAK database yang sebenarnya aman.
 CREATE TABLE IF NOT EXISTS schema_version (
   id      SMALLINT NOT NULL PRIMARY KEY,
   version INTEGER NOT NULL

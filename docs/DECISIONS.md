@@ -2422,3 +2422,90 @@ minimal (satu baris pesan konsol startup, satu baris posisi
 kelima perubahan ini murni dari audit kode + tiga agen Explore, termasuk
 posisi wordmark navbar di berbagai lebar layar, tampilan aksen merah,
 dan seberapa jauh bayangan panel Opsi Peta sekarang "masuk" ke kotak peta.
+
+## [2026-09-16] Penyatuan tiga sumber data: spesifikasi FUSION + fondasi Tahap A
+
+**Konteks:** permintaan mengembangkan ATLAS dari "di mana penjualan
+terjadi" jadi "seberapa yakin kita terhadap lokasi tiap pelanggan" —
+tiga sumber baru (Data KTP, Data Servis, Data Pengiriman) disatukan lewat
+primary key Nomor Mesin, menghasilkan enam Golongan Warlok berbobot dan
+tiga metrik turunan. Spesifikasi lengkapnya di `docs/FUSION.md`; yang
+dicatat di sini cuma keputusan arsitekturnya beserta alasannya.
+
+**1. Ketiga sumber baru tinggal di `astra_customers`, bukan `astra`.**
+KTP membawa nama+alamat, Servis membawa alamat, dan Pengiriman membawa
+titik GPS rumah berikut foto bukti — yang terakhir justru bentuk PII
+paling tajam, karena menunjuk satu rumah, bukan satu desa. Nomor mesin
+ikut diperlakukan sebagai kuasi-identitas (satu kendaraan = satu orang).
+Yang menyeberang ke `astra` cuma satu tabel agregat tanpa identitas,
+`segment_rollup`. Konsekuensinya memang diinginkan: `DROP DATABASE
+astra_customers` mematikan drill-down dan perhitungan ulang, tapi
+meninggalkan dashboard hidup dengan angka historisnya — aturan proyek
+yang sudah berlaku untuk PII lain.
+
+**2. Metrik disimpan, bukan dihitung saat halaman dibuka.** Alternatifnya
+(join lintas-database tiap permintaan) lebih segar tapi melanggar poin 1:
+dashboard akan mati total tanpa database PII. Keterlambatan hitungan
+menit tidak berarti apa-apa untuk angka yang bergerak bulanan.
+
+**3. `SCHEMA_VERSION` SENGAJA TIDAK dinaikkan.** Tabel baru semuanya
+`CREATE TABLE IF NOT EXISTS` dan tidak menyentuh tabel lama, jadi
+aplikasi versi lama masih aman membuka database ini — dia cuma tidak tahu
+tabel barunya. Menaikkan versi justru membuat aplikasi lama MENOLAK
+database yang sebenarnya kompatibel (lihat penjaga di `db.js`), dan
+proyek ini belum punya penjalan migrasi yang membuat kenaikan versi
+berarti apa-apa.
+
+**4. `segment_rollup` tanpa foreign key.** Ini potret historis: baris
+bulan lalu harus tetap ada dan tetap benar meski dealernya kelak dihapus
+dari master. FK dengan CASCADE akan menghapus sejarah diam-diam — dan
+sejarah yang hilang tanpa jejak justru yang paling mahal di tabel
+seperti ini. Tabel lain (`coverage`, `dealer_rings`) tetap memakai FK
+CASCADE karena isinya konfigurasi hidup, bukan catatan masa lalu.
+
+**5. `kpi_radius_m` disimpan per baris di `customer_fusion`, bukan cuma
+di `app_config`.** Tanpa itu, mengubah KPI Jarak membuat angka lama tidak
+bisa dijelaskan lagi ("kenapa dulu dia Warlok?"), dan pipeline tidak
+punya cara tahu baris mana yang basi setelah ambang berubah.
+
+**6. Ambang jadi data, bukan konstanta kode.** Tabel `app_config` baru
+menyimpan KPI Jarak (bawaan 50 km), ambang warna status, dan keenam bobot
+golongan, disemai lewat `INSERT ... ON CONFLICT DO NOTHING` supaya
+menjalankan ulang skema tidak pernah menimpa angka yang sudah disetel
+operator. Mengubah ambang adalah keputusan bisnis, dan orang yang berhak
+mengubahnya tidak punya akses ke kode maupun cara men-deploy.
+
+**7. Nama golongan: nama panjang resmi + label pendek untuk layar**
+(dikonfirmasi pengguna). Database dan dokumen memakai `loyal_verified` /
+"Warlok Loyal Verified"; sidebar selebar 164 px memakai "Warlok". Satu
+nama panjang di UI pasti terpotong ellipsis, dan label yang terpotong
+lebih buruk daripada dua nama yang dipetakan sekali di satu tabel.
+
+**8. `backend/core/geo.js` diekstrak dari `coverage.js` SEBELUM pemakai
+ketiga ditambahkan.** Haversine sebelumnya punya dua salinan identik
+(`backend/core/coverage.js` dan `frontend/js/geo.js`); penyatuan tiga
+sumber akan menambah satu pemanggil lagi di sisi server. Salinan frontend
+SENGAJA dibiarkan — `frontend/` tidak pernah meng-import dari `backend/`,
+dan batas itu lebih berharga daripada menghapus satu fungsi sepuluh
+baris. Yang menjaga keduanya tidak menyimpang sekarang adalah
+`test/geo.test.js`, yang membandingkan hasil kedua salinan pada empat
+pasang koordinat. `coverage.js` meneruskan lagi `distanceMeters` lewat
+`module.exports`, jadi `test/coverage.test.js` dan pemanggil lamanya
+tidak perlu tahu apa pun berubah.
+
+**9. Jalur realtime memakai micro-batch 60 detik, bukan per-kedatangan.**
+Ping selalu disimpan seketika (tidak boleh hilang), tapi klasifikasi
+ulangnya digabung. Alasannya beban: satu ping memicu pembacaan KTP+Servis,
+satu upsert fusi, dan satu penulisan ulang rollup desa — pada jam sibuk,
+puluhan ping dari kota yang sama menulis ulang baris yang sama
+berkali-kali dengan hasil akhir identik. Angka jendelanya ada di
+`app_config`, jadi bisa diperkecil tanpa deploy kalau kelak perlu.
+
+**Konsekuensi:** Tahap A (fondasi) sudah dikerjakan — `backend/core/geo.js`
+baru, tabel `app_config` + `segment_rollup` di `astra`, tabel
+`customer_ktp`/`service_visit`/`delivery_ping`/`customer_fusion` di
+`astra_customers`, plus uji silang dua salinan haversine. `npm test`
+27/27 hijau, dan skema baru sudah dijalankan sungguhan terhadap database
+uji (penjaga idempotensi `schema.sql` yang sudah ada ikut menguji tabel
+baru ini). Tahap B–F (konversi wilayah, ingest, fusi, API, UI) BELUM
+dikerjakan — lihat tabel tahapan di `docs/FUSION.md`.

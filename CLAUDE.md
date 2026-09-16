@@ -93,7 +93,7 @@ frontend/vendor/  library hasil unduhan. DI LUAR GIT, dibangun `npm run vendor`.
 test/             *.test.js dijalankan `npm test`; test/helpers/ bukan tes
 scripts/          perkakas baris perintah dan seed
 ops/              skrip operasional: auto-start, backup, tugas terjadwal
-docs/             PRD (apa), DECISIONS (kenapa), ROADMAP (kapan), PINDAH (pindah server)
+docs/             PRD (apa), DECISIONS (kenapa), ROADMAP (kapan), FUSION (3 sumber), PINDAH (pindah server)
 prototype/        berkas proposal mandiri. Ikut memakai backend/core/coverage.js.
 data/             geo + arsip unggahan. DI LUAR GIT, DI LUAR OneDrive.
 ```

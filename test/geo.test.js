@@ -8,6 +8,7 @@
 const assert = require('assert');
 const path = require('path');
 const { pathToFileURL } = require('url');
+const belakang = require('../backend/core/geo');
 
 async function test() {
   const source = pathToFileURL(
@@ -24,6 +25,23 @@ async function test() {
   const oneDegree = distanceMeters(-7.0, 110.0, -8.0, 110.0) / 1000;
   assert.ok(Math.abs(oneDegree - 111) < 2,
     `1 derajat lintang: ${oneDegree.toFixed(1)} km`);
+
+  // --- dua salinan rumus yang sama harus memberi jawaban yang sama ---
+  //
+  // `frontend/js/geo.js` (ESM, dipakai peta) dan `backend/core/geo.js` (CJS, dipakai
+  // jangkauan dan penyatuan tiga sumber) memuat haversine yang sama. Salinannya
+  // sengaja dibiarkan dua — frontend tidak boleh meng-import dari backend — jadi yang
+  // menjaga keduanya tidak menyimpang adalah perbandingan ini, bukan disiplin orang.
+  const pasangan = [
+    [-7.80, 110.37, -7.42, 109.23],   // Yogya -> Purwokerto
+    [0, 0, 0, 1],                     // satu derajat bujur di khatulistiwa
+    [-6.90, 107.60, -6.90, 107.60],   // titik yang sama, harus nol
+    [-7.25, 112.75, -8.65, 115.22],   // Surabaya -> Denpasar
+  ];
+  for (const [a, b, c, d] of pasangan) {
+    assert.ok(Math.abs(distanceMeters(a, b, c, d) - belakang.distanceMeters(a, b, c, d)) < 1e-6,
+      `salinan haversine frontend dan backend menyimpang di ${a},${b} -> ${c},${d}`);
+  }
 
   // --- lingkaran ---
   const lat = -7.8;
