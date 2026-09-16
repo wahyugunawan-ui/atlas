@@ -53,13 +53,23 @@ test('periode yang belum lengkap tidak dikirim setengah jadi', async () => {
   assert.strictEqual(fusionFilter(filter({ to: '' })).periode, null);
 });
 
-test('pos dan karesidenan dilaporkan sebagai diabaikan, bukan didiamkan', async () => {
+test('pos IKUT terkirim, bukan diabaikan', async () => {
   const { fusionFilter } = await import(MODUL);
-  // Keduanya tidak ada di segment_rollup. Halaman WAJIB bisa mengatakannya, kalau
-  // tidak angka se-provinsi terbaca sebagai angka pos yang dipilih.
-  const hasil = fusionFilter(filter({ outletCode: 'POS01', kares: 'KEDU' }));
-  assert.deepStrictEqual(hasil.abaikan, ['pos', 'karesidenan']);
-  assert.ok(!('outletCode' in hasil), 'pos tidak boleh diam-diam jadi saringan');
+  // Sampai 2026-09-17 pos masuk daftar `abaikan`. Sekarang server menerjemahkannya
+  // jadi daftar kelurahan lewat tabel coverage, jadi ia harus benar-benar dikirim.
+  const hasil = fusionFilter(filter({ outletCode: 'POS01' }));
+  assert.strictEqual(hasil.pos, 'POS01');
+  assert.deepStrictEqual(hasil.abaikan, []);
+});
+
+test('karesidenan tetap dilaporkan diabaikan, bukan didiamkan', async () => {
+  const { fusionFilter } = await import(MODUL);
+  // Petanya cuma ada di frontend (config.js), server tidak mengenalnya. Halaman WAJIB
+  // bisa mengatakannya, kalau tidak angka se-provinsi terbaca sebagai angka yang
+  // sudah disaring.
+  const hasil = fusionFilter(filter({ kares: 'kedu' }));
+  assert.deepStrictEqual(hasil.abaikan, ['karesidenan']);
+  assert.strictEqual(hasil.pos, null);
 });
 
 test('persenSumber membedakan "nol" dari "belum bisa diukur"', async () => {

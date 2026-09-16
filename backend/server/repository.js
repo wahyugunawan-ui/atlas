@@ -1095,12 +1095,24 @@ async function latestFusionPeriod() {
   return row && row.period ? row.period : null;
 }
 
+/**
+ * Saringan POS, dalam bentuk subquery.
+ *
+ * Pos tidak punya kolomnya sendiri di tabel rollup mana pun, dan memang tidak boleh:
+ * satu pos melayani BANYAK kelurahan, dan daftar kelurahannya bisa berubah kapan saja
+ * lewat halaman Pos. Menyalin daftar itu ke rollup berarti angka penggolongan jadi
+ * basi diam-diam begitu cakupan pos disunting. Jadi yang disimpan tetap kelurahan,
+ * dan pos diterjemahkan jadi daftar kelurahan SAAT DITANYA.
+ */
+const POS_FILTER = 'village_code IN (SELECT village_code FROM coverage WHERE outlet_code = ?)';
+
 /** Susun WHERE dari penyaring yang benar-benar diisi. */
 function fusionWhere(filter) {
   const where = ['period = ?'];
   const params = [filter.period];
   if (filter.cityCode) { where.push('city_code = ?'); params.push(filter.cityCode); }
   if (filter.dealerCode) { where.push('dealer_code = ?'); params.push(filter.dealerCode); }
+  if (filter.outletCode) { where.push(POS_FILTER); params.push(filter.outletCode); }
   if (filter.segment) { where.push('segment = ?'); params.push(filter.segment); }
   return { text: where.join(' AND '), params };
 }
@@ -1181,6 +1193,7 @@ async function fusionMatrix(period, filter) {
   const params = [period];
   if (filter && filter.cityCode) { where.push('city_code = ?'); params.push(filter.cityCode); }
   if (filter && filter.dealerCode) { where.push('dealer_code = ?'); params.push(filter.dealerCode); }
+  if (filter && filter.outletCode) { where.push(POS_FILTER); params.push(filter.outletCode); }
 
   return store.all(store.db(), `
     SELECT r.city_code AS "cityCode",
@@ -1203,6 +1216,7 @@ async function fusionOverlap(period, filter) {
   const params = [period];
   if (filter && filter.cityCode) { where.push('city_code = ?'); params.push(filter.cityCode); }
   if (filter && filter.dealerCode) { where.push('dealer_code = ?'); params.push(filter.dealerCode); }
+  if (filter && filter.outletCode) { where.push(POS_FILTER); params.push(filter.outletCode); }
 
   return store.all(store.db(), `
     SELECT has_service AS "hasService", has_delivery AS "hasDelivery", segment,
@@ -1256,6 +1270,7 @@ async function fusionSourceCoverage(period, filter, groupBy) {
   const params = [period];
   if (filter && filter.cityCode) { where.push('city_code = ?'); params.push(filter.cityCode); }
   if (filter && filter.dealerCode) { where.push('dealer_code = ?'); params.push(filter.dealerCode); }
+  if (filter && filter.outletCode) { where.push(POS_FILTER); params.push(filter.outletCode); }
 
   const hitung = `
     SUM(r.customer_count) AS total,
@@ -1285,13 +1300,21 @@ async function fusionSourceCoverage(period, filter, groupBy) {
 }
 
 /** Ringkasan per kota: siapa yang paling banyak, dan seberapa yakin kita. */
-async function fusionByCity(period) {
+async function fusionByCity(period, filter) {
+  // Sampai 2026-09-17 fungsi ini TIDAK menerima saringan sama sekali — panel Peringkat
+  // Kota diam saja waktu Dealer diganti, persis keluhan "filternya tidak berefek".
+  const where = ['period = ?'];
+  const params = [period];
+  if (filter && filter.cityCode) { where.push('city_code = ?'); params.push(filter.cityCode); }
+  if (filter && filter.dealerCode) { where.push('dealer_code = ?'); params.push(filter.dealerCode); }
+  if (filter && filter.outletCode) { where.push(POS_FILTER); params.push(filter.outletCode); }
+
   return store.all(store.db(), `
     SELECT city_code AS "cityCode",
            (SELECT MIN(city_name) FROM villages c WHERE c.city_code = r.city_code) AS "cityName",
            SUM(customer_count) AS total, SUM(weight_sum) AS "cwSales"
-    FROM segment_rollup r WHERE period = ?
-    GROUP BY city_code ORDER BY SUM(customer_count) DESC`, [period]);
+    FROM segment_rollup r WHERE ${where.join(' AND ')}
+    GROUP BY city_code ORDER BY SUM(customer_count) DESC`, params);
 }
 
 /**
@@ -1302,10 +1325,20 @@ async function fusionByCity(period) {
  * terjadi sekali di awal dan tidak membuktikan apa pun tentang pelanggan yang
  * kembali. Lihat docs/FUSION.md 2.4.
  */
-async function fusionByDealer(period, cityCode) {
+async function fusionByDealer(period, filter) {
   const where = ['r.period = ?'];
   const params = [period, period];   // yang pertama untuk CTE `utama` di bawah
-  if (cityCode) { where.push('r.city_code = ?'); params.push(cityCode); }
+  if (filter && filter.cityCode) { where.push('r.city_code = ?'); params.push(filter.cityCode); }
+  if (filter && filter.dealerCode) {
+    where.push('r.dealer_code = ?');
+    params.push(filter.dealerCode);
+  }
+  // POS_FILTER menyebut `village_code` tanpa awalan tabel; di query ini kolomnya ada
+  // di `r`, dan subquery-nya sendiri menyebut `coverage`, jadi tidak ada ambiguitas.
+  if (filter && filter.outletCode) {
+    where.push(`r.${POS_FILTER}`);
+    params.push(filter.outletCode);
+  }
 
   // Kota dealer = kota ASAL PEMBELI TERBANYAKNYA, bukan MIN(city_code), dan bukan
   // kota dealer itu sendiri — karena kota dealer TIDAK ADA di skema: baik `dealers`

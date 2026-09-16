@@ -390,14 +390,29 @@ ALTER TABLE segment_rollup ADD COLUMN IF NOT EXISTS city_code VARCHAR(8);
 -- pelanggan ada", jadi semua baris di sini menurut definisi punya KTP.
 CREATE TABLE IF NOT EXISTS source_overlap (
   period         VARCHAR(7) NOT NULL,
+  village_code   VARCHAR(16) NOT NULL DEFAULT '',  -- '' = desa tidak diketahui
   city_code      VARCHAR(8) NOT NULL,     -- '' = kota tidak diketahui
   dealer_code    VARCHAR(64) NOT NULL,
   has_service    BOOLEAN NOT NULL,
   has_delivery   BOOLEAN NOT NULL,
   segment        VARCHAR(24) NOT NULL,
   customer_count INTEGER NOT NULL,
-  PRIMARY KEY (period, city_code, dealer_code, has_service, has_delivery, segment)
+  PRIMARY KEY (period, village_code, city_code, dealer_code, has_service, has_delivery, segment)
 );
+
+-- Kelurahan ditambahkan 2026-09-17 supaya panel Venn dan Cakupan Sumber bisa ikut
+-- disaring per POS. Pemetaan pos -> wilayah hidup di tabel `coverage` dan satuannya
+-- kelurahan, bukan kota — tanpa kolom ini kedua panel itu diam-diam mengabaikan
+-- filter Pos sementara panel lain mematuhinya, dan dua angka di layar yang sama
+-- jadi saling bertentangan tanpa ada yang error.
+--
+-- Primary key WAJIB ikut berubah. Kalau kolomnya ditambah tapi kuncinya tidak, dua
+-- kelurahan berbeda di kota yang sama bertabrakan di kunci yang sama dan saling
+-- menimpa waktu ditulis ulang.
+ALTER TABLE source_overlap ADD COLUMN IF NOT EXISTS village_code VARCHAR(16) NOT NULL DEFAULT '';
+ALTER TABLE source_overlap DROP CONSTRAINT IF EXISTS source_overlap_pkey;
+ALTER TABLE source_overlap ADD PRIMARY KEY
+  (period, village_code, city_code, dealer_code, has_service, has_delivery, segment);
 
 CREATE INDEX IF NOT EXISTS idx_overlap_period ON source_overlap (period);
 

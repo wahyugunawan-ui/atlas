@@ -187,9 +187,15 @@ async function recalculate(options) {
     const kota = r.cityCode || '';
     const punyaServis = hasil.serviceCount > 0;
     const punyaKirim = hasil.deliveryCount > 0;
-    const kunciIrisan = `${kota}|${dealer}|${punyaServis}|${punyaKirim}|${hasil.segment}`;
+    // Desa ikut jadi kunci sejak 2026-09-17: pemetaan pos -> wilayah satuannya
+    // kelurahan, jadi tanpa ini filter Pos tidak bisa menyentuh Venn dan Cakupan
+    // Sumber sama sekali. Kuncinya ikut bertambah panjang, dan primary key tabelnya
+    // ikut berubah (schema.sql) — kalau tidak, dua kelurahan di kota yang sama saling
+    // menimpa.
+    const kunciIrisan =
+      `${desa}|${kota}|${dealer}|${punyaServis}|${punyaKirim}|${hasil.segment}`;
     const irisanSudah = irisan.get(kunciIrisan) ||
-      { kota, dealer, punyaServis, punyaKirim, segment: hasil.segment, n: 0 };
+      { desa, kota, dealer, punyaServis, punyaKirim, segment: hasil.segment, n: 0 };
     irisanSudah.n += 1;
     irisan.set(kunciIrisan, irisanSudah);
   });
@@ -210,7 +216,7 @@ async function recalculate(options) {
     [period, x.desa, x.cityCode, x.dealer, x.segment, x.n, Number(x.bobot.toFixed(2))]);
 
   const nilaiIrisan = [...irisan.values()].map((x) =>
-    [period, x.kota, x.dealer, x.punyaServis, x.punyaKirim, x.segment, x.n]);
+    [period, x.desa, x.kota, x.dealer, x.punyaServis, x.punyaKirim, x.segment, x.n]);
 
   // Keduanya ditulis dalam SATU transaksi: segment_rollup dan source_overlap adalah
   // dua sudut pandang atas perhitungan yang sama, dan separuh diperbarui separuh
@@ -231,7 +237,8 @@ async function recalculate(options) {
       const bulk = store.bulkValues(nilaiIrisan.slice(i, i + BATCH));
       await conn.query(`
         INSERT INTO source_overlap
-          (period, city_code, dealer_code, has_service, has_delivery, segment, customer_count)
+          (period, village_code, city_code, dealer_code, has_service, has_delivery,
+           segment, customer_count)
         VALUES ${bulk.text}`, bulk.params);
     }
   });

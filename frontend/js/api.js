@@ -81,6 +81,7 @@ export function fetchSegmentation(filter) {
   if (filter && filter.periode) q.set('periode', filter.periode);
   if (filter && filter.kota && filter.kota !== 'ALL') q.set('kota', filter.kota);
   if (filter && filter.dealer && filter.dealer !== 'ALL') q.set('dealer', filter.dealer);
+  if (filter && filter.pos && filter.pos !== 'ALL') q.set('pos', filter.pos);
   if (filter && filter.segmentasi) q.set('segmentasi', filter.segmentasi);
   return request(`${API}v1/segmentasi?${q}`);
 }
@@ -90,6 +91,8 @@ export function fetchPeringkat(filter) {
   const q = new URLSearchParams();
   if (filter && filter.periode) q.set('periode', filter.periode);
   if (filter && filter.kota && filter.kota !== 'ALL') q.set('kota', filter.kota);
+  if (filter && filter.dealer && filter.dealer !== 'ALL') q.set('dealer', filter.dealer);
+  if (filter && filter.pos && filter.pos !== 'ALL') q.set('pos', filter.pos);
   return request(`${API}v1/peringkat?${q}`);
 }
 
@@ -99,6 +102,7 @@ export function fetchIrisan(filter) {
   if (filter && filter.periode) q.set('periode', filter.periode);
   if (filter && filter.kota && filter.kota !== 'ALL') q.set('kota', filter.kota);
   if (filter && filter.dealer && filter.dealer !== 'ALL') q.set('dealer', filter.dealer);
+  if (filter && filter.pos && filter.pos !== 'ALL') q.set('pos', filter.pos);
   return request(`${API}v1/irisan?${q}`);
 }
 
@@ -108,6 +112,7 @@ export function fetchMatriks(filter) {
   if (filter && filter.periode) q.set('periode', filter.periode);
   if (filter && filter.kota && filter.kota !== 'ALL') q.set('kota', filter.kota);
   if (filter && filter.dealer && filter.dealer !== 'ALL') q.set('dealer', filter.dealer);
+  if (filter && filter.pos && filter.pos !== 'ALL') q.set('pos', filter.pos);
   return request(`${API}v1/matriks?${q}`);
 }
 
@@ -123,6 +128,7 @@ export function fetchCakupanSumber(filter) {
   if (filter && filter.periode) q.set('periode', filter.periode);
   if (filter && filter.kota && filter.kota !== 'ALL') q.set('kota', filter.kota);
   if (filter && filter.dealer && filter.dealer !== 'ALL') q.set('dealer', filter.dealer);
+  if (filter && filter.pos && filter.pos !== 'ALL') q.set('pos', filter.pos);
   return request(`${API}v1/cakupan-sumber?${q}`);
 }
 

@@ -833,6 +833,20 @@ function build(config) {
     return repo.legacyDealerCode(kode);
   };
 
+  /**
+   * Ketiga saringan lingkup, dibaca di SATU tempat.
+   *
+   * Sebelumnya tiap rute menyusunnya sendiri-sendiri, dan itu yang membuat filter Pos
+   * terlewat di semua rute sekaligus tanpa ada yang menyadarinya: tidak ada satu
+   * tempat pun yang bisa dilihat untuk menjawab "saringan apa saja yang dipahami
+   * halaman ini". Sekarang ada.
+   */
+  const saringFusi = async (q) => ({
+    cityCode: CITY.test(String(q.kota || '')) ? String(q.kota) : null,
+    dealerCode: await dealerFusi(q.dealer),
+    outletCode: OUTLET.test(String(q.pos || '')) ? String(q.pos) : null,
+  });
+
   api.get('/v1/segmentasi', async (req, res) => {
     const period = await periodeFusi(req.query);
     if (!period) {
@@ -844,8 +858,7 @@ function build(config) {
     }
     const filter = {
       period,
-      cityCode: CITY.test(String(req.query.kota || '')) ? String(req.query.kota) : null,
-      dealerCode: await dealerFusi(req.query.dealer),
+      ...(await saringFusi(req.query)),
       segment: SEGMENTS[String(req.query.segmentasi || '')] ? String(req.query.segmentasi) : null,
       limit: req.query.limit,
       offset: req.query.offset,
@@ -929,9 +942,9 @@ function build(config) {
   api.get('/v1/peringkat', async (req, res) => {
     const period = await periodeFusi(req.query);
     if (!period) return res.json({ period: null, cities: [], dealers: [] });
-    const kota = CITY.test(String(req.query.kota || '')) ? String(req.query.kota) : null;
+    const saring = await saringFusi(req.query);
     const [cities, dealers] = await Promise.all([
-      repo.fusionByCity(period), repo.fusionByDealer(period, kota),
+      repo.fusionByCity(period, saring), repo.fusionByDealer(period, saring),
     ]);
     res.json({ period, cities, dealers });
   });
@@ -953,10 +966,7 @@ function build(config) {
     if (!period) return res.json({ period: null, segments: kolom, rows: [], max: 0 });
 
     const [baris, setelan] = await Promise.all([
-      repo.fusionMatrix(period, {
-        cityCode: CITY.test(String(req.query.kota || '')) ? String(req.query.kota) : null,
-        dealerCode: await dealerFusi(req.query.dealer),
-      }),
+      repo.fusionMatrix(period, await saringFusi(req.query)),
       readSettings(),
     ]);
 
@@ -1012,10 +1022,7 @@ function build(config) {
         sumber: { ktp: 0, servis: 0, kirim: 0 } });
     }
 
-    const baris = await repo.fusionOverlap(period, {
-      cityCode: CITY.test(String(req.query.kota || '')) ? String(req.query.kota) : null,
-      dealerCode: await dealerFusi(req.query.dealer),
-    });
+    const baris = await repo.fusionOverlap(period, await saringFusi(req.query));
 
     const wilayah = (punyaServis, punyaKirim, segment) => {
       if (segment === 'unverified') return 'luar';
@@ -1058,18 +1065,15 @@ function build(config) {
    */
   api.get('/v1/cakupan-sumber', async (req, res) => {
     const period = await periodeFusi(req.query);
-    const kota = CITY.test(String(req.query.kota || '')) ? String(req.query.kota) : null;
-    const groupBy = kota ? 'dealer' : 'kota';
+    const saring = await saringFusi(req.query);
+    const groupBy = saring.cityCode ? 'dealer' : 'kota';
 
     if (!period) {
       return res.json({ period: null, groupBy, rows: [], total: 0,
         sumber: { ktp: 0, servis: 0, kirim: 0 } });
     }
 
-    const rows = await repo.fusionSourceCoverage(period, {
-      cityCode: kota,
-      dealerCode: await dealerFusi(req.query.dealer),
-    }, groupBy);
+    const rows = await repo.fusionSourceCoverage(period, saring, groupBy);
 
     // Tiap baris source_overlap menurut definisi punya KTP — itu syarat masuk
     // penggolongan sama sekali (lihat fuseEngine: tanpa baris KTP hasilnya null).

@@ -275,15 +275,37 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
   dengan angka Venn, dan kota 34.04 berjumlah 2.829 baik lewat daftar per-kota
   maupun per-dealernya (39/39 nama dealer terisi). Lihat `docs/DECISIONS.md`.
 
+- **Halaman Confidence Fusion kosong — diperbaiki.** Dilaporkan pengguna:
+  `switchTab()` tidak pernah memanggil penggambar untuk `fusion`, `servis`,
+  dan `kirim`, jadi ketiganya cuma terisi kalau filter kebetulan disentuh.
+  Rusak sejak potongan 1 dan lolos dari semua tes, karena yang rusak bukan
+  modulnya melainkan sambungan antar modul.
+- **Filter Pos sekarang dipahami**, dan Peringkat Kota/Dealer akhirnya
+  menuruti filter. Pos diterjemahkan jadi daftar kelurahan lewat `coverage`
+  saat ditanya (tidak disalin ke rollup, supaya tidak basi waktu cakupan pos
+  disunting). `source_overlap` dapat kolom `village_code` + primary key baru
+  supaya Venn dan Cakupan Sumber ikut tersaring. Diverifikasi silang: POS
+  BUTUH memberi 439 dari 19.598 di `segment_rollup` MAUPUN `source_overlap`.
+  Lihat `docs/DECISIONS.md`.
+
 **Belum dikerjakan (sisa Tahap F, lihat tabel tahapan di `docs/FUSION.md`):**
 - Checkbox pilih-sumber + pencarian di panel Cakupan Sumber (daftarnya sudah
   jalan; bagian interaktifnya belum)
 - Tiga jenis titik baru di peta (KTP/Servis/Kirim) + radius KPI Jarak
 - Drill-down per Nomor Mesin (rute PII-nya sudah ada, layarnya belum)
 - Mode Live/wallboard dan cross-filtering penuh di sidebar
-- Halaman Import jadi grid 3 panel + tombol unggah Data KTP/Servis
-  (sampai itu ada, ketiga rute impor baru dipanggil lewat alat lain)
-- F UI: menu Data, layer peta baru, halaman Confidence Fusion
+- Saringan Karesidenan di halaman Fusion (petanya cuma ada di frontend;
+  sampai dipindah ke server, pita kuning mengatakannya belum dipakai)
+- Halaman Import jadi grid 3 panel: kiri "Periode Tersimpan" (checklist 3
+  jenis data per periode, klik → jumlah/tanggal/hapus), tengah progres 4
+  tahap, kanan "Riwayat Impor" — plus akses lewat dropdown hover menu
+  "Import Data" mengikuti pola menu Master, dan tombol unggah Data
+  KTP/Servis. Sampai itu ada, ketiga rute impor baru dipanggil lewat alat
+  lain.
+- F UI sisa: layer peta baru. (Menu **Data** dengan tiga subhalaman —
+  "berdasarkan KTP", "Lokasi Service", "berdasarkan Lokasi Delivery" — dan
+  halaman Confidence Fusion SUDAH ada; ketiganya sempat tampak belum ada
+  karena bug halaman kosong di atas.)
 
 ### Rebranding ke ATLAS + polesan UI/UX korporat Astra Motor (2026-09-14 malam)
 

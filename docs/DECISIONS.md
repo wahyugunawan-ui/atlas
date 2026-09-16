@@ -3139,3 +3139,63 @@ pengukuran SQL langsung), kirim 0. Kota 34.04 berjumlah 2.829 lewat daftar
 per-kota maupun lewat daftar per-dealernya.
 
 **Caveat:** masih belum pernah dilihat di browser.
+
+## [2026-09-17] Halaman Confidence Fusion kosong, dan filter yang cuma setengah dipatuhi
+
+Dilaporkan pengguna, bukan ditemukan tes — dan itu bagian penting dari
+ceritanya. Seluruh Tahap F diverifikasi sampai tepat sebelum layar; yang
+pertama membuka halamannya di browser menemukan halamannya KOSONG.
+
+**Sebabnya satu baris yang tidak pernah ditulis.** `switchTab()` memanggil
+penggambar untuk `pos`, `dealer`, `konsumen`, `kelurahan`, dan `import` — tapi
+tidak untuk `fusion`, `servis`, dan `kirim`. Ketiganya mengandalkan `REPAINT`
+di `filter-bar.js`, dan itu cuma jalan waktu filter BERUBAH. Jadi tabnya
+terbuka, bingkainya muncul, isinya tidak pernah diisi; halaman baru terisi
+kalau orang kebetulan menyentuh filter. Tiga halaman sekaligus, sejak Tahap F
+potongan 1.
+
+Pelajarannya bukan "tambah tes". `test/page.test.js` menghitung handler dan
+memeriksa escaping, dan ia hijau sepanjang waktu — karena yang rusak bukan
+salah satu modul, melainkan SAMBUNGAN antar modul yang tidak dimiliki siapa
+pun. Yang menangkap hal seperti ini cuma membuka halamannya.
+
+**Filter: Pos sekarang benar-benar dipahami.** Sebelumnya `fusionFilter()`
+melaporkan pos sebagai "diabaikan". Sekarang server menerjemahkannya jadi
+daftar kelurahan lewat tabel `coverage` (`POS_FILTER` di repository.js).
+Pemetaan itu SENGAJA tidak disalin ke rollup: satu pos melayani banyak
+kelurahan dan daftarnya bisa disunting kapan saja lewat halaman Pos —
+menyalinnya berarti angka penggolongan jadi basi diam-diam begitu cakupan pos
+diubah. Jadi rollup tetap menyimpan kelurahan, dan pos diterjemahkan saat
+ditanya.
+
+Konsekuensinya satu perubahan skema: `source_overlap` tidak punya
+`village_code`, jadi Venn dan Cakupan Sumber TIDAK BISA menuruti filter Pos.
+Membiarkannya berarti dua panel diam-diam mengabaikan filter sementara panel
+lain mematuhinya — dua angka di layar yang sama saling bertentangan tanpa ada
+yang error. Kolomnya ditambahkan, dan **primary key ikut diubah**: tanpa itu
+dua kelurahan berbeda di kota yang sama bertabrakan di kunci yang sama dan
+saling menimpa. `ALTER`-nya idempoten (drop-if-exists lalu add), jadi aman
+dijalankan tiap kali server menyalakan skema.
+
+**Temuan sampingan, keluhan yang sama.** `fusionByCity(period)` tidak menerima
+saringan APA PUN, dan `fusionByDealer` cuma menerima kota. Jadi panel Peringkat
+Kota dan Peringkat Dealer diam saja waktu Dealer diganti. Ikut diperbaiki;
+ketiga saringan sekarang dibaca di satu tempat (`saringFusi()` di routes.js),
+karena tersebarnya penyusun filter itulah yang membuat Pos terlewat di lima
+rute sekaligus tanpa ada yang menyadarinya.
+
+**Karesidenan sengaja TIDAK ikut**, dan tetap muncul di pita kuning sebagai
+saringan yang belum dipakai. Petanya cuma hidup di `frontend/js/config.js`;
+memindahkannya ke server adalah perubahan tersendiri yang tidak diminta.
+
+Rekonsiliasi atas data Agustus 2026 sesudah `recalculate` (4,0 detik):
+`source_overlap` 940 → 11.099 baris, total tetap **19.598**, servis tetap
+**1.292**, 16 baris berkelurahan tidak diketahui. Pemeriksaan silang filter
+pos pada POS BUTUH (511 kelurahan): `segment_rollup` **439**, `source_overlap`
+**439** — dua tabel yang dihitung lewat jalur berbeda sepakat, dan 439 dari
+19.598 membuktikan saringannya benar-benar menyaring, bukan lolos semua atau
+mematikan semua.
+
+**Caveat:** perbaikan halaman kosong ini sendiri belum saya lihat di browser —
+sama seperti sebelumnya, verifikasi saya berhenti sebelum layar. Yang berubah:
+sekarang ada yang bisa memeriksanya.

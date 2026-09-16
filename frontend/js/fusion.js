@@ -328,18 +328,19 @@ function daftarPeringkat(rows, kunciNama, opsi) {
 /**
  * Katakan saringan mana yang TIDAK terpakai di halaman ini.
  *
- * Pos dan karesidenan tidak ada di `segment_rollup`. Tanpa catatan ini, memilih satu
- * pos memberi angka se-provinsi sementara dropdownnya menunjuk pos itu — salah yang
- * tidak kelihatan salah.
+ * Tinggal karesidenan: petanya cuma hidup di frontend (`config.js`), server tidak
+ * mengenalnya. Kota, Dealer, dan Pos semuanya dipahami sejak 2026-09-17. Tanpa catatan
+ * ini, memilih karesidenan memberi angka se-provinsi sementara dropdownnya menunjuk
+ * satu karesidenan — salah yang tidak kelihatan salah.
  */
 function catatanAbaikan(f) {
   if (!f.abaikan.length) return '';
   const nama = { pos: 'Pos', karesidenan: 'Karesidenan' };
   const daftar = f.abaikan.map((k) => nama[k] || k).join(' dan ');
   return `<div class="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 ` +
-    `text-[11px] text-amber-800">Saringan <b>${esc(daftar)}</b> tidak dipakai di ` +
-    `halaman ini — penggolongan disimpan per kota dan dealer saja. Angka di bawah ` +
-    `mengikuti saringan Kota, Dealer, dan periode.</div>`;
+    `text-[11px] text-amber-800">Saringan <b>${esc(daftar)}</b> belum dipakai di ` +
+    `halaman ini — penggolongan disimpan per kelurahan, kota, dan dealer. Angka di ` +
+    `bawah mengikuti saringan Kota, Dealer, Pos, dan periode.</div>`;
 }
 
 export async function renderFusion() {

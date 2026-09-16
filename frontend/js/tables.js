@@ -15,6 +15,7 @@ import { syncFilterBar } from './filter-bar.js';
 import {
   activeRows, clearScope, dealerBreakdown, pageFilters, scopeValue, setScope,
 } from './filters.js';
+import { renderDeliveryTable, renderFusion, renderServiceTable } from './fusion.js';
 import { selectOutlet } from './outlets.js';
 import { dealerCardHtml } from './render.js';
 import { fitToScope } from './map.js';
@@ -1548,6 +1549,13 @@ export function switchTab(name) {
   if (name === 'konsumen') renderCustomerTable();
   if (name === 'kelurahan') renderVillageTable();
   if (name === 'import') window.refreshImportTab();
+  // Tiga halaman penyatuan tiga sumber. KETINGGALAN sampai 2026-09-17: bilah filter
+  // memang menggambar ulang lewat REPAINT (filter-bar.js), tapi itu cuma jalan waktu
+  // filternya BERUBAH. Tanpa tiga baris ini, membuka tabnya menampilkan bingkai
+  // kosong — isinya baru muncul kalau orang kebetulan menyentuh filter.
+  if (name === 'fusion') renderFusion();
+  if (name === 'servis') renderServiceTable();
+  if (name === 'kirim') renderDeliveryTable();
 }
 
 /**
