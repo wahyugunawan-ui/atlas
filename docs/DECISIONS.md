@@ -2509,3 +2509,54 @@ baru, tabel `app_config` + `segment_rollup` di `astra`, tabel
 uji (penjaga idempotensi `schema.sql` yang sudah ada ikut menguji tabel
 baru ini). Tahap B–F (konversi wilayah, ingest, fusi, API, UI) BELUM
 dikerjakan — lihat tabel tahapan di `docs/FUSION.md`.
+
+## [2026-09-16] FUSION Tahap B: resolver nama desa dan rutenya
+
+**Konteks:** Tahap B dari `docs/FUSION.md` — mengubah nama Kelurahan/
+Kecamatan yang cuma teks (Data KTP dan Data Servis) jadi titik koordinat,
+karena tanpa itu tidak ada satu pun jarak yang bisa dihitung. Tiga
+keputusan yang perlu dijelaskan.
+
+**1. Padanan dekat yang TIDAK ambigu sekarang dipakai otomatis (status
+`fuzzy`) — dan ini menyimpang dari aturan impor penjualan.** Impor
+penjualan menolak semua tebakan sampai ada manusia yang mengonfirmasi
+(`backend/core/matching.js` menyarankan, tidak pernah memutuskan).
+Penyimpangannya disengaja dan terbatas: sumber KTP dan Servis datang tiap
+bulan dengan ribuan baris, dan meminta konfirmasi manual atas tiap varian
+ejaan yang sudah jelas (TEGALREJO vs Tegalreja) berarti fiturnya tidak
+akan pernah dipakai tim yang tidak punya orang IT. Tiga pengaman yang
+membuatnya tetap aman: (a) tebakan yang AMBIGU tidak pernah dipakai —
+kalau dua kandidat sama kuat (kecamatan sama-sama cocok/tidak DAN jarak
+ejaan sama), hasilnya `unmatched` berikut usulannya, bukan salah satu
+yang dipilih diam-diam; (b) statusnya dicatat per baris, jadi yang dipakai
+selalu bisa ditelusuri dan dibedakan dari yang cocok apa adanya; (c) alias
+yang dikonfirmasi manusia tetap menimpa segalanya. Aturan lama TIDAK
+diubah — impor penjualan tetap menolak tebakan.
+
+**2. Nama field di respons API bahasa Inggris, bukan Indonesia.** Contoh
+JSON di brief aslinya memakai `kode_wilayah`/`provinsi`/`desa`. Itu tidak
+diikuti: aturan proyek (CLAUDE.md, dan komentar pembuka
+`backend/server/repository.js`) adalah nama field mengikuti nama kolom
+dalam bahasa Inggris, supaya tidak ada penerjemahan di tengah yang bisa
+salah. Nama PARAMETER query tetap Indonesia (`?kecamatan=&desa=&kota=`)
+karena yang mengetiknya orang, bukan kode. `docs/FUSION.md` 2.5 sudah
+diperbarui supaya dokumen dan kode tidak berbeda.
+
+**3. Parameter `kota` opsional, dengan jawaban 409 untuk yang ambigu.**
+Kunci pencocokan proyek ini tiga tingkat karena dua tingkat tabrakan di
+171 tempat — Cilacap punya dua "Tambakreja". Importer selalu punya kode
+kota (ada di kolom Excel) dan karena itu selalu deterministik. Operator
+yang mengetik manual di halaman sering tidak punya, jadi rutenya tetap
+melayani: namanya dicari ke seluruh desa, dan kalau ternyata ada di lebih
+dari satu kabupaten jawabannya 409 berikut daftar kandidat — bukan salah
+satu yang dipilih diam-diam. Status `ambiguous` ini cuma ada di lapisan
+rute; resolver murninya tetap empat status seperti di spesifikasi.
+
+**Konsekuensi:** `backend/core/village-resolver.js` baru (murni, tanpa
+I/O — bisa diuji tanpa PostgreSQL), `repo.resolveVillageByName()`, dan
+rute `GET /api/v1/wilayah/koordinat`. Awalan `/v1` dipakai semua rute
+penyatuan; rute lama di `/api/*` tidak disentuh. `npm test` 28/28 hijau.
+Tesnya diuji mutasi: membuang penjaga ambiguitas membuat tebakan seri
+diterima (tes merah), dan membalik urutan penumpukan alias membuat
+keputusan manusia kalah dari nama asli (tes merah) — keduanya tertangkap.
+Tahap C–F belum dikerjakan.

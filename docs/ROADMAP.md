@@ -52,12 +52,17 @@ Istilah wilayah memakai terjemahan resmi BPS supaya konsisten:
 
 ## Sedang dikerjakan
 
-**Penyatuan tiga sumber data (FUSION).** Rancangan lengkap sudah ditulis
-di `docs/FUSION.md` dan fondasinya (Tahap A) sudah berdiri: modul geo
-bersama, tabel konfigurasi, tabel agregat, dan empat tabel penyatuan di
-database PII. Yang berikutnya Tahap B (konversi nama desa → koordinat),
-lalu C sampai F. Tidak ada satu pun jalur data baru yang sudah hidup —
-tabelnya ada, pengisinya belum.
+**Penyatuan tiga sumber data (FUSION).** Rancangan lengkap ada di
+`docs/FUSION.md`. Tahap A (fondasi: modul geo bersama, tabel konfigurasi,
+tabel agregat, empat tabel penyatuan di database PII) dan Tahap B
+(resolver nama desa → koordinat berikut rutenya) sudah selesai. Yang
+berikutnya Tahap C: importer Data KTP template baru, importer Data
+Servis, dan endpoint ping pengiriman.
+
+Tabel-tabelnya sudah ada di database sungguhan, tapi **masih kosong** —
+belum ada satu pun jalur yang mengisinya sampai Tahap C jadi. Golongan
+Warlok, metrik, dan halaman Confidence Fusion (Tahap D–F) karena itu
+belum bisa menampilkan apa pun.
 
 Selain itu kosong secara kode — ring dealer (1-3)/coverage pos (1-8), impor Master Dealer &
 Pos dari Excel, perbaikan sambungan penjualan bulanan ke dealer, ringkasan
@@ -167,7 +172,7 @@ cuma perluasan ke Sulawesi ke timur.
 Detail rancangan di `docs/FUSION.md`; alasan tiap keputusan arsitekturnya
 di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
 
-**Selesai dan diuji otomatis (27/27 berkas tes):**
+**Selesai dan diuji otomatis (28/28 berkas tes):**
 - Spesifikasi teknis lengkap Tahap 2 (skema, pipeline batch + realtime,
   tabel keputusan 6 golongan, KPI Jarak yang dapat dikustom, rumus CW
   Sales/Confidence Ratio/Retention Index, kontrak API, diagram alur) dan
@@ -180,9 +185,14 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
 - Uji baru: dua salinan haversine (frontend ESM dan backend CJS)
   dibandingkan pada empat pasang koordinat — diuji mutasi, mengganti
   jari-jari bola ke WGS84 menggeser hasil 148 m, jauh di atas ambang.
+- Tahap B: `backend/core/village-resolver.js` (murni, tanpa I/O) yang
+  mengubah nama Kelurahan/Kecamatan jadi kode wilayah dengan empat status
+  (ok/alias/fuzzy/unmatched), `repo.resolveVillageByName()`, dan rute
+  `GET /api/v1/wilayah/koordinat` — rute `/v1` pertama di proyek ini,
+  rute lama tidak disentuh. Tebakan yang ambigu ditolak, alias manusia
+  menimpa segalanya; keduanya diuji mutasi.
 
-**Belum dikerjakan (Tahap B–F, lihat tabel tahapan di `docs/FUSION.md`):**
-- B konversi nama desa → koordinat (pembungkus resolver + endpoint)
+**Belum dikerjakan (Tahap C–F, lihat tabel tahapan di `docs/FUSION.md`):**
 - C ingest: importer KTP template baru, importer Servis, endpoint ping
 - D fusi: `fuseEngine()` + batch + micro-batch + rollup
 - E API: segmentasi, metrik, recalculate, drill-down PII

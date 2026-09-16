@@ -11,8 +11,9 @@ const store = require('./db');
 const coverage = require('./coverage-store');
 const { config } = require('./config');
 const { toDealerCode } = require('../core/grouping');
-const { regionKey } = require('../core/region');
+const { regionKey, normalizeName, toDottedCityCode } = require('../core/region');
 const { suggestVillages } = require('../core/matching');
+const { buildVillageIndex, resolveVillage } = require('../core/village-resolver');
 
 /**
  * Seluruh isi dashboard dalam satu permintaan.
@@ -999,7 +1000,68 @@ async function updateOutlet(code, patch, config) {
   };
 }
 
+/**
+ * Cari koordinat satu desa dari namanya (docs/FUSION.md 2.1a).
+ *
+ * Tabel `villages` sudah memuat seluruh DIY + Jateng berikut centroidnya, jadi ini
+ * BUKAN geocoder alamat — tidak ada jalan dan nomor rumah di sini, cuma titik tengah
+ * desa. Itu memang yang tersedia di Data KTP dan Data Servis.
+ *
+ * `cityCode` OPSIONAL, dan itu keputusan yang perlu dijelaskan. Kunci pencocokan
+ * proyek ini tiga tingkat (kota|kecamatan|desa) karena dua tingkat tabrakan di 171
+ * tempat. Pemanggil yang punya kode kota — importer, yang mengambilnya dari kolom
+ * Excel — mendapat resolusi yang deterministik. Pemanggil yang tidak punya (operator
+ * yang mengetik manual di halaman) tetap dilayani: namanya dicari ke seluruh desa,
+ * dan kalau ternyata ada di lebih dari satu kabupaten, jawabannya BUKAN salah satu
+ * yang dipilih diam-diam, tapi 'ambiguous' berikut daftar kandidatnya.
+ *
+ * Seluruh 8.999 desa dibaca sekali per permintaan. Itu murah (beberapa milidetik) dan
+ * sengaja tidak di-cache: rutenya dipakai sesekali oleh orang, bukan per baris impor.
+ * Jalur impor nanti membangun indeksnya SEKALI untuk ribuan baris (2.1c).
+ */
+async function resolveVillageByName(input) {
+  const districtName = String(input.districtName || '');
+  const villageName = String(input.villageName || '');
+  const cityCode = input.cityCode ? toDottedCityCode(input.cityCode) : '';
+
+  const villages = await store.all(store.db(), `
+    SELECT village_code AS code, village_name AS name, district_name AS district,
+           district_code AS "districtCode", city_code AS "cityCode",
+           city_name AS "cityName", province_code AS "provinceCode", lat, lng
+    FROM villages`);
+
+  // Tanpa kode kota, kunci tiga tingkat mustahil dipakai — jadi dicari apa adanya
+  // lebih dulu. Satu hasil berarti tidak ada yang perlu ditebak sama sekali.
+  if (!cityCode) {
+    const persis = villages.filter((v) =>
+      normalizeName(v.district) === normalizeName(districtName) &&
+      normalizeName(v.name) === normalizeName(villageName));
+    if (persis.length === 1) {
+      return { status: 'ok', village: persis[0], suggestions: [] };
+    }
+    if (persis.length > 1) {
+      return { status: 'ambiguous', village: null, suggestions: persis.slice(0, 5) };
+    }
+  }
+
+  const index = buildVillageIndex(villages, await aliases());
+  const candidates = cityCode
+    ? villages.filter((v) => v.cityCode === cityCode)
+    : villages;
+
+  const hasil = resolveVillage({ cityCode, districtName, villageName }, index, candidates);
+  const byCode = {};
+  villages.forEach((v) => { byCode[v.code] = v; });
+
+  return {
+    status: hasil.status,
+    village: hasil.villageCode ? byCode[hasil.villageCode] : null,
+    suggestions: hasil.suggestions,
+  };
+}
+
 module.exports = {
+  resolveVillageByName,
   summary, unmatched, imports, periodSummary,
   customersInVillage, browseCustomers, hasCustomers, logCustomerAccess, updateOutlet,
   resetOutlets, allDealerRings, allPosCoverage, districts, saveDealerRings, savePosCoverage,

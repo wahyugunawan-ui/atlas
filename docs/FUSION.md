@@ -678,17 +678,34 @@ ada (middleware tolak-secara-bawaan; permintaan tanpa sesi valid dapat
 
 **Koordinat desa**
 
+Nama field memakai bahasa Inggris mengikuti nama kolomnya, aturan proyek
+yang sudah berlaku di seluruh `/api` — contoh JSON di brief aslinya
+memakai bahasa Indonesia, dan itu sengaja tidak diikuti supaya tidak ada
+penerjemahan di tengah yang bisa salah. Nama PARAMETER tetap Indonesia,
+karena yang mengetiknya orang.
+
 ```
-GET /api/v1/wilayah/koordinat?kecamatan=MLATI&desa=SINDUADI
+GET /api/v1/wilayah/koordinat?kecamatan=MLATI&desa=SINDUADI[&kota=34.04]
 200 {
-  "kode_wilayah": "34.04.01.2001", "provinsi": "DI YOGYAKARTA",
-  "kabupaten": "SLEMAN", "kecamatan": "MLATI", "desa": "SINDUADI",
+  "villageCode": "34.04.01.2001", "villageName": "Sinduadi",
+  "districtName": "Mlati", "districtCode": "34.04.01",
+  "cityCode": "34.04", "cityName": "SLEMAN", "provinceCode": "34",
   "lat": -7.7612, "lng": 110.3583,
-  "sumber_data": "villages", "cocok": "exact",
-  "diperbarui_pada": "2026-08-17T00:00:00Z"
+  "match": "ok",          // ok | alias | fuzzy
+  "source": "villages"
 }
-404 { "error": "desa tidak ditemukan", "usulan": [ { "kode_wilayah": "...", "desa": "SINDUADI", "jarak_ejaan": 1 } ] }
+409 { "error": "Nama ini ada di lebih dari satu kabupaten. Sebutkan parameter kota.",
+      "match": "ambiguous", "candidates": [ ... ] }
+404 { "error": "Desa tidak ditemukan.", "match": "unmatched",
+      "suggestions": [ { "villageCode": "...", "villageName": "Tegalreja", "editDistance": 1 } ] }
 ```
+
+Parameter `kota` OPSIONAL. Importer selalu mengirimnya (kode kota ada di
+kolom Excel) dan mendapat resolusi deterministik lewat kunci tiga
+tingkat. Operator yang mengetik manual boleh tidak mengirimnya — namanya
+dicari ke seluruh desa, dan kalau ternyata ada di lebih dari satu
+kabupaten, jawabannya 409 berikut kandidatnya, bukan salah satu yang
+dipilih diam-diam.
 
 Mengembalikan usulan pada 404 adalah inti kegunaannya: operator yang
 mengoreksi nama butuh kandidat, bukan sekadar penolakan.

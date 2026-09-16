@@ -189,6 +189,66 @@ function build(config) {
   });
 
   /**
+   * Koordinat satu desa dari namanya — layanan referensi wilayah (docs/FUSION.md 2.1a).
+   *
+   * Awalan /v1 dipakai SEMUA rute penyatuan tiga sumber, dan rute lama di /api/* tidak
+   * disentuh sama sekali. Itu yang membuat fitur baru ini tidak pernah bisa merusak
+   * halaman yang sudah dipakai tim tiap hari.
+   *
+   * Tanpa PII: nama desa dan koordinat titik tengahnya bukan data pribadi siapa pun.
+   * Jadi tidak lewat piiLimiter — beda dari rute /customers.
+   *
+   * Tiga jawaban, dan bedanya disengaja:
+   *   200  ketemu; `match` menyebut BAGAIMANA ketemunya (ok/alias/fuzzy)
+   *   409  namanya ada di lebih dari satu kabupaten; sebutkan `kota`
+   *   404  tidak ketemu, lengkap dengan usulan ejaan terdekat
+   *
+   * Usulan ikut dikirim pada 404 karena itulah gunanya buat operator: yang mengetik
+   * nama salah butuh kandidat, bukan sekadar penolakan.
+   */
+  api.get('/v1/wilayah/koordinat', async (req, res) => {
+    const districtName = String(req.query.kecamatan || '').trim();
+    const villageName = String(req.query.desa || '').trim();
+    const cityCode = String(req.query.kota || '').trim();
+    if (!districtName || !villageName) {
+      return res.status(400).json({
+        error: 'Parameter kecamatan dan desa wajib diisi.',
+      });
+    }
+
+    const ringkas = (v) => ({
+      villageCode: v.code,
+      villageName: v.name,
+      districtName: v.district,
+      districtCode: v.districtCode,
+      cityCode: v.cityCode,
+      cityName: v.cityName,
+      provinceCode: v.provinceCode,
+      lat: v.lat,
+      lng: v.lng,
+      ...(v.distance === undefined ? {} : { editDistance: v.distance }),
+    });
+
+    const hasil = await repo.resolveVillageByName({ cityCode, districtName, villageName });
+
+    if (hasil.status === 'ambiguous') {
+      return res.status(409).json({
+        error: 'Nama ini ada di lebih dari satu kabupaten. Sebutkan parameter kota.',
+        match: 'ambiguous',
+        candidates: hasil.suggestions.map(ringkas),
+      });
+    }
+    if (!hasil.village) {
+      return res.status(404).json({
+        error: 'Desa tidak ditemukan.',
+        match: hasil.status,
+        suggestions: hasil.suggestions.map(ringkas),
+      });
+    }
+    res.json({ ...ringkas(hasil.village), match: hasil.status, source: 'villages' });
+  });
+
+  /**
    * Ganti seluruh ring satu dealer.
    *
    * Badannya gambaran LENGKAP, bukan tambalan: {rings: {"33.13.09": 1, ...}}.
