@@ -1234,6 +1234,56 @@ async function legacyDealerCode(code) {
   return (rows[0] && rows[0].legacyCode) ? rows[0].legacyCode : code;
 }
 
+/**
+ * Bahan panel Cakupan Sumber: berapa banyak pelanggan tiap kota/dealer yang PUNYA
+ * tiap sumber data.
+ *
+ * Dimensi kepemilikan, bukan golongan — pelanggan yang punya servis tapi jauh tetap
+ * "punya servis". Sumbernya `source_overlap`, satu baris per (kota, dealer, punya
+ * servis, punya kirim, golongan); diukur pada data Agustus 2026, dikelompokkan per
+ * kota MAUPUN per dealer keduanya berjumlah 19.598 = total segmentasi, jadi
+ * pengelompokan di sini tidak menggandakan siapa pun.
+ *
+ * COALESCE bukan hiasan: `SUM(...) FILTER (WHERE has_delivery)` mengembalikan NULL,
+ * bukan 0, kalau tidak ada satu pun baris yang lolos saringan — dan itu keadaan
+ * SEKARANG, karena belum ada satu pun ping pengiriman. Tanpa COALESCE panel ini
+ * menampilkan "null" alih-alih nol.
+ *
+ * @param {string} groupBy 'kota' | 'dealer'
+ */
+async function fusionSourceCoverage(period, filter, groupBy) {
+  const where = ['period = ?'];
+  const params = [period];
+  if (filter && filter.cityCode) { where.push('city_code = ?'); params.push(filter.cityCode); }
+  if (filter && filter.dealerCode) { where.push('dealer_code = ?'); params.push(filter.dealerCode); }
+
+  const hitung = `
+    SUM(r.customer_count) AS total,
+    COALESCE(SUM(r.customer_count) FILTER (WHERE r.has_service), 0) AS servis,
+    COALESCE(SUM(r.customer_count) FILTER (WHERE r.has_delivery), 0) AS kirim`;
+
+  if (groupBy === 'dealer') {
+    return store.all(store.db(), `
+      SELECT r.dealer_code AS "code", d.dealer_name AS "name", ${hitung}
+      FROM source_overlap r
+      -- legacy_code, alasan sama dengan fusionRows(): rollup menyimpan kode numerik
+      -- Excel, dealers.dealer_code adalah kode turunan nama.
+      LEFT JOIN dealers d ON d.legacy_code = r.dealer_code
+      WHERE ${where.join(' AND ')}
+      GROUP BY r.dealer_code, d.dealer_name
+      ORDER BY SUM(r.customer_count) DESC`, params);
+  }
+
+  return store.all(store.db(), `
+    SELECT r.city_code AS "code",
+           (SELECT MIN(city_name) FROM villages c WHERE c.city_code = r.city_code) AS "name",
+           ${hitung}
+    FROM source_overlap r
+    WHERE ${where.join(' AND ')}
+    GROUP BY r.city_code
+    ORDER BY SUM(r.customer_count) DESC`, params);
+}
+
 /** Ringkasan per kota: siapa yang paling banyak, dan seberapa yakin kita. */
 async function fusionByCity(period) {
   return store.all(store.db(), `
@@ -1349,6 +1399,7 @@ module.exports = {
   resolveVillageByName,
   latestFusionPeriod, fusionTotals, fusionRows, fusionByCity, fusionByDealer,
   fusionEngineDetail, setAppConfig, fusionMatrix, fusionOverlap, legacyDealerCode,
+  fusionSourceCoverage,
   summary, unmatched, imports, periodSummary,
   customersInVillage, browseCustomers, hasCustomers, logCustomerAccess, updateOutlet,
   resetOutlets, allDealerRings, allPosCoverage, districts, saveDealerRings, savePosCoverage,

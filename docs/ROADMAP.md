@@ -266,9 +266,18 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
   yang tidak berlaku di halaman ini sekarang dikatakan lewat pita kuning,
   bukan didiamkan. Lihat `docs/DECISIONS.md`.
 
+- Tahap F potongan 4: panel **Cakupan Sumber** — berapa persen pelanggan
+  tiap kota (atau tiap dealer, begitu Kota dipilih) yang punya tiap sumber
+  data. Ternyata BUKAN cuma menggambar: tabelnya punya kolomnya, tapi tidak
+  ada rute yang mengeluarkannya per entitas, jadi `repo.fusionSourceCoverage()`
+  + `GET /api/v1/cakupan-sumber` ikut dibuat. Direkonsiliasi atas data
+  sungguhan: 57 kota berjumlah 19.598 = total segmentasi, servis 1.292 sama
+  dengan angka Venn, dan kota 34.04 berjumlah 2.829 baik lewat daftar per-kota
+  maupun per-dealernya (39/39 nama dealer terisi). Lihat `docs/DECISIONS.md`.
+
 **Belum dikerjakan (sisa Tahap F, lihat tabel tahapan di `docs/FUSION.md`):**
-- Panel Cakupan Sumber (datanya sudah ada di `source_overlap`, tinggal
-  digambar)
+- Checkbox pilih-sumber + pencarian di panel Cakupan Sumber (daftarnya sudah
+  jalan; bagian interaktifnya belum)
 - Tiga jenis titik baru di peta (KTP/Servis/Kirim) + radius KPI Jarak
 - Drill-down per Nomor Mesin (rute PII-nya sudah ada, layarnya belum)
 - Mode Live/wallboard dan cross-filtering penuh di sidebar

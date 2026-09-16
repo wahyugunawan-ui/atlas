@@ -16,9 +16,11 @@
  * baru drill-down per nomor mesin — jadi keduanya menjelaskan apa yang akan tampil dan
  * dari mana datangnya, tanpa berpura-pura punya data.
  */
-import { fetchIrisan, fetchMatriks, fetchPeringkat, fetchSegmentation } from './api.js';
+import {
+  fetchCakupanSumber, fetchIrisan, fetchMatriks, fetchPeringkat, fetchSegmentation,
+} from './api.js';
 import { $, esc, formatNumber } from './dom.js';
-import { fusionFilter } from './filters.js';
+import { fusionFilter, persenSumber } from './filters.js';
 import { SEGMENTS, SUMBER } from './fusion-segments.js';
 
 /** Satu-satunya tempat status diterjemahkan jadi warna, biar konsisten antar panel. */
@@ -194,6 +196,80 @@ function venn(data) {
     `</svg>`;
 }
 
+/**
+ * Panel Cakupan Sumber: berapa persen pelanggan tiap kota/dealer yang punya tiap
+ * sumber data.
+ *
+ * C · KTP SENGAJA tidak digambar sebagai bar. Tiap pelanggan yang sampai ke panel ini
+ * menurut definisi punya baris KTP — itu syarat masuk penggolongan sama sekali — jadi
+ * barnya akan 100% di setiap baris tanpa kecuali. Bar yang selalu penuh tidak
+ * membedakan apa pun; yang membedakan cuma dua sumber sisanya.
+ *
+ * Judulnya memakai `groupBy` dari server, bukan tebakan sendiri, supaya judul panel
+ * tidak pernah bisa berbeda dari isi daftarnya.
+ */
+function cakupanSumber(data) {
+  const rows = (data && data.rows) || [];
+  const total = Number(data && data.total) || 0;
+  if (!rows.length || !total) {
+    return '<p class="text-xs text-slate-400 py-4 text-center">Belum ada data.</p>';
+  }
+
+  const sumber = (data && data.sumber) || {};
+  const bar = (kunci, nilai, pembagi) => {
+    const p = persenSumber(nilai, pembagi);
+    return `<div class="flex items-center gap-1.5 mt-0.5">` +
+      `<span class="text-[9px] text-slate-400 w-12 shrink-0">${esc(SUMBER[kunci].label)}</span>` +
+      `<div class="h-[7px] rounded-sm bg-slate-100 overflow-hidden flex-1">` +
+        `<div class="h-full rounded-sm" style="width:${p || 0}%;background:${
+          SUMBER[kunci].color}"></div></div>` +
+      `<span class="text-[9px] mono text-slate-500 w-14 text-right">${
+        esc(formatNumber(Number(nilai) || 0))} · ${p == null ? '—' : `${p}%`}</span></div>`;
+  };
+
+  const perDealer = Boolean(data && data.groupBy === 'dealer');
+
+  /**
+   * Nama baris waktu servernya tidak menemukan namanya.
+   *
+   * Diukur pada data Agustus 2026: dari 57 kota, 20 tidak punya nama — 3 memakai
+   * sentinel '' (kota tidak diketahui) dan 17 sisanya kode BPS di LUAR cakupan proyek
+   * (31.75 Jakarta, 32.xx Jawa Barat, 35.xx Jawa Timur, bahkan 12.75 Sumatera Utara).
+   * Itu pembeli dari luar DIY/Jateng, bukan kesalahan data. Tapi menulis "31.75" begitu
+   * saja ke orang non-IT tidak memberi tahu apa pun, jadi kodenya tetap ditulis
+   * DIDAMPINGI keterangannya.
+   */
+  const namaBaris = (r) => {
+    if (r.name) return r.name;
+    if (perDealer) return r.code ? `Dealer ${r.code}` : 'Dealer tidak dikenal';
+    if (r.code === '' || !r.code) return 'Kota tidak diketahui';
+    return `Luar cakupan (${r.code})`;
+  };
+
+  const daftar = rows.slice(0, 25).map((r) => {
+    const n = Number(r.total) || 0;
+    // city_code '' = kota yang tidak diketahui (source_overlap memakainya sebagai
+    // sentinel, kolomnya NOT NULL). Dikatakan apa adanya, bukan dibuang diam-diam.
+    const nama = namaBaris(r);
+    return `<div class="py-1 border-b border-slate-50 last:border-0">` +
+      `<div class="flex items-center gap-2">` +
+        `<span class="text-[11px] text-slate-700 truncate flex-1">${esc(nama)}</span>` +
+        `<span class="text-[11px] mono text-slate-500">${esc(formatNumber(n))}</span>` +
+      `</div>` + bar('servis', r.servis, n) + bar('kirim', r.kirim, n) + `</div>`;
+  }).join('');
+
+  // Kirim kosong sama sekali itu keadaan yang BENAR sekarang (belum ada produsen ping),
+  // bukan cacat gambar. Deretan bar ungu yang kosong di tiap baris akan terbaca sebagai
+  // "dealer ini tidak pernah mengirim" kalau tidak dikatakan.
+  const catatan = Number(sumber.kirim) ? '' :
+    `<p class="text-[10px] text-slate-400 mt-2 leading-snug">Bar <b>A · Kirim</b> kosong ` +
+    `di semua baris karena belum ada satu pun data pengiriman yang masuk — bukan karena ` +
+    `pengirimannya nol.</p>`;
+
+  return `<p class="text-[10px] text-slate-400 mb-1">C · KTP tidak digambar: semua ` +
+    `pelanggan di sini pasti punya KTP (100%).</p>` + daftar + catatan;
+}
+
 function panelBelum(judul, keterangan) {
   return `<div class="bg-white rounded-xl border border-slate-200 p-3 flex-1 min-w-0">` +
     `<div class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">${esc(judul)}</div>` +
@@ -280,9 +356,11 @@ export async function renderFusion() {
   let peringkat;
   let matrix;
   let irisan;
+  let cakupan;
   try {
-    [hasil, peringkat, matrix, irisan] = await Promise.all([
+    [hasil, peringkat, matrix, irisan, cakupan] = await Promise.all([
       fetchSegmentation(f), fetchPeringkat(f), fetchMatriks(f), fetchIrisan(f),
+      fetchCakupanSumber(f),
     ]);
   } catch (error) {
     wadah.innerHTML = `<div class="p-6 text-center"><p class="text-sm text-red-600">${
@@ -333,6 +411,15 @@ export async function renderFusion() {
       `<div class="bg-white rounded-xl border border-slate-200 p-3 flex-1 min-w-0">` +
         `<div class="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Peringkat dealer</div>` +
         daftarPeringkat(peringkat.dealers, 'dealerName', { denganKota: true }) +
+      `</div>` +
+      `<div class="bg-white rounded-xl border border-slate-200 p-3 flex-1 min-w-0">` +
+        `<div class="flex items-baseline gap-2 mb-1">` +
+          `<span class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">` +
+          `Cakupan sumber</span>` +
+          `<span class="text-[10px] text-slate-400">per ${
+            esc(cakupan && cakupan.groupBy === 'dealer' ? 'dealer' : 'kota')}</span>` +
+        `</div>` +
+        cakupanSumber(cakupan) +
       `</div>` +
     `</div>` +
     `<div class="flex gap-2 mt-2">` +

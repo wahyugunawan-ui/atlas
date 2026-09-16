@@ -135,6 +135,19 @@ export function fusionFilter(f) {
   };
 }
 
+/**
+ * Persentase kepemilikan sumber, dibulatkan untuk dibaca orang.
+ *
+ * Nol pembagi mengembalikan null, BUKAN 0: "0%" berarti "diukur, hasilnya nol",
+ * sedangkan tidak ada pembagi berarti "belum ada yang bisa diukur". Dua keadaan yang
+ * berbeda dan tidak boleh tampil sama.
+ */
+export function persenSumber(n, total) {
+  const pembagi = Number(total) || 0;
+  if (!pembagi) return null;
+  return Math.round((Number(n) || 0) / pembagi * 100);
+}
+
 export function activeRows(page) {
   const f = pageFilters(page);
 

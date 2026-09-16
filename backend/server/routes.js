@@ -1046,6 +1046,46 @@ function build(config) {
     res.json({ period, regions, total, sumber });
   });
 
+  /**
+   * Panel Cakupan Sumber: siapa punya sumber apa, dipecah per kota atau per dealer.
+   *
+   * SPESIFIKASINYA DIUBAH SEDIKIT, dan ini disengaja. docs/FUSION.md menulis daftarnya
+   * berpindah "per-dealer bila filter Dealer aktif". Tapi kalau satu dealer sudah
+   * dipilih, daftar per-dealer cuma berisi SATU baris — panel yang tidak memberi tahu
+   * apa pun. Yang dipakai di sini: begitu KOTA dipilih, daftarnya turun jadi
+   * dealer-dealer di kota itu. Itu arah drill-down yang sebenarnya dicari orang, dan
+   * memilih dealer tetap menyisakan daftar kota yang berguna (dari mana pembelinya).
+   */
+  api.get('/v1/cakupan-sumber', async (req, res) => {
+    const period = await periodeFusi(req.query);
+    const kota = CITY.test(String(req.query.kota || '')) ? String(req.query.kota) : null;
+    const groupBy = kota ? 'dealer' : 'kota';
+
+    if (!period) {
+      return res.json({ period: null, groupBy, rows: [], total: 0,
+        sumber: { ktp: 0, servis: 0, kirim: 0 } });
+    }
+
+    const rows = await repo.fusionSourceCoverage(period, {
+      cityCode: kota,
+      dealerCode: await dealerFusi(req.query.dealer),
+    }, groupBy);
+
+    // Tiap baris source_overlap menurut definisi punya KTP — itu syarat masuk
+    // penggolongan sama sekali (lihat fuseEngine: tanpa baris KTP hasilnya null).
+    const sumber = { ktp: 0, servis: 0, kirim: 0 };
+    let total = 0;
+    rows.forEach((r) => {
+      const n = Number(r.total) || 0;
+      total += n;
+      sumber.ktp += n;
+      sumber.servis += Number(r.servis) || 0;
+      sumber.kirim += Number(r.kirim) || 0;
+    });
+
+    res.json({ period, groupBy, rows, total, sumber });
+  });
+
   api.get('/v1/konfigurasi/kpi-jarak', async (req, res) => {
     const s = await readSettings();
     res.json({

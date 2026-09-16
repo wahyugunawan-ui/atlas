@@ -61,3 +61,22 @@ test('pos dan karesidenan dilaporkan sebagai diabaikan, bukan didiamkan', async 
   assert.deepStrictEqual(hasil.abaikan, ['pos', 'karesidenan']);
   assert.ok(!('outletCode' in hasil), 'pos tidak boleh diam-diam jadi saringan');
 });
+
+test('persenSumber membedakan "nol" dari "belum bisa diukur"', async () => {
+  const { persenSumber } = await import(MODUL);
+  // Bedanya penting di panel Cakupan Sumber: 0% berarti diukur dan hasilnya nol,
+  // sedangkan tanpa pembagi berarti tidak ada yang bisa diukur sama sekali. Kalau
+  // keduanya jadi 0, bar kosong terbaca sebagai fakta padahal belum ada datanya.
+  assert.strictEqual(persenSumber(0, 100), 0);
+  assert.strictEqual(persenSumber(5, 0), null);
+  assert.strictEqual(persenSumber(0, 0), null);
+});
+
+test('persenSumber membulatkan, dan nilai kosong dihitung nol', async () => {
+  const { persenSumber } = await import(MODUL);
+  assert.strictEqual(persenSumber(50, 200), 25);
+  assert.strictEqual(persenSumber(1, 3), 33);
+  assert.strictEqual(persenSumber(2, 3), 67);
+  // `kirim` datang dari SQL sebagai null waktu belum ada ping sama sekali.
+  assert.strictEqual(persenSumber(null, 100), 0);
+});

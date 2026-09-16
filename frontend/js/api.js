@@ -111,6 +111,21 @@ export function fetchMatriks(filter) {
   return request(`${API}v1/matriks?${q}`);
 }
 
+/**
+ * Cakupan sumber per kota atau per dealer.
+ *
+ * Pengelompokannya ditentukan SERVER dari ada/tidaknya saringan kota, dan dikembalikan
+ * lewat field `groupBy` — layar tidak menebaknya sendiri, supaya judul panel tidak
+ * pernah bisa berbeda dari isinya.
+ */
+export function fetchCakupanSumber(filter) {
+  const q = new URLSearchParams();
+  if (filter && filter.periode) q.set('periode', filter.periode);
+  if (filter && filter.kota && filter.kota !== 'ALL') q.set('kota', filter.kota);
+  if (filter && filter.dealer && filter.dealer !== 'ALL') q.set('dealer', filter.dealer);
+  return request(`${API}v1/cakupan-sumber?${q}`);
+}
+
 /** Rincian satu nomor mesin. RUTE PII — dibatasi laju dan dicatat di server. */
 export const fetchEngineDetail = (engineNo) =>
   request(`${API}v1/mesin/${encodeURIComponent(engineNo)}`);

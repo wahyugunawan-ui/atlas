@@ -3081,3 +3081,61 @@ yang diambil dari berkas, dan tepat satu tes yang merah.
 
 **Caveat yang masih berlaku:** belum ada satu pun bagian Tahap F yang pernah
 dilihat di browser. Verifikasi berhenti tepat sebelum layar.
+
+## [2026-09-17] FUSION Tahap F potongan 4: panel Cakupan Sumber
+
+ROADMAP menulis panel ini "datanya sudah ada di `source_overlap`, tinggal
+digambar". Itu ternyata cuma separuh benar: TABELNYA memang punya `city_code`
+dan `dealer_code`, tapi tidak ada satu pun rute yang mengeluarkannya per
+entitas — `/v1/irisan` cuma memberi angka global. Jadi potongan ini butuh
+fungsi repo + rute baru, bukan cuma renderer.
+
+**Spesifikasinya diubah sedikit, dan ini disengaja.** `docs/FUSION.md` menulis
+daftarnya berpindah "per-dealer bila filter Dealer aktif". Tapi kalau satu
+dealer sudah dipilih, daftar per-dealer berisi SATU baris — panel yang tidak
+memberi tahu apa pun. Yang dipakai: begitu **Kota** dipilih, daftarnya turun
+jadi dealer-dealer di kota itu. Arah drill-down yang sebenarnya dicari orang,
+dan memilih dealer tetap menyisakan daftar kota yang berguna (dari mana
+pembelinya datang). Pengelompokan diputuskan SERVER dan dikembalikan lewat
+field `groupBy`, supaya judul panel tidak pernah bisa berbeda dari isinya.
+
+**Tiga hal yang cuma ketahuan dari data sungguhan:**
+
+1. `SUM(...) FILTER (WHERE has_delivery)` mengembalikan **NULL, bukan 0**, kalau
+   tidak ada satu pun baris yang lolos — dan itu keadaan sekarang, karena belum
+   ada ping pengiriman. Tanpa `COALESCE` panel ini menulis "null" di tiap baris.
+2. Dari 57 kota, **20 tidak punya nama**: 3 memakai sentinel `''` (kota tidak
+   diketahui) dan 17 sisanya kode BPS di luar cakupan proyek — 31.75 Jakarta,
+   32.xx Jawa Barat, 35.xx Jawa Timur, bahkan 12.75 Sumatera Utara. Itu pembeli
+   dari luar DIY/Jateng, bukan data rusak. Menulis "31.75" begitu saja ke
+   pembaca non-IT tidak memberi tahu apa pun, jadi sekarang tertulis "Luar
+   cakupan (31.75)".
+3. Join dealer tetap harus lewat `legacy_code`. Diuji di kota 34.04: 39 dari 39
+   nama dealer terisi.
+
+**Bar C · KTP sengaja tidak digambar.** Tiap pelanggan yang sampai ke panel ini
+menurut definisi punya baris KTP — itu syarat masuk penggolongan sama sekali —
+jadi barnya akan 100% di setiap baris tanpa kecuali. Bar yang selalu penuh
+tidak membedakan apa pun. Bar A · Kirim tetap digambar meski kosong, tapi
+disertai kalimat bahwa kosongnya karena datanya belum ada, bukan karena
+pengirimannya nol.
+
+`persenSumber()` mengembalikan **null, bukan 0**, waktu pembaginya nol: "0%"
+berarti diukur dan hasilnya nol, sedangkan tanpa pembagi berarti belum ada yang
+bisa diukur. Dua keadaan berbeda yang tidak boleh tampil sama.
+
+**Satu pelajaran verifikasi yang saya nyaris salah catat.** Saya sempat memakai
+`curl` ke rute baru, dapat 401, dan hendak menuliskannya sebagai bukti rutenya
+terdaftar. Itu keliru: penjaganya deny-by-default, jadi rute yang SAMA SEKALI
+tidak ada pun menjawab 401 — saya buktikan dengan memanggil rute karangan.
+Bukti yang benar datang dari membangun routernya dan membaca daftar rutenya:
+15 rute `/v1`, `cakupan-sumber` ada di dalamnya, rute karangan tidak. Sama
+persis dengan pelajaran 302 pada `/js/*` sebelumnya — status HTTP dari balik
+penjaga tidak mengatakan apa pun tentang keberadaan sesuatu.
+
+Rekonsiliasi atas data Agustus 2026: per kota 57 baris berjumlah 19.598 (=
+total segmentasi), servis 1.292 (= angka yang sama dengan Venn dan dengan
+pengukuran SQL langsung), kirim 0. Kota 34.04 berjumlah 2.829 lewat daftar
+per-kota maupun lewat daftar per-dealernya.
+
+**Caveat:** masih belum pernah dilihat di browser.
