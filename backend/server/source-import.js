@@ -66,6 +66,21 @@ async function runSourceImport(options) {
     const rows = mapRows(table.slice(1), cols, spec);
     markEngines(rows, spec);
 
+    // Kode kota dinormalkan ke bentuk BPS bertitik SEBELUM disimpan.
+    //
+    // Excel menulisnya tanpa titik ('3404'); tabel `villages` memakai '34.04'. Tanpa
+    // langkah ini nilainya tetap tersimpan apa adanya dan tidak pernah bisa
+    // disambungkan — diukur pada data Agustus 2026: 0 dari 49 kode kota cocok, jadi
+    // nama kota kosong di seluruh panel dan rute /v1/metrik/kota/:kota (yang
+    // memvalidasi format bertitik) tidak akan pernah menemukan apa pun.
+    // Sesudah dinormalkan: 37 dari 49 cocok — 12 sisanya memang di luar DIY+Jateng.
+    //
+    // Dinormalkan di sini, bukan waktu membaca, supaya `segment_rollup` yang
+    // menyalin kolom ini dari `customer_ktp` ikut benar tanpa perubahan kedua.
+    rows.forEach((r) => {
+      if (r.cityCode) r.cityCode = toDottedCityCode(r.cityCode);
+    });
+
     // --- indeks wilayah: DIBANGUN SEKALI untuk seluruh berkas ---
     //
     // Bukan sekali per baris. Berkas Astra belasan ribu baris, dan membaca 8.999 desa

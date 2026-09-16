@@ -976,6 +976,25 @@ membatalkan. Panel Dealer diberi lebar sedikit lebih besar (flex 1,2)
 karena nama dealer panjang, dan menampilkan kota di belakang nama
 ("Nama Dealer · Nama Kota").
 
+> **Kota dealer itu kota siapa?** Rancangan awal menganggap tiap dealer
+> punya satu kota. Data Agustus 2026 membantahnya, dan skemanya juga:
+> `dealers` maupun `outlets` TIDAK punya kolom kota sama sekali. Yang
+> ditampilkan karena itu **kota asal pembeli terbanyak** dealer tersebut.
+> Dominasinya terukur beragam — 94%, 88%, 53%, 45%, 42% — jadi
+> persentasenya (`citySharePct`) ikut dikembalikan API dan ditampilkan di
+> layar begitu di bawah 60%. Menulis "· Bantul" untuk dealer yang cuma 45%
+> pembelinya dari Bantul, tanpa menyebut angkanya, adalah setengah
+> kebenaran yang terbaca sebagai fakta.
+>
+> Satu jebakan baca yang harus diingat: kalau filter Kota sedang aktif,
+> `citySharePct` selalu 100% — bukan karena dealernya memang terpusat, tapi
+> karena angkanya memang sudah disaring ke kota itu saja. Persentase ini
+> hanya bermakna waktu filter Kota = Semua.
+>
+> Menurunkan kota dealer dari koordinat posnya ditolak: cuma 55 dari 78
+> dealer punya pos berkoordinat, jadi 23 dealer akan kehilangan labelnya
+> demi ketepatan yang toh tidak bisa dicapai seluruhnya.
+
 > Catatan flexbox yang sudah pernah menggigit proyek ini: elemen yang
 > menggulir harus `flex-1 overflow-y-auto min-h-0` di dalam induk
 > `h-full min-h-0`. Tanpa `min-h-0`, tinggi tak terbatas membuat gulir

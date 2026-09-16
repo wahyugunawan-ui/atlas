@@ -52,6 +52,20 @@ function test() {
 
   assert.strictEqual(barisKtp[0].engineNo, 'MESIN-BENAR-1',
     'nilai mesin diambil dari kolom yang salah — ini bug yang paling mahal di berkas ini');
+
+  // Apostrof penanda teks Excel dibuang untuk SEMUA field. Di berkas sungguhan ini
+  // kena Tgl Mohon ("'15082026") dan Kode Kota ("'3404"); yang kedua membuat 0 dari
+  // 49 kode kota cocok ke tabel villages sampai ketahuan dari data Agustus 2026.
+  const berapostrof = mapRows([
+    ["'R1", 'Budi', 'Jl. A', 'Sinduadi', 'Mlati', "'3404", '', '', "'7348", '', '', '',
+      '', '', '', '', 'x', "'MESIN1", "'15082026", ''],
+  ], kolomKtp, SPECS.ktp);
+  assert.strictEqual(berapostrof[0].cityCode, '3404',
+    'apostrof penanda teks Excel harus dibuang dari kode kota');
+  assert.strictEqual(berapostrof[0].engineNo, 'MESIN1',
+    'apostrof juga dibuang dari nomor mesin, kalau sumbernya menulis begitu');
+  assert.strictEqual(berapostrof[0].frameNo, 'R1');
+  assert.strictEqual(berapostrof[0].dealerCode, '7348');
   assert.strictEqual(barisKtp[0].address, 'Jl. Kaliurang 5');
   assert.strictEqual(barisKtp[0].villageText, 'Sinduadi');
   assert.strictEqual(barisKtp[0].rowNo, 2, 'baris data pertama = baris 2 di Excel');

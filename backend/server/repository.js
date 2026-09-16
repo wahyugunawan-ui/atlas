@@ -1150,7 +1150,12 @@ async function fusionRows(filter) {
            r.segment, r.customer_count AS "customerCount", r.weight_sum AS "weightSum"
     FROM segment_rollup r
     LEFT JOIN villages v ON v.village_code = r.village_code
-    LEFT JOIN dealers d ON d.dealer_code = r.dealer_code
+    -- legacy_code, BUKAN dealer_code. Data KTP menyebut dealer dengan kode numerik
+    -- Excel ('7348'), sedangkan dealers.dealer_code adalah kode turunan nama
+    -- ('NUSANTARASAKTIGEJAYAN'); yang numerik disimpan di kolom legacy_code. Diukur
+    -- pada data Agustus 2026: lewat legacy_code cocok 78 dari 78, lewat dealer_code
+    -- cocok 0 dari 78 — seluruh nama dealer kosong di layar sampai ini diperbaiki.
+    LEFT JOIN dealers d ON d.legacy_code = r.dealer_code
     WHERE ${w.text}
     ORDER BY r.customer_count DESC, r.village_code
     LIMIT ? OFFSET ?`, [...w.params, limit + 1, offset])
@@ -1181,20 +1186,52 @@ async function fusionByCity(period) {
  * kembali. Lihat docs/FUSION.md 2.4.
  */
 async function fusionByDealer(period, cityCode) {
-  const where = ['period = ?'];
-  const params = [period];
-  if (cityCode) { where.push('city_code = ?'); params.push(cityCode); }
+  const where = ['r.period = ?'];
+  const params = [period, period];   // yang pertama untuk CTE `utama` di bawah
+  if (cityCode) { where.push('r.city_code = ?'); params.push(cityCode); }
 
+  // Kota dealer = kota ASAL PEMBELI TERBANYAKNYA, bukan MIN(city_code), dan bukan
+  // kota dealer itu sendiri — karena kota dealer TIDAK ADA di skema: baik `dealers`
+  // maupun `outlets` tidak punya kolom kota.
+  //
+  // MIN() yang dipakai versi pertama salah dan terbukti salah: ASTRA MOTOR KEBUMEN
+  // dapat 33.01 (Cilacap) padahal 88% pembelinya 33.05 (Kebumen); ASTRA MOTOR
+  // CILACAP dapat 32.07 (Bogor) padahal 94% pembelinya 33.01 (Cilacap). Kota
+  // terbanyak justru cocok dengan nama dealernya sendiri di kedua kasus.
+  //
+  // `citySharePct` ikut dikembalikan karena dominasinya TIDAK selalu kuat — diukur:
+  // 94%, 88%, 53%, 45%, 42%. Di ujung bawah itu label kota cuma mayoritas tipis, dan
+  // yang membaca layar berhak tahu bedanya. Menurunkan kota dari koordinat pos
+  // ditolak: cuma 55 dari 78 dealer punya pos berkoordinat, jadi 23 dealer akan
+  // kehilangan labelnya demi ketepatan yang tidak seluruhnya bisa dicapai.
+  //
+  // JEBAKAN BACA: kalau `cityCode` diisi (filter Kota aktif), `citySharePct` SELALU
+  // 100% — bukan karena dealernya terpusat, tapi karena barisnya memang sudah
+  // disaring ke kota itu saja. Yang menampilkannya wajib menyembunyikan persentase
+  // ini waktu filter kota sedang aktif; angkanya cuma bermakna pada Kota = Semua.
   return store.all(store.db(), `
+    WITH utama AS (
+      SELECT DISTINCT ON (dealer_code) dealer_code, city_code,
+             SUM(customer_count) AS n
+      FROM segment_rollup
+      WHERE period = ?
+      GROUP BY dealer_code, city_code
+      ORDER BY dealer_code, SUM(customer_count) DESC, city_code
+    )
     SELECT r.dealer_code AS "dealerCode", d.dealer_name AS "dealerName",
-           MIN(r.city_code) AS "cityCode",
+           u.city_code AS "cityCode",
+           (SELECT MIN(city_name) FROM villages vc WHERE vc.city_code = u.city_code)
+             AS "cityName",
+           ROUND(u.n * 100.0 / NULLIF(SUM(r.customer_count), 0), 0) AS "citySharePct",
            SUM(r.customer_count) AS total, SUM(r.weight_sum) AS "cwSales",
            SUM(CASE WHEN r.segment IN ('loyal_verified', 'service_near')
                     THEN r.customer_count ELSE 0 END) AS returning
     FROM segment_rollup r
-    LEFT JOIN dealers d ON d.dealer_code = r.dealer_code
+    -- legacy_code, alasan sama dengan fusionRows() di atas.
+    LEFT JOIN dealers d ON d.legacy_code = r.dealer_code
+    LEFT JOIN utama u ON u.dealer_code = r.dealer_code
     WHERE ${where.join(' AND ')}
-    GROUP BY r.dealer_code, d.dealer_name
+    GROUP BY r.dealer_code, d.dealer_name, u.city_code, u.n
     ORDER BY SUM(r.customer_count) DESC`, params);
 }
 

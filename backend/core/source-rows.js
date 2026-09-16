@@ -159,8 +159,18 @@ function findColumns(header, spec) {
 
 /** Baris mentah -> objek berfield, membawa nomor barisnya di berkas asal. */
 function mapRows(rows, cols, spec) {
+  // Apostrof di DEPAN dibuang untuk SEMUA field, bukan per kolom.
+  //
+  // Excel menandai sel yang dipaksa jadi teks dengan apostrof di depan, dan penanda
+  // itu ikut terbaca sebagai bagian nilainya. Di berkas CDB Astra ini kena SETIDAKNYA
+  // dua kolom — `Tgl Mohon` ("'15082026") dan `Kode Kota` ("'3404") — dan dua-duanya
+  // rusak dengan cara yang sama diam-diamnya: tanggalnya jadi NULL semua, kode
+  // kotanya tidak cocok dengan satu pun kode BPS. Diperbaiki di SINI, sekali, bukan
+  // di tiap kolom yang kebetulan ketahuan; kalau tidak, kolom berikutnya yang
+  // bernasib sama baru ketahuan setelah datanya salah di layar.
   const ambil = (r, field) =>
-    (cols[field] === undefined ? '' : String(r[cols[field]] == null ? '' : r[cols[field]]).trim());
+    (cols[field] === undefined ? ''
+      : String(r[cols[field]] == null ? '' : r[cols[field]]).trim().replace(/^'/, ''));
 
   return (rows || []).map((r, i) => {
     const out = { rowNo: i + 2, status: null, villageCode: null };  // +2: judul + 1-index

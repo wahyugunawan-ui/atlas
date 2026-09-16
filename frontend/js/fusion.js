@@ -49,19 +49,42 @@ function panelBelum(judul, keterangan) {
     `<p class="text-[11px] text-slate-400 mt-2 leading-snug">${esc(keterangan)}</p></div>`;
 }
 
-/** Daftar peringkat kota/dealer: nama, total, dan Confidence Ratio berwarna. */
-function daftarPeringkat(rows, kunciNama) {
+/**
+ * Daftar peringkat kota/dealer: nama, total, dan Confidence Ratio berwarna.
+ *
+ * `denganKota` menempelkan kota di belakang nama dealer ("Nama Dealer · Nama Kota",
+ * docs/FUSION.md 3.3). Kota itu adalah asal pembeli TERBANYAK dealer tersebut, bukan
+ * kota dealernya — kota dealer tidak ada di skema. Persentasenya ikut ditulis kalau
+ * dominasinya di bawah 60%, karena "· Bantul" untuk dealer yang cuma 45% pembelinya
+ * dari Bantul terbaca sebagai fakta padahal cuma mayoritas tipis.
+ *
+ * Persentase itu DISEMBUNYIKAN waktu filter kota sedang aktif: pada keadaan itu
+ * nilainya selalu 100% karena barisnya memang sudah disaring ke kota itu saja.
+ */
+function daftarPeringkat(rows, kunciNama, opsi) {
   if (!rows || !rows.length) {
     return '<p class="text-xs text-slate-400 py-4 text-center">Belum ada data.</p>';
   }
+  const denganKota = Boolean(opsi && opsi.denganKota);
+  const kotaDisaring = Boolean(opsi && opsi.kotaDisaring);
+
   return rows.slice(0, 25).map((r) => {
     const total = Number(r.total) || 0;
     const rasio = total ? Number(r.cwSales) / total : null;
     const persen = rasio == null ? '—' : `${(rasio * 100).toFixed(0)}%`;
     const warna = rasio == null ? 'text-slate-400'
       : (rasio >= 0.65 ? 'text-emerald-600' : (rasio < 0.50 ? 'text-red-600' : 'text-amber-600'));
+
+    const bagian = Number(r.citySharePct);
+    const kota = (denganKota && r.cityName)
+      ? `<span class="text-slate-400"> · ${esc(r.cityName)}${
+        (!kotaDisaring && Number.isFinite(bagian) && bagian < 60) ? ` ${esc(String(bagian))}%` : ''
+      }</span>`
+      : '';
+
     return `<div class="flex items-center gap-2 py-1 border-b border-slate-50 last:border-0">` +
-      `<span class="text-[11px] text-slate-700 truncate flex-1">${esc(r[kunciNama] || r.cityCode || r.dealerCode || '—')}</span>` +
+      `<span class="text-[11px] text-slate-700 truncate flex-1">${
+        esc(r[kunciNama] || r.cityCode || r.dealerCode || '—')}${kota}</span>` +
       `<span class="text-[11px] mono text-slate-500">${esc(formatNumber(total))}</span>` +
       `<span class="text-[11px] font-bold mono ${warna} w-10 text-right">${esc(persen)}</span></div>`;
   }).join('');
@@ -131,7 +154,7 @@ export async function renderFusion() {
       `</div>` +
       `<div class="bg-white rounded-xl border border-slate-200 p-3 flex-1 min-w-0">` +
         `<div class="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Peringkat dealer</div>` +
-        daftarPeringkat(peringkat.dealers, 'dealerName') +
+        daftarPeringkat(peringkat.dealers, 'dealerName', { denganKota: true }) +
       `</div>` +
     `</div>` +
     `<div class="flex gap-2 mt-2">` +

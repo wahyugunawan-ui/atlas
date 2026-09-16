@@ -2859,3 +2859,70 @@ milik motor di luar kohort Agustus.
 `segment_rollup` — Confidence Ratio 55,4%. Tabel `customers` yang lama
 (19.051 baris) tidak disentuh sama sekali. Impornya idempoten: dijalankan
 dua kali dengan periode yang sama, jumlah barisnya tetap.
+
+## [2026-09-17] Tiga sambungan yang putus, dan semuanya cuma terlihat dari data nyata
+
+**Konteks:** sesudah impor sungguhan berhasil, lapisan query Tahap E
+dijalankan atas data yang ada isinya — sebelumnya cuma pernah diuji
+terhadap database KOSONG, yang membuat setiap fungsi lulus dengan
+mengembalikan kosong. Tiga sambungan ternyata putus, dan ketiganya
+menghasilkan layar yang tampak wajar dengan isi yang salah.
+
+**1. Kode kota tidak pernah cocok: 0 dari 49.** `customer_ktp.city_code`
+menyimpan nilai Excel apa adanya — `'3404`, dengan apostrof penanda teks
+DAN tanpa titik — sedangkan `villages.city_code` berformat BPS `34.04`.
+Akibatnya nama kota kosong di seluruh panel, dan rute
+`/api/v1/metrik/kota/:kota` (yang memvalidasi format bertitik) tidak akan
+pernah menemukan apa pun: endpoint itu mati total tanpa satu pun error.
+Diperbaiki di dua lapis — apostrof dibuang untuk SEMUA field di
+`mapRows()` (akar masalahnya, bukan per kolom yang kebetulan ketahuan),
+dan kode kota dinormalkan `toDottedCityCode()` sebelum disimpan, sekali,
+di tempat yang juga menentukan isi `segment_rollup`. Sesudahnya: 37 dari
+49 cocok; 12 sisanya memang KTP luar DIY+Jateng (Jakarta, Bogor,
+Pasuruan, Tangsel).
+
+**2. Nama dealer kosong seluruhnya: 0 dari 78.** Data KTP menyebut dealer
+dengan kode numerik Excel (`7348`), sementara `dealers.dealer_code` adalah
+kode turunan nama (`NUSANTARASAKTIGEJAYAN`); yang numerik ada di kolom
+`legacy_code`. Diukur: lewat `legacy_code` cocok 78 dari 78, lewat
+`dealer_code` cocok 0 dari 78. Join-nya diperbaiki di `fusionRows()` dan
+`fusionByDealer()`.
+
+**3. Kota dealer salah, dan salahnya meyakinkan.** `fusionByDealer()`
+memakai `MIN(city_code)` — yang berarti kota pembeli dengan kode terkecil,
+bukan kota dealernya. Hasilnya: ASTRA MOTOR CILACAP berlabel Bogor, ASTRA
+MOTOR KEBUMEN berlabel Cilacap. Ini jenis kesalahan yang paling berbahaya
+di dashboard: angkanya keluar, labelnya terbaca masuk akal, dan tidak ada
+yang error.
+
+Penyelidikannya menemukan hal yang lebih mendasar: **kota dealer TIDAK ADA
+di skema** — `dealers` maupun `outlets` tidak punya kolom kota. Jadi yang
+dipakai sekarang kota asal pembeli TERBANYAK, dan itu terbukti cocok
+dengan nama dealernya sendiri (KEBUMEN → Kabupaten Kebumen 88%, CILACAP →
+Kabupaten Cilacap 94%). Tapi dominasinya beragam — 94%, 88%, 53%, 45%,
+42% — jadi `citySharePct` ikut dikembalikan dan ditampilkan begitu di
+bawah 60%. Menulis "· Bantul" untuk dealer yang cuma 45% pembelinya dari
+Bantul, tanpa angkanya, adalah setengah kebenaran yang terbaca sebagai
+fakta.
+
+Menurunkan kota dealer dari koordinat pos DITOLAK: cuma 55 dari 78 dealer
+punya pos berkoordinat, jadi 23 dealer kehilangan label demi ketepatan
+yang toh tidak bisa dicapai seluruhnya.
+
+Satu jebakan baca dicatat di kode dan dokumen: waktu filter Kota aktif,
+`citySharePct` selalu 100% — bukan karena dealernya terpusat, tapi karena
+barisnya memang sudah disaring. Layar menyembunyikan angka itu pada
+keadaan tersebut.
+
+**Pelajaran yang lebih besar dari ketiganya.** Lapisan query Tahap E lulus
+"asap" waktu diuji terhadap database kosong, dan itu membuktikan nyaris
+tidak ada: query yang salah kolom join-nya tetap mengembalikan nol baris
+dengan mulus. Ketiga cacat ini baru muncul begitu ada isinya. Untuk
+lapisan yang tugasnya menyambungkan tabel, "jalan tanpa error" dan "benar"
+adalah dua hal yang sangat berbeda.
+
+**Konsekuensi:** `npm test` 32/32 hijau. Sesudah impor ulang: 37 dari 49
+kota bernama, 78 dari 78 dealer bernama, dan `/v1/metrik/kota/34.04`
+mengembalikan 2.829 pelanggan (Confidence Ratio 55,3%) — sebelumnya
+kosong. Jumlah baris tetap 19.598 setelah tiga kali impor, jadi
+idempotensinya terbukti berulang, bukan sekali.
