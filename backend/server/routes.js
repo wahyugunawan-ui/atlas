@@ -971,6 +971,66 @@ function build(config) {
     res.json({ period, segments: kolom, rows, max });
   });
 
+  /**
+   * Irisan sumber data — bahan diagram Venn (docs/FUSION.md 3.2).
+   *
+   * Region Venn dipetakan DI SINI, bukan di SQL maupun di halaman, karena
+   * pemetaannya bergantung pada daftar golongan yang sama dengan mesin
+   * penggolongan — dan daftar itu tinggal di satu tempat.
+   *
+   * Pemetaannya mengikuti aritmetika gambar acuan: tiap region Venn berpadanan satu
+   * lawan satu dengan golongan, KECUALI Migran yang dipecah menurut sumber yang
+   * dimilikinya (di gambar: 199 "kirim saja" + 228 "servis saja" = 427 Migran).
+   *
+   * Satu region yang TIDAK ada di gambar acuan tetap disediakan: Migran yang punya
+   * KEDUA sumber tapi dua-duanya jauh. Di Venn tiga lingkaran, lensa A∩B di luar C
+   * memang ada tempatnya. Menggabungkannya diam-diam ke "servis saja" akan membuat
+   * angka yang dijumlah pembaca tidak pernah cocok dengan daftar golongan.
+   */
+  api.get('/v1/irisan', async (req, res) => {
+    const period = await periodeFusi(req.query);
+    const kosong = {
+      a_b_c: 0, b_c: 0, a_c: 0, c_saja: 0, a_saja: 0, b_saja: 0, a_b: 0, luar: 0,
+    };
+    if (!period) {
+      return res.json({ period: null, regions: kosong, total: 0,
+        sumber: { ktp: 0, servis: 0, kirim: 0 } });
+    }
+
+    const baris = await repo.fusionOverlap(period, {
+      cityCode: CITY.test(String(req.query.kota || '')) ? String(req.query.kota) : null,
+      dealerCode: DEALER.test(String(req.query.dealer || '')) ? String(req.query.dealer) : null,
+    });
+
+    const wilayah = (punyaServis, punyaKirim, segment) => {
+      if (segment === 'unverified') return 'luar';
+      if (segment === 'loyal_verified') return 'a_b_c';
+      if (segment === 'service_near') return 'b_c';
+      if (segment === 'delivery_near') return 'a_c';
+      if (segment === 'registered_only') return 'c_saja';
+      // Sisanya Migran: terukur tapi jauh — posisinya ditentukan sumber yang ada.
+      if (punyaServis && punyaKirim) return 'a_b';
+      if (punyaServis) return 'b_saja';
+      if (punyaKirim) return 'a_saja';
+      return 'c_saja';
+    };
+
+    const regions = Object.assign({}, kosong);
+    const sumber = { ktp: 0, servis: 0, kirim: 0 };
+    let total = 0;
+
+    baris.forEach((b) => {
+      const n = Number(b.n) || 0;
+      regions[wilayah(b.hasService, b.hasDelivery, b.segment)] += n;
+      total += n;
+      sumber.ktp += n;                       // tiap baris di sini menurut definisi punya KTP
+      if (b.hasService) sumber.servis += n;
+      if (b.hasDelivery) sumber.kirim += n;
+    });
+
+    res.json({ period, regions, total, sumber });
+  });
+
   api.get('/v1/konfigurasi/kpi-jarak', async (req, res) => {
     const s = await readSettings();
     res.json({

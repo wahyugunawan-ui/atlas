@@ -2976,3 +2976,56 @@ jadi pivotnya tidak menggandakan maupun menghilangkan baris. Penyaring
 kota juga benar (kota=34.04 → 1 baris, 2.829). **Belum diverifikasi di
 browser**: seluruh pemeriksaan berhenti tepat sebelum layar, seperti
 potongan sebelumnya.
+
+## [2026-09-17] FUSION Tahap F potongan 3: Venn irisan sumber data
+
+**1. `source_overlap` jadi tabel sendiri, bukan kolom di `segment_rollup`.**
+Yang disimpan dimensi yang BERBEDA: bukan "golongannya apa", melainkan
+"sumber apa saja yang dimiliki". Satu golongan bisa datang dari kombinasi
+sumber berbeda — Migran muncul baik dari yang cuma punya servis (jauh)
+maupun yang cuma punya kiriman (jauh) — dan Venn wajib memisah keduanya.
+Tabel ini juga yang nanti menopang panel Cakupan Sumber, jadi ia membayar
+ongkosnya dua kali.
+
+**2. Yang dicatat KEPEMILIKAN, bukan kedekatan.** Pelanggan yang punya
+data servis tapi jauh tetap "punya servis" di tabel ini. Kedekatan sudah
+diwakili golongannya. Mencampur keduanya akan membuat satu angka menjawab
+dua pertanyaan sekaligus, dan tidak menjawab keduanya dengan benar.
+
+**3. Satu region ditambahkan yang TIDAK ada di gambar acuan.** Migran yang
+punya KEDUA sumber tapi dua-duanya jauh tidak punya tempat di mockup. Di
+Venn tiga lingkaran, lensa A∩B di luar C memang ada tempatnya, jadi region
+itu disediakan. Alternatifnya — menggabungkannya diam-diam ke "servis
+saja" — akan membuat angka yang dijumlah pembaca tidak pernah cocok dengan
+daftar golongan di sidebar, dan ketidakcocokan seperti itu menghabiskan
+kepercayaan jauh lebih cepat daripada satu region tambahan.
+
+**4. Region dipetakan di RUTE, bukan SQL maupun halaman.** Pemetaannya
+bergantung pada daftar golongan yang sama dengan mesin penggolongan, dan
+daftar itu tinggal di satu tempat.
+
+**5. Geometri Venn statis, angkanya saja yang dinamis.** Venn tiga
+himpunan yang luasnya proporsional-akurat adalah masalah geometri yang
+jauh lebih mahal daripada nilainya di sini — dan pembacanya membaca
+angkanya, bukan luasnya. Sudah dicatat di FUSION.md sejak rancangan.
+
+**Konsekuensi:** `npm test` 32/32 hijau. `recalculate()` menulis 940 baris
+`source_overlap` dalam 1,7 detik (membaca tabel PII yang sudah terisi,
+tanpa baca Excel lagi), satu transaksi bersama `segment_rollup` supaya dua
+panel di layar yang sama tidak pernah saling bertentangan.
+
+Rekonsiliasi delapan baris atas data sungguhan SEMUANYA lolos: jumlah
+seluruh region = total = 19.598, dan tiap region cocok persis dengan
+golongannya (`c_saja` = Warga Terdaftar 18.291, `b_c` = Setia Bengkel 980,
+`luar` = Tak Terverifikasi 317, `a_saja + b_saja + a_b` = Migran 10).
+
+**Yang harus diketahui pembaca: lingkaran A · Kirim kosong sama sekali.**
+`sumber.kirim = 0`, karena belum ada satu pun ping pengiriman — rutenya
+ada, produsennya belum (integrasi sistem lapangan sengaja ditunda, lihat
+Tahap C poin 7). Jadi Venn-nya akan tampak berat sebelah sampai data
+pengiriman mengalir. Itu keadaan yang benar, bukan cacat gambar.
+
+Satu pemeriksaan silang yang menyenangkan: `sumber.servis` = 1.292, angka
+yang SAMA persis dengan irisan nomor mesin yang diukur langsung lewat SQL
+waktu menyelidiki "93% Warga asli". Dua jalur kode yang berbeda sampai ke
+angka yang sama — itu yang membuat angkanya bisa dipercaya.

@@ -16,9 +16,9 @@
  * baru drill-down per nomor mesin — jadi keduanya menjelaskan apa yang akan tampil dan
  * dari mana datangnya, tanpa berpura-pura punya data.
  */
-import { fetchMatriks, fetchPeringkat, fetchSegmentation } from './api.js';
+import { fetchIrisan, fetchMatriks, fetchPeringkat, fetchSegmentation } from './api.js';
 import { $, esc, formatNumber } from './dom.js';
-import { SEGMENTS } from './fusion-segments.js';
+import { SEGMENTS, SUMBER } from './fusion-segments.js';
 
 /** Satu-satunya tempat status diterjemahkan jadi warna, biar konsisten antar panel. */
 const WARNA_STATUS = {
@@ -139,6 +139,60 @@ function matriks(data) {
     `</thead><tbody>${baris}</tbody></table></div>`;
 }
 
+/**
+ * Diagram Venn irisan sumber data.
+ *
+ * GEOMETRINYA STATIS, angkanya saja yang berubah. Venn tiga himpunan yang luasnya
+ * proporsional-akurat adalah masalah geometri yang jauh lebih mahal daripada nilainya
+ * di sini — dan pembacanya toh membaca angkanya, bukan luasnya. Posisi tiap angka
+ * dihitung sekali di bawah dan tidak pernah bergerak.
+ *
+ * Kotak garis putus-putus membungkus SELURUH diagram: yang di luar ketiga lingkaran
+ * adalah "Tak Terverifikasi" — punya jejak, tapi tidak satu pun bisa dijadikan titik.
+ */
+function venn(data) {
+  const r = (data && data.regions) || {};
+  const total = Number(data && data.total) || 0;
+  if (!total) {
+    return '<p class="text-xs text-slate-400 py-6 text-center">Belum ada data.</p>';
+  }
+
+  const A = SUMBER.kirim.color;
+  const B = SUMBER.servis.color;
+  const C = SUMBER.ktp.color;
+  const angka = (x, y, n, warna, besar) => (n
+    ? `<text x="${x}" y="${y}" text-anchor="middle" style="fill:${warna};font-size:${
+      besar ? 13 : 10}px;font-weight:800">${esc(formatNumber(n))}</text>`
+    : '');
+
+  return `<svg viewBox="0 0 300 208" width="100%" style="max-height:208px" class="block">` +
+    `<rect x="6" y="6" width="288" height="196" rx="8" fill="none" ` +
+    `stroke="${esc(SEGMENTS.unverified.color)}" stroke-width="1.5" stroke-dasharray="5 4"/>` +
+    `<text x="14" y="22" style="fill:${esc(SEGMENTS.unverified.color)};font-size:8px;` +
+    `font-weight:800">TAK TERVERIFIKASI</text>` +
+
+    `<circle cx="112" cy="88" r="56" fill="${esc(A)}" fill-opacity="0.10" stroke="${esc(A)}" stroke-width="1.2"/>` +
+    `<circle cx="188" cy="88" r="56" fill="${esc(B)}" fill-opacity="0.10" stroke="${esc(B)}" stroke-width="1.2"/>` +
+    `<circle cx="150" cy="134" r="56" fill="${esc(C)}" fill-opacity="0.10" stroke="${esc(C)}" stroke-width="1.2"/>` +
+
+    `<text x="74" y="40" style="fill:${esc(A)};font-size:8px;font-weight:800">A · KIRIM</text>` +
+    `<text x="196" y="40" style="fill:${esc(B)};font-size:8px;font-weight:800">B · SERVIS</text>` +
+    `<text x="128" y="196" style="fill:${esc(C)};font-size:8px;font-weight:800">C · KTP</text>` +
+
+    angka(86, 74, r.a_saja, A) +
+    angka(214, 74, r.b_saja, B) +
+    angka(150, 62, r.a_b, '#64748b') +
+    angka(112, 124, r.a_c, SEGMENTS.delivery_near.color) +
+    angka(188, 124, r.b_c, SEGMENTS.service_near.color) +
+    angka(150, 166, r.c_saja, SEGMENTS.registered_only.color) +
+    `<circle cx="150" cy="104" r="17" fill="${esc(SEGMENTS.loyal_verified.color)}"/>` +
+    (r.a_b_c
+      ? `<text x="150" y="108" text-anchor="middle" style="fill:#fff;font-size:11px;` +
+        `font-weight:800">${esc(formatNumber(r.a_b_c))}</text>` : '') +
+    angka(40, 190, r.luar, SEGMENTS.unverified.color, true) +
+    `</svg>`;
+}
+
 function panelBelum(judul, keterangan) {
   return `<div class="bg-white rounded-xl border border-slate-200 p-3 flex-1 min-w-0">` +
     `<div class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">${esc(judul)}</div>` +
@@ -203,9 +257,10 @@ export async function renderFusion() {
   let hasil;
   let peringkat;
   let matrix;
+  let irisan;
   try {
-    [hasil, peringkat, matrix] = await Promise.all([
-      fetchSegmentation({}), fetchPeringkat({}), fetchMatriks({}),
+    [hasil, peringkat, matrix, irisan] = await Promise.all([
+      fetchSegmentation({}), fetchPeringkat({}), fetchMatriks({}), fetchIrisan({}),
     ]);
   } catch (error) {
     wadah.innerHTML = `<div class="p-6 text-center"><p class="text-sm text-red-600">${
@@ -261,10 +316,11 @@ export async function renderFusion() {
       panelBelum('Tampilan peta',
         'Sebaran titik KTP, Servis, dan Pengiriman memakai peta yang sama dengan ' +
         'halaman Insight & Peta. Belum dibuat.') +
-      panelBelum('Irisan sumber data (Venn)',
-        'Irisan KTP / Servis / Kirim berikut yang di luar irisan. Belum dibuat: ' +
-        'wilayah Migran perlu dipecah menurut sumber mana yang dimiliki, dan angka ' +
-        'itu belum ada di ringkasan — butuh satu tambahan kecil di pipeline.') +
+      `<div class="bg-white rounded-xl border border-slate-200 p-3 flex-1 min-w-0">` +
+        `<div class="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">` +
+        `Irisan sumber data (Venn)</div>` +
+        venn(irisan) +
+      `</div>` +
     `</div>` +
     `<div class="bg-white rounded-xl border border-slate-200 p-3 mt-2">` +
       `<div class="flex items-baseline gap-2 mb-1">` +

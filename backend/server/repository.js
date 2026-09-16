@@ -1191,6 +1191,27 @@ async function fusionMatrix(period, filter) {
     GROUP BY r.city_code, r.segment`, params);
 }
 
+/**
+ * Bahan diagram Venn dan panel Cakupan Sumber: siapa punya sumber apa.
+ *
+ * Dikembalikan mentah per (punya servis, punya kirim, golongan) — yang memutarnya
+ * jadi region Venn adalah rutenya, karena pemetaan region butuh daftar golongan yang
+ * sama dengan mesin penggolongan dan itu tinggal di satu tempat.
+ */
+async function fusionOverlap(period, filter) {
+  const where = ['period = ?'];
+  const params = [period];
+  if (filter && filter.cityCode) { where.push('city_code = ?'); params.push(filter.cityCode); }
+  if (filter && filter.dealerCode) { where.push('dealer_code = ?'); params.push(filter.dealerCode); }
+
+  return store.all(store.db(), `
+    SELECT has_service AS "hasService", has_delivery AS "hasDelivery", segment,
+           SUM(customer_count) AS n
+    FROM source_overlap
+    WHERE ${where.join(' AND ')}
+    GROUP BY has_service, has_delivery, segment`, params);
+}
+
 /** Ringkasan per kota: siapa yang paling banyak, dan seberapa yakin kita. */
 async function fusionByCity(period) {
   return store.all(store.db(), `
@@ -1305,7 +1326,7 @@ async function fusionEngineDetail(engineNo) {
 module.exports = {
   resolveVillageByName,
   latestFusionPeriod, fusionTotals, fusionRows, fusionByCity, fusionByDealer,
-  fusionEngineDetail, setAppConfig, fusionMatrix,
+  fusionEngineDetail, setAppConfig, fusionMatrix, fusionOverlap,
   summary, unmatched, imports, periodSummary,
   customersInVillage, browseCustomers, hasCustomers, logCustomerAccess, updateOutlet,
   resetOutlets, allDealerRings, allPosCoverage, districts, saveDealerRings, savePosCoverage,

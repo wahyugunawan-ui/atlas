@@ -143,6 +143,7 @@ async function recalculate(options) {
   // --- golongkan ---
   const nilaiFusi = [];
   const rollup = new Map();
+  const irisan = new Map();
   const counts = {};
 
   ktpRows.forEach((r) => {
@@ -175,6 +176,22 @@ async function recalculate(options) {
     sudah.n += 1;
     sudah.bobot += hasil.weight;
     rollup.set(kunciRollup, sudah);
+
+    // Dimensi KEDUA: sumber apa saja yang dimiliki, bukan golongannya (schema.sql
+    // source_overlap). Yang dicatat KEPEMILIKAN, bukan kedekatan — pelanggan yang
+    // punya servis tapi jauh tetap "punya servis". Itulah yang membuat Venn bisa
+    // memisah Migran jadi "kirim saja" dan "servis saja".
+    //
+    // city_code di tabel itu NOT NULL dan ikut primary key, jadi kota yang tidak
+    // diketahui dipakai '' — sama seperti village_code di segment_rollup.
+    const kota = r.cityCode || '';
+    const punyaServis = hasil.serviceCount > 0;
+    const punyaKirim = hasil.deliveryCount > 0;
+    const kunciIrisan = `${kota}|${dealer}|${punyaServis}|${punyaKirim}|${hasil.segment}`;
+    const irisanSudah = irisan.get(kunciIrisan) ||
+      { kota, dealer, punyaServis, punyaKirim, segment: hasil.segment, n: 0 };
+    irisanSudah.n += 1;
+    irisan.set(kunciIrisan, irisanSudah);
   });
 
   // --- tulis hasil per mesin (database PII) ---
@@ -192,6 +209,13 @@ async function recalculate(options) {
   const nilaiRollup = [...rollup.values()].map((x) =>
     [period, x.desa, x.cityCode, x.dealer, x.segment, x.n, Number(x.bobot.toFixed(2))]);
 
+  const nilaiIrisan = [...irisan.values()].map((x) =>
+    [period, x.kota, x.dealer, x.punyaServis, x.punyaKirim, x.segment, x.n]);
+
+  // Keduanya ditulis dalam SATU transaksi: segment_rollup dan source_overlap adalah
+  // dua sudut pandang atas perhitungan yang sama, dan separuh diperbarui separuh
+  // tidak akan membuat dua panel di layar yang sama saling bertentangan tanpa ada
+  // yang error.
   await store.transaction(main, async (conn) => {
     await conn.query('DELETE FROM segment_rollup WHERE period = ?', [period]);
     for (let i = 0; i < nilaiRollup.length; i += BATCH) {
@@ -201,6 +225,15 @@ async function recalculate(options) {
           (period, village_code, city_code, dealer_code, segment, customer_count, weight_sum)
         VALUES ${bulk.text}`, bulk.params);
     }
+
+    await conn.query('DELETE FROM source_overlap WHERE period = ?', [period]);
+    for (let i = 0; i < nilaiIrisan.length; i += BATCH) {
+      const bulk = store.bulkValues(nilaiIrisan.slice(i, i + BATCH));
+      await conn.query(`
+        INSERT INTO source_overlap
+          (period, city_code, dealer_code, has_service, has_delivery, segment, customer_count)
+        VALUES ${bulk.text}`, bulk.params);
+    }
   });
 
   return {
@@ -208,6 +241,7 @@ async function recalculate(options) {
     engines: ktpRows.length,
     written: nilaiFusi.length,
     rollup: nilaiRollup.length,
+    overlap: nilaiIrisan.length,
     kpiRadiusM,
     counts,
   };

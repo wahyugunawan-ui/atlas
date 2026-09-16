@@ -93,6 +93,15 @@ export function fetchPeringkat(filter) {
   return request(`${API}v1/peringkat?${q}`);
 }
 
+/** Irisan sumber data (Venn) — region-nya sudah dipetakan server. */
+export function fetchIrisan(filter) {
+  const q = new URLSearchParams();
+  if (filter && filter.periode) q.set('periode', filter.periode);
+  if (filter && filter.kota && filter.kota !== 'ALL') q.set('kota', filter.kota);
+  if (filter && filter.dealer && filter.dealer !== 'ALL') q.set('dealer', filter.dealer);
+  return request(`${API}v1/irisan?${q}`);
+}
+
 /** Matriks Kota x Golongan, sudah dipivot dan diurutkan server. */
 export function fetchMatriks(filter) {
   const q = new URLSearchParams();

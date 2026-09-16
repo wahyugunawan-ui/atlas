@@ -249,10 +249,17 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
   jumlah seluruh baris matriks 19.598 — sama persis dengan total
   segmentasi, jadi pivotnya tidak bocor.
 
+- Tahap F potongan 3: panel **Venn irisan sumber data**, berikut tabel
+  `source_overlap` yang menopangnya (dimensi kepemilikan sumber, terpisah
+  dari dimensi golongan). Rute baru `GET /api/v1/irisan`. Diverifikasi
+  atas data sungguhan dengan rekonsiliasi delapan baris: jumlah seluruh
+  region = 19.598 = total segmentasi, dan tiap region cocok persis dengan
+  golongannya (Migran 10 terpecah jadi servis-saja 10). Tabel yang sama
+  nanti dipakai panel Cakupan Sumber.
+
 **Belum dikerjakan (sisa Tahap F, lihat tabel tahapan di `docs/FUSION.md`):**
-- Panel Venn irisan sumber. Butuh satu tambahan kecil di pipeline dulu:
-  wilayah Migran harus dipecah menurut sumber mana yang dimiliki
-  (servis saja / kirim saja), dan angka itu belum ada di `segment_rollup`
+- Panel Cakupan Sumber (datanya sudah ada di `source_overlap`, tinggal
+  digambar)
 - Tiga jenis titik baru di peta (KTP/Servis/Kirim) + radius KPI Jarak
 - Drill-down per Nomor Mesin (rute PII-nya sudah ada, layarnya belum)
 - Mode Live/wallboard dan cross-filtering penuh di sidebar

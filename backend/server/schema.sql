@@ -372,6 +372,35 @@ CREATE TABLE IF NOT EXISTS segment_rollup (
 -- Untuk database yang tabelnya sudah terlanjur dibuat sebelum kolom ini ada.
 ALTER TABLE segment_rollup ADD COLUMN IF NOT EXISTS city_code VARCHAR(8);
 
+-- Siapa punya sumber apa — bahan diagram Venn dan panel Cakupan Sumber (3.1/3.2).
+--
+-- KENAPA TABEL SENDIRI, bukan kolom tambahan di segment_rollup. Yang disimpan di sini
+-- dimensi yang BERBEDA: bukan "golongannya apa", tapi "sumber datanya apa saja yang
+-- dimiliki". Satu golongan bisa datang dari kombinasi sumber yang berbeda —
+-- "Migran/Nomaden" muncul baik dari pelanggan yang cuma punya servis (jauh) maupun
+-- yang cuma punya kiriman (jauh), dan Venn HARUS memisah keduanya. Angka acuan di
+-- gambar rancangan membuktikan itu: 199 (Kirim saja) + 228 (Servis saja) = 427,
+-- persis jumlah Migran.
+--
+-- `segment` tetap ikut disimpan supaya satu tabel melayani dua panel sekaligus: Venn
+-- memakainya untuk menempatkan tiap region, Cakupan Sumber mengabaikannya dan cukup
+-- menjumlah per sumber.
+--
+-- KTP tidak punya kolomnya sendiri: baris KTP-lah yang mendefinisikan "satu
+-- pelanggan ada", jadi semua baris di sini menurut definisi punya KTP.
+CREATE TABLE IF NOT EXISTS source_overlap (
+  period         VARCHAR(7) NOT NULL,
+  city_code      VARCHAR(8) NOT NULL,     -- '' = kota tidak diketahui
+  dealer_code    VARCHAR(64) NOT NULL,
+  has_service    BOOLEAN NOT NULL,
+  has_delivery   BOOLEAN NOT NULL,
+  segment        VARCHAR(24) NOT NULL,
+  customer_count INTEGER NOT NULL,
+  PRIMARY KEY (period, city_code, dealer_code, has_service, has_delivery, segment)
+);
+
+CREATE INDEX IF NOT EXISTS idx_overlap_period ON source_overlap (period);
+
 CREATE INDEX IF NOT EXISTS idx_rollup_period ON segment_rollup (period);
 CREATE INDEX IF NOT EXISTS idx_rollup_dealer ON segment_rollup (dealer_code);
 
