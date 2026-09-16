@@ -290,6 +290,16 @@ CREATE TABLE IF NOT EXISTS pos_coverage_district (
 
 CREATE INDEX IF NOT EXISTS idx_pos_coverage_outlet ON pos_coverage_district (outlet_code);
 
+-- Sumber yang diimpor: 'sales' (Excel bulanan yang sudah ada), 'ktp', atau 'servis'.
+--
+-- Ditambah waktu penyatuan tiga sumber masuk (docs/FUSION.md Tahap C). Tanpa kolom
+-- ini, Riwayat Impor mencampur tiga jenis berkas yang berbeda tanpa satu pun cara
+-- membedakannya — dan "impor 19.000 baris" jadi kalimat yang tidak bisa ditindaklanjuti.
+--
+-- DEFAULT 'sales' supaya seluruh baris riwayat yang sudah ada tetap benar artinya:
+-- sebelum kolom ini ada, satu-satunya yang bisa diimpor memang penjualan.
+ALTER TABLE imports ADD COLUMN IF NOT EXISTS source VARCHAR(16) NOT NULL DEFAULT 'sales';
+
 -- ============================================================================
 -- PENYATUAN TIGA SUMBER (docs/FUSION.md) — bagian yang BEBAS PII
 -- ============================================================================

@@ -2560,3 +2560,73 @@ Tesnya diuji mutasi: membuang penjaga ambiguitas membuat tebakan seri
 diterima (tes merah), dan membalik urutan penumpukan alias membuat
 keputusan manusia kalah dari nama asli (tes merah) — keduanya tertangkap.
 Tahap C–F belum dikerjakan.
+
+## [2026-09-16] FUSION Tahap C: impor Data KTP & Data Servis, dan ping pengiriman
+
+**Konteks:** jalur masuk untuk dua sumber unggahan bulanan dan satu sumber
+realtime (`docs/FUSION.md` Tahap C). Sampai tahap ini tabelnya ada tapi
+kosong; sesudahnya ada yang mengisinya.
+
+**1. Satu mekanisme, dua sumber.** `backend/server/source-import.js`
+melayani KTP dan Servis sekaligus; yang membedakan cuma satu entri di
+`SPECS` (`backend/core/source-rows.js`) — tabel tujuan, judul kolom yang
+dicari, dan apakah nomor mesin berulang itu wajar. Dua importer terpisah
+yang 90% sama adalah dua tempat yang harus diperbaiki tiap kali ada satu
+hal berubah.
+
+**2. Kolom dicari lewat JUDUL yang dicocokkan PERSIS, bukan nomor urut dan
+bukan pencocokan longgar.** Ini keputusan yang paling menentukan di tahap
+ini, dan sebabnya ada di berkas yang dipakai tim: Data KTP punya kolom 17
+berjudul `No. Mesi` (terpotong di sumbernya) TEPAT DI SEBELAH kolom 18
+`No Mesin` yang asli, plus `Alamat` yang muncul dua kali (konsumen di
+kolom 3, dealer di kolom 11) dan pasangan `Kelurahan`/`Kecamatan` milik
+dealer. Pencocokan yang longgar akan memilih kolom yang salah tanpa satu
+pun error muncul — impornya "berhasil", dan seluruh penyatuan data
+menempel ke nomor mesin yang keliru. Diuji mutasi, dan ketiganya
+tertangkap: mencocokkan judul yang MENGANDUNG `mesin` mengambil
+`Kode Mesin` (kolom 16), mencocokkan yang DIAWALI `nomesi` mengambil
+kolom terpotong (17), begitu juga pencocokan terbalik. Cuma cocok-persis
+yang mendarat di kolom yang benar.
+
+**3. Nomor mesin ganda diperlakukan berbeda per sumber.** Di KTP ganda
+berarti salah ketik atau satu unit tercatat dua kali: baris pertama
+dipakai, sisanya ditandai `duplicate` dan dilaporkan berikut nomor
+barisnya di Excel. Di Servis ganda itu WAJAR — satu motor memang servis
+berkali-kali sebulan — jadi tidak ditandai sama sekali. Menyamakan
+keduanya berarti salah satunya pasti salah.
+
+**4. Baris tak cocok TIDAK ditulis ke tabel `unmatched` yang sudah ada.**
+Tabel itu milik impor penjualan dan `row_count`-nya berarti "berapa baris
+PENJUALAN"; mencampurinya dengan baris KTP/Servis diam-diam mengubah arti
+halaman Master Kelurahan yang membacanya. Hasilnya dikembalikan lewat
+respons API dan diringkas di kolom `message` baris audit. Alias yang
+dibuat operator di halaman itu tetap menolong ketiga sumber, karena
+`village_aliases` memang dipakai bersama.
+
+**5. Kolom `imports.source` ditambahkan** (`DEFAULT 'sales'`) supaya
+Riwayat Impor bisa membedakan tiga jenis berkas. Defaultnya membuat
+seluruh baris riwayat lama tetap benar artinya: sebelum kolom ini ada,
+satu-satunya yang bisa diimpor memang penjualan. `SCHEMA_VERSION` tetap
+tidak dinaikkan, alasan sama seperti Tahap A.
+
+**6. Kunci impor DIBAGI dengan impor penjualan.** Ketiga impor
+menghapus-lalu-menulis-ulang periode yang sama, jadi tidak boleh jalan
+bersamaan. Ini memakai `import-lock.js` yang sudah ada apa adanya — bukan
+kunci kedua yang harus disamakan dengan yang pertama.
+
+**7. Ping pengiriman untuk sekarang tetap di belakang sesi.** Semestinya
+token layanan (pemanggilnya mesin, bukan orang), tapi brief menyebut
+integrasi sistem lapangan menyusul — dan membuka satu jalur publik
+ber-token sebelum ada yang memakainya berarti menambah permukaan serangan
+yang menganggur. `PUBLIC_PATHS` tidak disentuh. Yang sudah berlaku: ping
+SELALU disimpan lebih dulu, termasuk kalau nomor mesinnya belum dikenal —
+menolaknya berarti kehilangan satu-satunya bukti koordinat rumah yang
+pernah lewat, dan bukti itu tidak datang dua kali.
+
+**Konsekuensi:** `npm test` 29/29 hijau. Rute baru
+`POST /api/v1/import/ktp`, `POST /api/v1/import/servis`, dan
+`POST /api/v1/pengiriman/ping`; rute lama tidak disentuh. Kolom baru di
+`imports` diterapkan `schema.sql` saat server start, jadi server perlu
+dinyalakan ulang sekali setelah pembaruan ini. Belum ada UI-nya — ketiga
+rute baru masih dipanggil lewat alat lain sampai Tahap F. Tahap D (fusi
+dan penggolongan) dan E (API metrik) belum dikerjakan.

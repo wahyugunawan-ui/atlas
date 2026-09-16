@@ -53,16 +53,17 @@ Istilah wilayah memakai terjemahan resmi BPS supaya konsisten:
 ## Sedang dikerjakan
 
 **Penyatuan tiga sumber data (FUSION).** Rancangan lengkap ada di
-`docs/FUSION.md`. Tahap A (fondasi: modul geo bersama, tabel konfigurasi,
-tabel agregat, empat tabel penyatuan di database PII) dan Tahap B
-(resolver nama desa → koordinat berikut rutenya) sudah selesai. Yang
-berikutnya Tahap C: importer Data KTP template baru, importer Data
-Servis, dan endpoint ping pengiriman.
+`docs/FUSION.md`. Tahap A (fondasi), B (resolver nama desa → koordinat),
+dan C (impor Data KTP & Data Servis, plus rute ping pengiriman) sudah
+selesai. Yang berikutnya Tahap D: `fuseEngine()` — mengukur jarak,
+menerapkan tabel keputusan enam golongan, dan meringkasnya ke
+`segment_rollup`.
 
-Tabel-tabelnya sudah ada di database sungguhan, tapi **masih kosong** —
-belum ada satu pun jalur yang mengisinya sampai Tahap C jadi. Golongan
-Warlok, metrik, dan halaman Confidence Fusion (Tahap D–F) karena itu
-belum bisa menampilkan apa pun.
+Jalur masuknya sudah ada, tapi **belum ada UI-nya**: ketiga rute baru
+masih harus dipanggil lewat alat lain (halaman Import belum diubah, itu
+Tahap F). Dan karena Tahap D belum jadi, tabel `customer_fusion` masih
+kosong — golongan Warlok, metrik, dan halaman Confidence Fusion belum
+bisa menampilkan apa pun.
 
 Selain itu kosong secara kode — ring dealer (1-3)/coverage pos (1-8), impor Master Dealer &
 Pos dari Excel, perbaikan sambungan penjualan bulanan ke dealer, ringkasan
@@ -172,7 +173,7 @@ cuma perluasan ke Sulawesi ke timur.
 Detail rancangan di `docs/FUSION.md`; alasan tiap keputusan arsitekturnya
 di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
 
-**Selesai dan diuji otomatis (28/28 berkas tes):**
+**Selesai dan diuji otomatis (29/29 berkas tes):**
 - Spesifikasi teknis lengkap Tahap 2 (skema, pipeline batch + realtime,
   tabel keputusan 6 golongan, KPI Jarak yang dapat dikustom, rumus CW
   Sales/Confidence Ratio/Retention Index, kontrak API, diagram alur) dan
@@ -191,9 +192,16 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
   `GET /api/v1/wilayah/koordinat` — rute `/v1` pertama di proyek ini,
   rute lama tidak disentuh. Tebakan yang ambigu ditolak, alias manusia
   menimpa segalanya; keduanya diuji mutasi.
+- Tahap C: impor Data KTP dan Data Servis (satu mekanisme, dua spesifikasi
+  kolom) plus rute ping pengiriman. Kolom dicari lewat judul yang
+  dicocokkan PERSIS — berkas KTP punya `No. Mesi` (terpotong) tepat di
+  sebelah `No Mesin` yang asli, dan `Alamat`/`Kelurahan` milik dealer
+  yang gampang tertukar dengan milik konsumen. Ganda/tanpa nomor mesin
+  ditandai dan dilaporkan berikut nomor barisnya, tidak dibuang diam-diam.
+  Kolom `imports.source` ditambahkan supaya Riwayat Impor bisa
+  membedakan tiga jenis berkas.
 
-**Belum dikerjakan (Tahap C–F, lihat tabel tahapan di `docs/FUSION.md`):**
-- C ingest: importer KTP template baru, importer Servis, endpoint ping
+**Belum dikerjakan (Tahap D–F, lihat tabel tahapan di `docs/FUSION.md`):**
 - D fusi: `fuseEngine()` + batch + micro-batch + rollup
 - E API: segmentasi, metrik, recalculate, drill-down PII
 - F UI: menu Data, layer peta baru, halaman Confidence Fusion

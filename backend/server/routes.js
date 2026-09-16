@@ -9,6 +9,7 @@ const path = require('path');
 const crypto = require('crypto');
 const repo = require('./repository');
 const { runImport, isRunning } = require('./importer');
+const { runSourceImport, savePing } = require('./source-import');
 const { previewOutletImport, commitOutletImport } = require('./pos-import');
 const { RateLimiter } = require('./auth');
 
@@ -690,6 +691,114 @@ function build(config) {
         res.status(status).json({ error: error.message });
       }
     });
+
+  /* ------------------------------------------------------------------------
+     IMPOR DATA KTP & DATA SERVIS (docs/FUSION.md Tahap C)
+     ------------------------------------------------------------------------
+     Bentuknya sama persis dengan /import di atas — multipart, berkas disimpan
+     dengan nama buatan server, kunci impor yang sama — cuma tujuannya database
+     PII dan tabelnya berbeda per sumber. Satu handler untuk dua sumber: yang
+     membedakan cuma satu parameter di path.
+     ------------------------------------------------------------------------ */
+
+  const importSumber = (source) =>
+    async (req, res) => {
+      if (isRunning()) {
+        return res.status(409).json({
+          error: 'Sedang ada impor yang berjalan. Tunggu sampai selesai, lalu coba lagi.',
+        });
+      }
+
+      let parsed;
+      try {
+        parsed = parseMultipart(req.body, req.headers['content-type']);
+      } catch (error) {
+        return res.status(400).json({ error: error.message });
+      }
+
+      const period = String(parsed.fields.period || '');
+      if (!PERIOD.test(period)) {
+        return res.status(400).json({ error: 'Pilih bulan dan tahun dulu.' });
+      }
+      if (!parsed.file) {
+        return res.status(400).json({ error: 'Tidak ada berkas yang terkirim.' });
+      }
+
+      const original = String(parsed.file.filename || 'unggahan');
+      const ext = path.extname(original).toLowerCase();
+      if (!['.xlsx', '.xlsm', '.csv', '.txt'].includes(ext)) {
+        return res.status(400).json({
+          error: `Format ${ext || 'itu'} tidak bisa dibaca. Kirim .xlsx atau .csv.`,
+        });
+      }
+
+      const dir = path.join(config.dataDir, 'uploads');
+      fs.mkdirSync(dir, { recursive: true });
+      pruneUploads(dir);
+      const safe = path.join(dir,
+        `${source}-${period}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`);
+      fs.writeFileSync(safe, parsed.file.data);
+
+      try {
+        res.json(await runSourceImport({
+          source, file: safe, period, fileName: path.basename(original),
+          ip: req.ip, config,
+        }));
+      } catch (error) {
+        const status = error.code === 'SEDANG_BERJALAN' ? 409 : 400;
+        res.status(status).json({ error: error.message });
+      }
+    };
+
+  api.post('/v1/import/ktp',
+    express.raw({ type: 'multipart/form-data', limit: MAX_UPLOAD }),
+    importSumber('ktp'));
+
+  api.post('/v1/import/servis',
+    express.raw({ type: 'multipart/form-data', limit: MAX_UPLOAD }),
+    importSumber('servis'));
+
+  /**
+   * Ping pengiriman realtime (docs/FUSION.md 1.3).
+   *
+   * Untuk sekarang tetap di belakang sesi yang sama dengan rute lain. Brief-nya
+   * menyebut integrasi sistem lapangan menyusul ("buatkan dulu templatenya"), dan
+   * membuka satu jalur publik ber-token sebelum ada yang memakainya berarti menambah
+   * permukaan serangan yang menganggur — dilakukan nanti, bersama integrasinya.
+   *
+   * Disimpan dulu, divalidasi belakangan: satu-satunya yang benar-benar wajib adalah
+   * koordinat yang berupa angka, karena kolomnya memang angka. Nomor mesin yang belum
+   * dikenal TIDAK ditolak.
+   */
+  api.post('/v1/pengiriman/ping', express.json({ limit: '64kb' }), async (req, res) => {
+    const body = req.body || {};
+    const lat = Number(body.lat);
+    const lng = Number(body.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return res.status(400).json({ error: 'lat dan lng harus angka.' });
+    }
+    const sentAt = body.sentAt ? new Date(body.sentAt) : new Date();
+    if (Number.isNaN(sentAt.getTime())) {
+      return res.status(400).json({ error: 'sentAt bukan waktu yang sah.' });
+    }
+
+    try {
+      const id = await savePing({
+        engineNo: String(body.engineNo || '').trim().slice(0, 32),
+        sentAt: sentAt.toISOString(),
+        lat,
+        lng,
+        accuracyM: Number.isFinite(Number(body.accuracyM)) ? Number(body.accuracyM) : null,
+        locationText: String(body.locationText || '').slice(0, 200),
+        photoUrl: String(body.photoUrl || '').slice(0, 500),
+        courierName: String(body.courierName || '').slice(0, 120),
+        note: String(body.note || ''),
+      }, config);
+      res.status(201).json({ stored: true, id });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  });
 
   /* ------------------------------------------------------------------------
      IMPOR MASSAL POS (Master Dealer/Pos)

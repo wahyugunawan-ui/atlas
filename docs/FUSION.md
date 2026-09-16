@@ -759,16 +759,26 @@ GET /api/v1/metrik/dealer/{dealer_code}
 
 ```
 POST /api/v1/pengiriman/ping
-{ "engine_no": "...", "sent_at": "...", "lat": -7.76, "lng": 110.35,
-  "accuracy_m": 8, "location_text": "...", "photo_url": "...",
-  "courier_name": "...", "note": "" }
-201 { "diterima": true, "id": 12345 }
+{ "engineNo": "...", "sentAt": "2026-09-16T10:00:00Z", "lat": -7.76, "lng": 110.35,
+  "accuracyM": 8, "locationText": "...", "photoUrl": "...",
+  "courierName": "...", "note": "" }
+201 { "stored": true, "id": 12345 }
+400 { "error": "lat dan lng harus angka." }
 ```
 
-Karena pemanggilnya mesin, bukan orang, rute ini memakai token layanan
-tersendiri (bukan cookie sesi) dan pembatas laju sendiri. Ia **selalu**
-menyimpan lebih dulu dan memvalidasi belakangan — ping yang ditolak
-karena nomor mesinnya belum dikenal tetap tersimpan (kasus batas 3).
+Ia **selalu** menyimpan lebih dulu dan memvalidasi belakangan — ping yang
+nomor mesinnya belum dikenal TETAP tersimpan (kasus batas 3). Yang
+benar-benar wajib cuma koordinat berupa angka, karena kolomnya memang
+angka.
+
+**Autentikasi, keadaan sekarang vs tujuan.** Karena pemanggilnya kelak
+mesin dan bukan orang, rute ini semestinya memakai token layanan
+tersendiri (bukan cookie sesi) berikut pembatas laju sendiri. Itu BELUM
+dibuat: untuk sekarang rutenya ikut sesi yang sama dengan rute lain.
+Alasannya, brief menyebut integrasi sistem lapangan menyusul ("buatkan
+dulu templatenya") — dan membuka satu jalur publik ber-token sebelum ada
+yang memakainya berarti menambah permukaan serangan yang menganggur.
+Token layanan dikerjakan bersama integrasinya.
 
 **Drill-down satu mesin — rute PII**
 
