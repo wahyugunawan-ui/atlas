@@ -54,15 +54,16 @@ Istilah wilayah memakai terjemahan resmi BPS supaya konsisten:
 
 **Penyatuan tiga sumber data (FUSION).** Rancangan lengkap ada di
 `docs/FUSION.md`. Tahap A (fondasi), B (resolver nama desa → koordinat),
-C (impor Data KTP & Data Servis, plus rute ping pengiriman), dan D (mesin
-penggolongan + ringkasan ke `segment_rollup`) sudah selesai. Yang
-berikutnya Tahap E: rute API untuk hasil golongan, metrik per kota dan
-per dealer, perhitungan ulang, dan drill-down per nomor mesin.
+C (impor Data KTP & Data Servis, plus rute ping pengiriman), D (mesin
+penggolongan + ringkasan ke `segment_rollup`), dan E (dua belas rute
+`/api/v1/*`) sudah selesai. Yang tersisa tinggal Tahap F: layarnya —
+menu Data dengan tiga sub-halaman, tiga jenis titik baru di peta, dan
+halaman Confidence Fusion.
 
-Rantainya sudah nyambung dari Excel sampai angka golongan, tapi **belum
-ada satu pun layar yang menampilkannya** — halaman Import belum diubah
-dan halaman Confidence Fusion belum dibuat (keduanya Tahap F), jadi
-ketiga rute impor baru masih harus dipanggil lewat alat lain.
+Rantainya sudah nyambung dari Excel sampai angka golongan dan sudah bisa
+dibaca lewat API, tapi **belum ada satu pun layar yang menampilkannya** —
+halaman Import belum diubah dan halaman Confidence Fusion belum dibuat,
+jadi seluruh rute baru masih harus dipanggil lewat alat lain.
 
 Satu bagian rancangan yang SENGAJA ditunda: micro-batch 60 detik untuk
 ping realtime (2.2 jalur B). Belum ada produsen ping-nya, jadi yang
@@ -178,7 +179,7 @@ cuma perluasan ke Sulawesi ke timur.
 Detail rancangan di `docs/FUSION.md`; alasan tiap keputusan arsitekturnya
 di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
 
-**Selesai dan diuji otomatis (30/30 berkas tes):**
+**Selesai dan diuji otomatis (31/31 berkas tes):**
 - Spesifikasi teknis lengkap Tahap 2 (skema, pipeline batch + realtime,
   tabel keputusan 6 golongan, KPI Jarak yang dapat dikustom, rumus CW
   Sales/Confidence Ratio/Retention Index, kontrak API, diagram alur) dan
@@ -213,9 +214,15 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
   spesifikasi diuji; tabel keputusannya diuji mutasi (urutan aturan
   ditukar, ambang jadi eksklusif, servis terjauh dipakai — ketiganya
   merah).
+- Tahap E: dua belas rute `/api/v1/*` — hasil golongan tersaring,
+  metrik per kota dan per dealer (berikut Retention Index), peringkat,
+  baca/ubah KPI Jarak, perhitungan ulang, dan drill-down per nomor mesin.
+  Yang terakhir itu rute PII: lewat `piiLimiter` dan tercatat di
+  `access_log`, sama seperti `/customers`. Ambang warna statusnya diuji
+  mutasi (ambang digeser inklusif/eksklusif dan kosakata rasio/retensi
+  ditukar — semuanya merah).
 
-**Belum dikerjakan (Tahap E–F, lihat tabel tahapan di `docs/FUSION.md`):**
-- E API: segmentasi, metrik, recalculate, drill-down PII
+**Belum dikerjakan (Tahap F, lihat tabel tahapan di `docs/FUSION.md`):**
 - F UI: menu Data, layer peta baru, halaman Confidence Fusion
 
 ### Rebranding ke ATLAS + polesan UI/UX korporat Astra Motor (2026-09-14 malam)

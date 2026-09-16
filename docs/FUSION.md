@@ -562,9 +562,19 @@ provinsi yang tersedia tapi kosong secara bawaan.** Per kabupaten
 ditolak: dashboard ini dibaca dengan cara membandingkan kota satu sama
 lain, dan itu hanya sah kalau penggarisnya sama.
 
-Disimpan di `app_config.kpi_jarak_m`. Yang berwenang mengubah: role
-admin, lewat halaman Pengaturan. Tiap perubahan menulis `updated_by` dan
-`updated_at`.
+Disimpan di `app_config.kpi_jarak_m`. Tiap perubahan menulis `updated_by`
+dan `updated_at`.
+
+**Soal "role admin".** Rancangan awal menyebut perubahan ini dibatasi role
+admin. Aplikasi ini TIDAK punya sistem peran sama sekali — satu sandi
+dipakai bersama seluruh tim (lihat `backend/server/auth.js`), dan
+menambahkan peran adalah pekerjaan tersendiri yang belum diminta. Sampai
+peran benar-benar ada, yang dipakai adalah pengaman yang SUDAH terbukti di
+rute perusak lain di proyek ini: konfirmasi yang harus diketik persis
+(`?confirm=<radiusKm>`), sama seperti hapus periode dan reset master pos.
+Mengubah ambang ini membuat seluruh golongan tersimpan tidak sebanding
+lagi, jadi ia pantas diperlakukan seperti penghapusan data, bukan seperti
+ganti setelan biasa.
 
 **Konsekuensi perubahan ambang terhadap data lama.** Karena tiap baris
 `customer_fusion` menyimpan `kpi_radius_m` yang dipakainya, sistem selalu

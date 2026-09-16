@@ -37,13 +37,42 @@ async function readSettings() {
   const map = {};
   rows.forEach((r) => { map[r.key] = r.value; });
 
-  const kpi = Number(map.kpi_jarak_m);
+  const angka = (key, bawaan) => {
+    const n = Number(map[key]);
+    return Number.isFinite(n) ? n : bawaan;
+  };
+
   const weights = {};
   Object.keys(SEGMENTS).forEach((kode) => {
     const w = Number(map['weight_' + kode]);
     if (Number.isFinite(w)) weights[kode] = w;
   });
-  return { kpiRadiusM: Number.isFinite(kpi) ? kpi : DEFAULT_KPI_M, weights };
+
+  return {
+    kpiRadiusM: angka('kpi_jarak_m', DEFAULT_KPI_M),
+    weights,
+    // Ambang warna status, dipakai bersama oleh API dan (nanti) seluruh komponen
+    // Tahap 3. Dibaca dari satu tempat supaya hijau di satu panel berarti hal yang
+    // sama dengan hijau di panel lain.
+    confidenceSolidMin: angka('confidence_solid_min', 0.65),
+    confidenceRapuhMax: angka('confidence_rapuh_max', 0.50),
+    retentionSehatMin: angka('retention_sehat_min', 0.50),
+    retentionRisikoMax: angka('retention_risiko_max', 0.30),
+  };
+}
+
+/** Label status dari sebuah rasio. null kalau rasionya memang belum ada. */
+function statusRatio(ratio, min, max) {
+  if (ratio == null) return null;
+  if (ratio >= min) return 'solid';
+  return ratio < max ? 'rapuh' : 'sedang';
+}
+
+/** Sama, dengan kosakata dealer: sehat / waspada / berisiko. */
+function statusRetention(ratio, min, max) {
+  if (ratio == null) return null;
+  if (ratio >= min) return 'sehat';
+  return ratio < max ? 'berisiko' : 'waspada';
 }
 
 /** Kode desa -> titik. Desa yang tidak dikenal jadi titik kosong = gagal tergeocode. */
@@ -184,4 +213,4 @@ async function recalculate(options) {
   };
 }
 
-module.exports = { recalculate, readSettings };
+module.exports = { recalculate, readSettings, statusRatio, statusRetention };

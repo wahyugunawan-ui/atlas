@@ -2685,3 +2685,56 @@ persis — diperbaiki memakai jarak mentah. Kolom baru `segment_rollup.city_code
 diterapkan `schema.sql` saat server start. Tahap E (API metrik) dan F (UI)
 belum dikerjakan; sampai Tahap F belum ada satu pun layar yang menampilkan
 hasil ini.
+
+## [2026-09-16] FUSION Tahap E: rute hasil golongan, metrik, dan drill-down
+
+**Konteks:** delapan rute `/api/v1/*` yang membuka hasil Tahap D — angka
+golongan, metrik per kota dan per dealer, peringkat, konfigurasi ambang,
+perhitungan ulang, dan rincian satu nomor mesin.
+
+**1. "Role admin" di spesifikasi TIDAK bisa dilaksanakan, dan tidak
+dikarang-karang.** Rancangan menyebut perubahan KPI Jarak dibatasi role
+admin. Aplikasi ini tidak punya sistem peran sama sekali — satu sandi
+dipakai bersama seluruh tim — dan menambahkan peran adalah pekerjaan
+tersendiri yang belum diminta. Yang dipakai sebagai gantinya pengaman yang
+SUDAH terbukti di rute perusak lain di proyek ini: konfirmasi yang harus
+diketik persis (`?confirm=<radiusKm>`), sama seperti hapus periode dan
+reset master pos. Mengubah ambang ini membuat seluruh golongan tersimpan
+tidak sebanding lagi, jadi ia pantas diperlakukan seperti penghapusan
+data. `docs/FUSION.md` 2.3a sudah diperbarui supaya dokumen tidak
+menjanjikan sesuatu yang tidak ada.
+
+**2. Mengubah KPI Jarak TIDAK langsung menghitung ulang.** Rutenya
+menyimpan nilai baru lalu mengembalikan berapa baris yang terdampak;
+perhitungan ulang panggilan terpisah yang eksplisit. Dua langkah, pola
+yang sama dengan pratinjau-lalu-terapkan di impor master pos. Satu klik
+yang diam-diam menghitung ulang belasan ribu baris adalah hal yang tidak
+bisa dibatalkan.
+
+**3. CW Sales dihitung dari `weight_sum` yang TERSIMPAN, bukan dari bobot
+yang dibaca ulang saat itu.** Kalau bobot di `app_config` diubah tapi
+penggolongan belum dihitung ulang, membaca bobot baru akan menghasilkan
+campuran: bobot hari ini dikalikan golongan kemarin. Angka yang tampil
+harus selalu konsisten dengan golongan yang benar-benar tersimpan.
+
+**4. Retention Index memakai `loyal_verified + service_near`, bukan semua
+golongan "dekat".** `delivery_near` sengaja tidak ikut: pengiriman terjadi
+sekali di awal dan tidak membuktikan apa pun tentang pelanggan yang
+KEMBALI. Yang diukur retensi, bukan kedekatan.
+
+**5. Drill-down per nomor mesin diperlakukan persis seperti `/customers`.**
+Ia mengembalikan nama, alamat, dan titik rumah, jadi lewat `piiLimiter`
+dan tiap aksesnya dicatat `logCustomerAccess`. Rute PII baru tanpa
+keduanya membuka jalan penyedotan yang tidak meninggalkan jejak — dan rute
+ini justru lebih tajam daripada `/customers`, karena mengembalikan
+koordinat rumah.
+
+**6. Satu rute di luar spesifikasi: `GET /api/v1/peringkat`.** Panel
+Peringkat Kota dan Peringkat Dealer di Tahap 3 membaca bahan yang sama;
+memisahnya jadi dua permintaan membuka peluang halaman menampilkan
+potongan dari dua keadaan berbeda — alasan yang sama kenapa `/api/summary`
+lama satu endpoint, bukan lima.
+
+**7. `recalculate` dibalas 202, dan ditolak selagi impor berjalan.**
+Pekerjaannya bisa menit-menitan (202 = diterima, belum selesai), dan
+keduanya menulis tabel yang sama.

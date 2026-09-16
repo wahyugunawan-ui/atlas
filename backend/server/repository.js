@@ -1060,8 +1060,191 @@ async function resolveVillageByName(input) {
   };
 }
 
+/* ==========================================================================
+   PENYATUAN TIGA SUMBER — bacaan untuk API (docs/FUSION.md Tahap E)
+   ==========================================================================
+   Semua di bawah ini membaca `segment_rollup` di database `astra` — agregat
+   TANPA identitas. Satu-satunya yang menyentuh database PII adalah
+   fusionEngineDetail() di paling bawah, dan rutenya wajib lewat piiLimiter
+   plus logCustomerAccess.
+   ========================================================================== */
+
+/**
+ * Simpan satu nilai konfigurasi.
+ *
+ * Upsert, bukan INSERT: kuncinya sudah ada sejak schema.sql menyemai nilai bawaan.
+ * `updated_by` diisi IP karena itu satu-satunya yang kita punya — aplikasi ini tidak
+ * punya identitas pengguna, satu sandi dipakai bersama. Jejak yang jujur tapi kasar
+ * lebih berguna daripada kolom kosong.
+ */
+async function setAppConfig(key, value, ip) {
+  await store.run(store.db(), `
+    INSERT INTO app_config (key, value, updated_at, updated_by)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT (key) DO UPDATE
+      SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at,
+          updated_by = EXCLUDED.updated_by`,
+  [key, String(value), new Date().toISOString(), ip || null]);
+  return { key, value: String(value) };
+}
+
+/** Periode terbaru yang sudah punya hasil penggolongan. */
+async function latestFusionPeriod() {
+  const row = await store.one(store.db(),
+    'SELECT MAX(period) AS period FROM segment_rollup');
+  return row && row.period ? row.period : null;
+}
+
+/** Susun WHERE dari penyaring yang benar-benar diisi. */
+function fusionWhere(filter) {
+  const where = ['period = ?'];
+  const params = [filter.period];
+  if (filter.cityCode) { where.push('city_code = ?'); params.push(filter.cityCode); }
+  if (filter.dealerCode) { where.push('dealer_code = ?'); params.push(filter.dealerCode); }
+  if (filter.segment) { where.push('segment = ?'); params.push(filter.segment); }
+  return { text: where.join(' AND '), params };
+}
+
+/**
+ * Angka golongan untuk satu kombinasi penyaring.
+ *
+ * `counts` per golongan, plus CW Sales dan Confidence Ratio yang dihitung dari
+ * `weight_sum` yang SUDAH tersimpan — bukan dari bobot yang dibaca ulang sekarang.
+ * Bedanya penting: kalau bobot di app_config diubah tapi penggolongan belum dihitung
+ * ulang, angka yang tampil harus tetap konsisten dengan golongan yang tersimpan,
+ * bukan campuran bobot baru dan golongan lama.
+ */
+async function fusionTotals(filter) {
+  const w = fusionWhere(filter);
+  const rows = await store.all(store.db(), `
+    SELECT segment, SUM(customer_count) AS n, SUM(weight_sum) AS bobot
+    FROM segment_rollup WHERE ${w.text} GROUP BY segment`, w.params);
+
+  const counts = {};
+  let total = 0;
+  let cwSales = 0;
+  rows.forEach((r) => {
+    counts[r.segment] = Number(r.n);
+    total += Number(r.n);
+    cwSales += Number(r.bobot);
+  });
+  return {
+    counts,
+    total,
+    cwSales: Number(cwSales.toFixed(2)),
+    confidenceRatio: total ? cwSales / total : null,
+  };
+}
+
+/** Baris rollup, buat tabel dan peringkat. Dibatasi halaman. */
+async function fusionRows(filter) {
+  const w = fusionWhere(filter);
+  const limit = Math.min(Math.max(Number(filter.limit) || 50, 1), 500);
+  const offset = Math.max(Number(filter.offset) || 0, 0);
+
+  return store.all(store.db(), `
+    SELECT r.village_code AS "villageCode", v.village_name AS "villageName",
+           r.city_code AS "cityCode",
+           (SELECT MIN(city_name) FROM villages c WHERE c.city_code = r.city_code) AS "cityName",
+           r.dealer_code AS "dealerCode", d.dealer_name AS "dealerName",
+           r.segment, r.customer_count AS "customerCount", r.weight_sum AS "weightSum"
+    FROM segment_rollup r
+    LEFT JOIN villages v ON v.village_code = r.village_code
+    LEFT JOIN dealers d ON d.dealer_code = r.dealer_code
+    WHERE ${w.text}
+    ORDER BY r.customer_count DESC, r.village_code
+    LIMIT ? OFFSET ?`, [...w.params, limit + 1, offset])
+    .then((rows) => ({
+      rows: rows.slice(0, limit),
+      hasMore: rows.length > limit,
+      limit,
+      offset,
+    }));
+}
+
+/** Ringkasan per kota: siapa yang paling banyak, dan seberapa yakin kita. */
+async function fusionByCity(period) {
+  return store.all(store.db(), `
+    SELECT city_code AS "cityCode",
+           (SELECT MIN(city_name) FROM villages c WHERE c.city_code = r.city_code) AS "cityName",
+           SUM(customer_count) AS total, SUM(weight_sum) AS "cwSales"
+    FROM segment_rollup r WHERE period = ?
+    GROUP BY city_code ORDER BY SUM(customer_count) DESC`, [period]);
+}
+
+/**
+ * Ringkasan per dealer, berikut bahan Retention Index.
+ *
+ * `returning` = pelanggan yang kembali servis DEKAT rumahnya (golongan
+ * loyal_verified + service_near). `delivery_near` sengaja tidak ikut: pengiriman
+ * terjadi sekali di awal dan tidak membuktikan apa pun tentang pelanggan yang
+ * kembali. Lihat docs/FUSION.md 2.4.
+ */
+async function fusionByDealer(period, cityCode) {
+  const where = ['period = ?'];
+  const params = [period];
+  if (cityCode) { where.push('city_code = ?'); params.push(cityCode); }
+
+  return store.all(store.db(), `
+    SELECT r.dealer_code AS "dealerCode", d.dealer_name AS "dealerName",
+           MIN(r.city_code) AS "cityCode",
+           SUM(r.customer_count) AS total, SUM(r.weight_sum) AS "cwSales",
+           SUM(CASE WHEN r.segment IN ('loyal_verified', 'service_near')
+                    THEN r.customer_count ELSE 0 END) AS returning
+    FROM segment_rollup r
+    LEFT JOIN dealers d ON d.dealer_code = r.dealer_code
+    WHERE ${where.join(' AND ')}
+    GROUP BY r.dealer_code, d.dealer_name
+    ORDER BY SUM(r.customer_count) DESC`, params);
+}
+
+/**
+ * Rincian satu nomor mesin — PII.
+ *
+ * Mengembalikan nama, alamat, dan titik rumah, jadi rutenya WAJIB lewat piiLimiter
+ * dan mencatat aksesnya. null kalau database PII memang tidak ada: aplikasi harus
+ * tetap jalan penuh tanpanya.
+ */
+async function fusionEngineDetail(engineNo) {
+  const pii = store.customers();
+  if (!pii) return null;
+
+  const fusion = await store.one(pii, `
+    SELECT engine_no AS "engineNo", period, village_code AS "villageCode",
+           city_code AS "cityCode", dealer_code AS "dealerCode",
+           ktp_lat AS "ktpLat", ktp_lng AS "ktpLng",
+           service_lat AS "serviceLat", service_lng AS "serviceLng",
+           service_count AS "serviceCount",
+           delivery_lat AS "deliveryLat", delivery_lng AS "deliveryLng",
+           delivery_count AS "deliveryCount",
+           dist_service_m AS "distServiceM", dist_delivery_m AS "distDeliveryM",
+           segment, weight, kpi_radius_m AS "kpiRadiusM", computed_at AS "computedAt"
+    FROM customer_fusion WHERE engine_no = ?`, [engineNo]);
+  if (!fusion) return null;
+
+  const ktp = await store.one(pii, `
+    SELECT name, address, village_text AS "villageText", district_text AS "districtText",
+           village_code AS "villageCode", resolve_status AS "resolveStatus", period
+    FROM customer_ktp WHERE engine_no = ? ORDER BY period DESC LIMIT 1`, [engineNo]);
+
+  const services = await store.all(pii, `
+    SELECT period, village_text AS "villageText", district_text AS "districtText",
+           city_text AS "cityText", service_type AS "serviceType",
+           village_code AS "villageCode", resolve_status AS "resolveStatus"
+    FROM service_visit WHERE engine_no = ? ORDER BY period DESC`, [engineNo]);
+
+  const pings = await store.all(pii, `
+    SELECT sent_at AS "sentAt", lat, lng, accuracy_m AS "accuracyM",
+           location_text AS "locationText", courier_name AS "courierName"
+    FROM delivery_ping WHERE engine_no = ? ORDER BY sent_at DESC LIMIT 50`, [engineNo]);
+
+  return { fusion, ktp, services, pings };
+}
+
 module.exports = {
   resolveVillageByName,
+  latestFusionPeriod, fusionTotals, fusionRows, fusionByCity, fusionByDealer,
+  fusionEngineDetail, setAppConfig,
   summary, unmatched, imports, periodSummary,
   customersInVillage, browseCustomers, hasCustomers, logCustomerAccess, updateOutlet,
   resetOutlets, allDealerRings, allPosCoverage, districts, saveDealerRings, savePosCoverage,

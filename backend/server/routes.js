@@ -10,6 +10,10 @@ const crypto = require('crypto');
 const repo = require('./repository');
 const { runImport, isRunning } = require('./importer');
 const { runSourceImport, savePing } = require('./source-import');
+const {
+  recalculate, readSettings, statusRatio, statusRetention,
+} = require('./fusion-store');
+const { SEGMENTS } = require('../core/fusion');
 const { previewOutletImport, commitOutletImport } = require('./pos-import');
 const { RateLimiter } = require('./auth');
 
@@ -798,6 +802,222 @@ function build(config) {
     } catch (error) {
       res.status(400).json({ error: error.message });
     }
+  });
+
+  /* ------------------------------------------------------------------------
+     HASIL PENGGOLONGAN & METRIK (docs/FUSION.md Tahap E)
+     ------------------------------------------------------------------------
+     Semuanya membaca `segment_rollup` — agregat TANPA identitas — kecuali
+     drill-down satu nomor mesin di paling bawah, yang memang PII dan karena
+     itu lewat piiLimiter dan dicatat di access_log.
+     ------------------------------------------------------------------------ */
+
+  /** Periode yang diminta, atau periode terbaru yang punya hasil. */
+  const periodeFusi = async (q) => {
+    const diminta = String(q.periode || q.period || '');
+    return PERIOD.test(diminta) ? diminta : await repo.latestFusionPeriod();
+  };
+
+  api.get('/v1/segmentasi', async (req, res) => {
+    const period = await periodeFusi(req.query);
+    if (!period) {
+      return res.json({
+        period: null, data: [],
+        meta: { total: 0, counts: {}, cwSales: 0, confidenceRatio: null },
+        note: 'Belum ada hasil penggolongan. Impor Data KTP dulu.',
+      });
+    }
+    const filter = {
+      period,
+      cityCode: CITY.test(String(req.query.kota || '')) ? String(req.query.kota) : null,
+      dealerCode: DEALER.test(String(req.query.dealer || '')) ? String(req.query.dealer) : null,
+      segment: SEGMENTS[String(req.query.segmentasi || '')] ? String(req.query.segmentasi) : null,
+      limit: req.query.limit,
+      offset: req.query.offset,
+    };
+    const [totals, halaman, setelan] = await Promise.all([
+      repo.fusionTotals(filter), repo.fusionRows(filter), readSettings(),
+    ]);
+    res.json({
+      period,
+      data: halaman.rows,
+      meta: {
+        total: totals.total,
+        counts: totals.counts,
+        cwSales: totals.cwSales,
+        confidenceRatio: totals.confidenceRatio,
+        status: statusRatio(totals.confidenceRatio,
+          setelan.confidenceSolidMin, setelan.confidenceRapuhMax),
+        kpiJarakKm: setelan.kpiRadiusM / 1000,
+        limit: halaman.limit,
+        offset: halaman.offset,
+        hasMore: halaman.hasMore,
+      },
+    });
+  });
+
+  api.get('/v1/metrik/kota/:kota', async (req, res) => {
+    const kota = String(req.params.kota || '');
+    if (!CITY.test(kota)) {
+      return res.status(400).json({ error: 'Kode kota harus format BPS bertitik, mis. 34.04.' });
+    }
+    const period = await periodeFusi(req.query);
+    if (!period) return res.status(404).json({ error: 'Belum ada hasil penggolongan.' });
+
+    const [totals, setelan] = await Promise.all([
+      repo.fusionTotals({ period, cityCode: kota }), readSettings(),
+    ]);
+    res.json({
+      period,
+      cityCode: kota,
+      total: totals.total,
+      cwSales: totals.cwSales,
+      confidenceRatio: totals.confidenceRatio,
+      status: statusRatio(totals.confidenceRatio,
+        setelan.confidenceSolidMin, setelan.confidenceRapuhMax),
+      counts: totals.counts,
+    });
+  });
+
+  api.get('/v1/metrik/dealer/:dealer', async (req, res) => {
+    const dealer = String(req.params.dealer || '');
+    if (!DEALER.test(dealer)) return res.status(400).json({ error: 'Kode dealer tidak sah.' });
+
+    const period = await periodeFusi(req.query);
+    if (!period) return res.status(404).json({ error: 'Belum ada hasil penggolongan.' });
+
+    const [totals, perDealer, setelan] = await Promise.all([
+      repo.fusionTotals({ period, dealerCode: dealer }),
+      repo.fusionByDealer(period, null), readSettings(),
+    ]);
+    const baris = perDealer.find((d) => d.dealerCode === dealer);
+    const kembali = baris ? Number(baris.returning) : 0;
+    const retention = totals.total ? kembali / totals.total : null;
+
+    res.json({
+      period,
+      dealerCode: dealer,
+      dealerName: baris ? baris.dealerName : null,
+      total: totals.total,
+      cwSales: totals.cwSales,
+      confidenceRatio: totals.confidenceRatio,
+      confidenceStatus: statusRatio(totals.confidenceRatio,
+        setelan.confidenceSolidMin, setelan.confidenceRapuhMax),
+      retentionIndex: retention,
+      retentionStatus: statusRetention(retention,
+        setelan.retentionSehatMin, setelan.retentionRisikoMax),
+      counts: totals.counts,
+    });
+  });
+
+  /** Peringkat kota dan dealer sekaligus — bahan dua panel di Tahap 3. */
+  api.get('/v1/peringkat', async (req, res) => {
+    const period = await periodeFusi(req.query);
+    if (!period) return res.json({ period: null, cities: [], dealers: [] });
+    const kota = CITY.test(String(req.query.kota || '')) ? String(req.query.kota) : null;
+    const [cities, dealers] = await Promise.all([
+      repo.fusionByCity(period), repo.fusionByDealer(period, kota),
+    ]);
+    res.json({ period, cities, dealers });
+  });
+
+  api.get('/v1/konfigurasi/kpi-jarak', async (req, res) => {
+    const s = await readSettings();
+    res.json({
+      radiusKm: s.kpiRadiusM / 1000,
+      radiusM: s.kpiRadiusM,
+      weights: s.weights,
+      confidenceSolidMin: s.confidenceSolidMin,
+      confidenceRapuhMax: s.confidenceRapuhMax,
+    });
+  });
+
+  /**
+   * Ubah KPI Jarak.
+   *
+   * TIDAK ada pemeriksaan peran, karena aplikasi ini memang tidak punya sistem peran:
+   * satu sandi dipakai bersama seluruh tim (lihat auth.js). Spesifikasi menyebut
+   * "role admin"; sampai peran benar-benar ada, yang dipakai adalah pengaman yang
+   * SUDAH terbukti di rute perusak lain — konfirmasi yang harus diketik PERSIS.
+   * Mengubah ambang ini membuat seluruh golongan yang tersimpan tidak sebanding lagi,
+   * jadi ia pantas diperlakukan seperti hapus periode, bukan seperti ganti setelan.
+   *
+   * Tidak langsung menghitung ulang: mengembalikan berapa baris yang akan terdampak
+   * supaya layar bisa meminta kepastian dulu. Perhitungan ulangnya panggilan terpisah.
+   */
+  api.put('/v1/konfigurasi/kpi-jarak', express.json({ limit: '8kb' }), async (req, res) => {
+    const km = Number((req.body || {}).radiusKm);
+    if (!Number.isFinite(km) || km <= 0 || km > 500) {
+      return res.status(400).json({ error: 'radiusKm harus angka antara 0 dan 500.' });
+    }
+    if (String(req.query.confirm || '') !== String(km)) {
+      return res.status(400).json({
+        error: `Konfirmasi tidak cocok. Kirim ?confirm=${km} untuk mengubah KPI Jarak.`,
+      });
+    }
+    if (isRunning()) {
+      return res.status(409).json({ error: 'Sedang ada impor berjalan. Tunggu sampai selesai.' });
+    }
+
+    const meter = Math.round(km * 1000);
+    await repo.setAppConfig('kpi_jarak_m', String(meter), req.ip);
+    const period = await repo.latestFusionPeriod();
+    const totals = period ? await repo.fusionTotals({ period }) : { total: 0 };
+    res.json({
+      radiusKm: km,
+      radiusM: meter,
+      barisPerluHitungUlang: totals.total,
+      catatan: 'Nilai tersimpan. Golongan lama BELUM dihitung ulang — panggil ' +
+        'POST /api/v1/fusion/recalculate supaya angkanya sebanding lagi.',
+    });
+  });
+
+  /**
+   * Hitung ulang penggolongan.
+   *
+   * Dibalas 202 (diterima), bukan 200: untuk periode besar pekerjaannya bisa
+   * menit-menitan. Ditolak selagi ada impor berjalan — keduanya menulis tabel yang sama.
+   */
+  api.post('/v1/fusion/recalculate', express.json({ limit: '8kb' }), async (req, res) => {
+    if (isRunning()) {
+      return res.status(409).json({ error: 'Sedang ada impor berjalan. Tunggu sampai selesai.' });
+    }
+    const diminta = String((req.body || {}).periode || '');
+    const period = PERIOD.test(diminta) ? diminta : await repo.latestFusionPeriod();
+    if (!period) {
+      return res.status(400).json({ error: 'Belum ada periode yang bisa dihitung ulang.' });
+    }
+    try {
+      res.status(202).json(await recalculate({ period, config }));
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  /**
+   * Rincian satu nomor mesin — RUTE PII.
+   *
+   * Mengembalikan nama, alamat, dan titik rumah. Karena itu WAJIB dua hal, sama
+   * seperti /customers: lewat piiLimiter, dan tiap aksesnya tercatat. Rute PII baru
+   * tanpa keduanya membuka jalan penyedotan yang tidak meninggalkan jejak.
+   */
+  api.get('/v1/mesin/:engine', async (req, res) => {
+    if (!piiLimiter.allow(req.ip || 'tidak diketahui')) {
+      return res.status(429).json({
+        error: 'Terlalu banyak permintaan data konsumen. Tunggu sebentar lalu coba lagi.',
+      });
+    }
+    const engine = String(req.params.engine || '').trim().slice(0, 32);
+    if (!engine) return res.status(400).json({ error: 'Nomor mesin wajib diisi.' });
+
+    const detail = await repo.fusionEngineDetail(engine);
+    if (!detail) {
+      return res.status(404).json({
+        error: 'Nomor mesin ini belum punya hasil penggolongan, atau data konsumen tidak tersedia.',
+      });
+    }
+    repo.logCustomerAccess(req.ip, detail.fusion.villageCode || 'mesin', 1);
+    res.json(detail);
   });
 
   /* ------------------------------------------------------------------------
