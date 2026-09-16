@@ -21,6 +21,7 @@ import {
   addLayers, fitToScope, invalidateSalePoints, paintChoropleth, redrawMap, setBasemap,
   setCoverageViewPos, setHeatmapMode, setRingViewDealer, syncGroupControls,
   syncHeatmapModeButtons, toggleDistrictNames, setupMap, toggleFullscreen,
+  toggleFusionPoints,
 } from './map.js';
 import {
   closeSelectionInfo, drawDealerMarkers, drawMarkers, selectOutlet, showVillageTooltip,
@@ -67,7 +68,7 @@ const HANDLERS = {
   coverageEditing, anyGroupEditing,
   openRingChooser, closeRingChooser, assignRing,
   redrawMap, setBasemap, setRingViewDealer, setCoverageViewPos, setHeatmapMode,
-  applyScope, toggleFullscreen, fitToScope, toggleDistrictNames,
+  applyScope, toggleFullscreen, fitToScope, toggleDistrictNames, toggleFusionPoints,
   // ringkasan
   setTreemapView, selectEntity, closeDealerCard, togglePerformanceSort,
   toggleLivePerforma, openPerformaFull, closePerformaFull,

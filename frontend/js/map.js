@@ -6,9 +6,12 @@ import {
 } from './config.js';
 import { classOf, dealerColor, percentileBreaks, RAMP, COLOR_EMPTY } from './colors.js';
 import { $, bbox, sumBy, toast } from './dom.js';
-import { fetchGeo } from './api.js';
-import { activeRows, pageFilters, scopeValue } from './filters.js';
-import { EMPTY_COLLECTION } from './geo.js';
+import { fetchGeo, fetchKpiJarak, fetchTitikPeta } from './api.js';
+import { activeRows, fusionFilter, pageFilters, scopeValue } from './filters.js';
+import { circle, EMPTY_COLLECTION } from './geo.js';
+import {
+  cincinPerDesa, pembangkitAcak, sebarDiPoligon, titikPerDesa,
+} from './fusion-points.js';
 import { contributionsForRows, fixedContributionClass } from './sales-stats.js';
 import { S } from './state.js';
 
@@ -172,6 +175,194 @@ export function addLayers() {
       'circle-stroke-color': '#ffffff',
     },
   });
+
+  /* ---- tiga lapisan titik penyatuan sumber (docs/FUSION.md 3.1) -------------
+     MENYIMPANG DARI SPESIFIKASI, disengaja: spesifikasi meminta Servis berupa
+     SYMBOL layer berbentuk kotak lewat map.addImage(). addImage() belum pernah
+     dipakai sekali pun di proyek ini, dan ikonnya tidak bisa saya lihat hasilnya
+     di browser — memperkenalkan API baru yang tidak terverifikasi demi bentuk
+     kotak bukan pertukaran yang sepadan. Ketiganya circle layer, dibedakan lewat
+     ISIAN dan OUTLINE:
+       KTP    = isian warna dealer, tanpa outline   (menyatu dengan titik penjualan)
+       Servis = isian merah muda tetap, kecil       (warna tetap = bukan soal dealer)
+       Kirim  = isian kosong, outline kuning        (kosong-berpinggir beda jelas)
+     Warna tetap dipakai untuk DEALER pada lapisan KTP; golongan tidak pernah
+     memakai warna, sesuai prinsip dua saluran di 3.1. */
+  S.map.addSource('ktp', { type: 'geojson', data: EMPTY_COLLECTION });
+  S.map.addLayer({
+    id: 'ktp-titik', type: 'circle', source: 'ktp',
+    layout: { visibility: 'none' },
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 7, 1.4, 11, 2.6, 14, 4.5],
+      'circle-color': ['get', 'warna'],
+      'circle-opacity': 0.8,
+    },
+  });
+
+  S.map.addSource('servis', { type: 'geojson', data: EMPTY_COLLECTION });
+  S.map.addLayer({
+    id: 'servis-titik', type: 'circle', source: 'servis',
+    layout: { visibility: 'none' },
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 7, 1.2, 11, 2.2, 14, 3.6],
+      'circle-color': '#ec4899',
+      'circle-opacity': 0.9,
+      'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 11, 0, 13, 0.4],
+      'circle-stroke-color': '#ffffff',
+    },
+  });
+
+  S.map.addSource('kirim', { type: 'geojson', data: EMPTY_COLLECTION });
+  S.map.addLayer({
+    id: 'kirim-titik', type: 'circle', source: 'kirim',
+    layout: { visibility: 'none' },
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 7, 1.6, 11, 3, 14, 5],
+      'circle-opacity': 0,
+      'circle-stroke-width': 1.2,
+      'circle-stroke-color': '#f59e0b',
+    },
+  });
+
+  // Lingkaran radius KPI Jarak. Fill sangat tipis + garis putus-putus: ini alat ukur,
+  // bukan data — tidak boleh menutupi wilayah di bawahnya.
+  //
+  // NAMANYA `kpi-jarak-*`. JANGAN diberi awalan "radius".
+  //
+  // test/page.test.js bagian 11 menjaga agar dua nama lapisan milik fitur lama
+  // "Lingkaran Radius 3/5/7/10 km" (dibuang total 2026-08-31) tidak pernah muncul
+  // lagi di berkas ini. Penjaganya mencocokkan POTONGAN TEKS pada seluruh isi
+  // map.js — komentar pun ikut terbaca. Jadi menuliskan kedua nama lama itu di sini,
+  // bahkan hanya untuk menjelaskan, sudah cukup untuk menyalakannya; itu persis yang
+  // terjadi pada versi pertama komentar ini. KPI Jarak juga memang hal yang berbeda
+  // dari radius jangkauan lama, jadi namanya tidak seharusnya mirip.
+  S.map.addSource('kpi-jarak', { type: 'geojson', data: EMPTY_COLLECTION });
+  S.map.addLayer({
+    id: 'kpi-jarak-isi', type: 'fill', source: 'kpi-jarak',
+    layout: { visibility: 'none' },
+    paint: { 'fill-color': '#0b2f6b', 'fill-opacity': 0.05 },
+  });
+  S.map.addLayer({
+    id: 'kpi-jarak-garis', type: 'line', source: 'kpi-jarak',
+    layout: { visibility: 'none' },
+    paint: {
+      'line-color': '#0b2f6b', 'line-width': 1.4, 'line-dasharray': [3, 2],
+      'line-opacity': 0.8,
+    },
+  });
+}
+
+/* ==========================================================================
+   TITIK KTP / SERVIS / PENGIRIMAN + RADIUS KPI
+   ==========================================================================
+   Datanya HITUNGAN per kelurahan, bukan koordinat — lihat fusion-points.js untuk
+   alasan lengkapnya (centroid kelurahan, dan PII pada titik pengiriman). Yang di
+   sini cuma urusan MapLibre dan pengambilan data; aritmetika dan geometrinya di
+   fusion-points.js supaya bisa diuji tanpa browser.
+   ========================================================================== */
+
+/** Benih berbeda per jenis, supaya titik KTP dan Servis tidak saling menimpa persis. */
+const BENIH_TITIK = { ktp: 991, servis: 20260917, kirim: 4242 };
+
+const LAYER_TITIK = { ktp: 'ktp-titik', servis: 'servis-titik', kirim: 'kirim-titik' };
+
+/**
+ * Tanda saringan yang sedang aktif.
+ *
+ * Dipakai membandingkan apakah data yang tersimpan masih menjawab pertanyaan yang
+ * sama. Tanpa ini, mengganti Kota akan tetap menampilkan titik kota sebelumnya —
+ * salah yang tidak kelihatan salah, karena sebaran acak selalu tampak wajar.
+ */
+function tandaSaringPeta() {
+  const f = fusionFilter(pageFilters('peta'));
+  return [f.periode, f.kota, f.dealer, f.pos].join('|');
+}
+
+/** Ambil hitungan titik dari server, lalu gambar ulang. Aman dipanggil berkali-kali. */
+async function muatTitikFusi() {
+  if (S.fusionPointsLoading) return;
+  S.fusionPointsLoading = true;
+  const tanda = tandaSaringPeta();
+  try {
+    const jawab = await fetchTitikPeta(fusionFilter(pageFilters('peta')));
+    S.fusionPoints = { tanda, rows: jawab.rows || [], cache: {}, cincin: null };
+  } catch (e) {
+    S.fusionPoints = { tanda, rows: [], cache: {}, cincin: null, galat: e.message };
+    toast(`Titik tiga sumber gagal dimuat: ${e.message}`);
+  } finally {
+    S.fusionPointsLoading = false;
+  }
+  redrawMap();
+}
+
+/**
+ * Sebaran titik satu jenis, dibangun sekali lalu dipakai ulang.
+ *
+ * Hasilnya disimpan di `cache` milik data yang sedang dipegang, jadi dia ikut terbuang
+ * sendiri begitu saringannya berubah — tidak ada cache yang hidup lebih lama daripada
+ * data yang melahirkannya.
+ */
+function bangunTitikFusi(jenis) {
+  const data = S.fusionPoints;
+  if (!data || !S.geo) return EMPTY_COLLECTION;
+  if (data.cache[jenis]) return data.cache[jenis];
+
+  if (!data.cincin) data.cincin = cincinPerDesa(S.geo);
+  const perDesa = titikPerDesa(data.rows, jenis);
+  const rand = pembangkitAcak(BENIH_TITIK[jenis]);
+  const features = [];
+
+  Object.keys(perDesa).forEach((kode) => {
+    const ring = data.cincin[kode];
+    if (!ring) return;
+    perDesa[kode].forEach((bagian) => {
+      sebarDiPoligon(ring, bagian.n, rand).forEach((koordinat) => {
+        features.push({
+          type: 'Feature',
+          properties: {
+            warna: dealerColor(S.registry, bagian.dealer),
+            dealer: bagian.dealer,
+            village: kode,
+          },
+          geometry: { type: 'Point', coordinates: koordinat },
+        });
+      });
+    });
+  });
+
+  data.cache[jenis] = { type: 'FeatureCollection', features };
+  return data.cache[jenis];
+}
+
+/**
+ * Lingkaran radius KPI Jarak, dipusatkan di pos atau dealer yang sedang dipilih.
+ *
+ * Spesifikasi menggambarnya di sekitar titik KTP saat telusur satu Nomor Mesin;
+ * layar telusur itu belum ada. Sampai ada, pusatnya dibuat pos/dealer terpilih —
+ * itu pertanyaan yang bisa dijawab sekarang ("sejauh apa 50 km dari pos ini?"),
+ * bukan lingkaran karangan di tengah peta.
+ */
+function bangunRadiusKpi() {
+  if (!S.kpiRadiusM) return EMPTY_COLLECTION;
+
+  const kodePos = scopeValue('pos');
+  const kodeDealer = scopeValue('dealer');
+  let titik = null;
+  if (kodePos !== 'ALL') titik = S.outletByCode[kodePos];
+  else if (kodeDealer !== 'ALL') titik = S.dealerByCode[kodeDealer];
+
+  if (!titik || !Number.isFinite(titik.lat) || !Number.isFinite(titik.lng)) {
+    return EMPTY_COLLECTION;
+  }
+  return {
+    type: 'FeatureCollection',
+    features: [circle(titik.lng, titik.lat, S.kpiRadiusM)],
+  };
+}
+
+/** Toggle tiga titik dan radius KPI. Memuat data saat pertama dibutuhkan. */
+export function toggleFusionPoints() {
+  redrawMap();
 }
 
 /* ==========================================================================
@@ -552,6 +743,39 @@ export function redrawMap() {
   if (showPoints) S.map.getSource('jual').setData(buildSalePoints());
   S.map.setLayoutProperty('jual-titik', 'visibility', showPoints ? 'visible' : 'none');
   if ($('map-note')) $('map-note').classList.toggle('hidden', !showPoints);
+
+  // Tiga titik penyatuan sumber. Datanya diambil sekali, lalu dipakai ulang; kalau
+  // saringannya sudah berganti, diambil lagi. Pengambilannya asinkron dan memanggil
+  // redrawMap() lagi setelah selesai — jadi di lintasan INI layernya cukup dibiarkan
+  // memakai data lama, bukan dikosongkan (mengosongkannya bikin titik berkedip).
+  const jenisAktif = Object.keys(LAYER_TITIK).filter((j) => on(`opt-titik-${j}`));
+  if (jenisAktif.length) {
+    const basi = !S.fusionPoints || S.fusionPoints.tanda !== tandaSaringPeta();
+    if (basi && !S.fusionPointsLoading) muatTitikFusi();
+  }
+  Object.keys(LAYER_TITIK).forEach((jenis) => {
+    const tampil = on(`opt-titik-${jenis}`);
+    if (tampil && S.fusionPoints) {
+      S.map.getSource(jenis).setData(bangunTitikFusi(jenis));
+    }
+    S.map.setLayoutProperty(LAYER_TITIK[jenis], 'visibility', tampil ? 'visible' : 'none');
+  });
+
+  // Radius KPI Jarak. Ambangnya diambil sekali dari server; sampai datang, lingkaran
+  // tidak digambar sama sekali — lebih baik tidak ada daripada lingkaran berjari-jari
+  // tebakan yang terlihat persis seperti yang sungguhan.
+  const tampilRadius = on('opt-kpi-jarak');
+  if (tampilRadius && S.kpiRadiusM == null && !S.kpiRadiusLoading) {
+    S.kpiRadiusLoading = true;
+    fetchKpiJarak()
+      .then((k) => { S.kpiRadiusM = k.radiusM; })
+      .catch(() => { S.kpiRadiusM = null; })
+      .finally(() => { S.kpiRadiusLoading = false; redrawMap(); });
+  }
+  if (tampilRadius) S.map.getSource('kpi-jarak').setData(bangunRadiusKpi());
+  ['kpi-jarak-isi', 'kpi-jarak-garis'].forEach((id) => {
+    S.map.setLayoutProperty(id, 'visibility', tampilRadius ? 'visible' : 'none');
+  });
 
   // Titik penjualan ikut ruang lingkup.
   //

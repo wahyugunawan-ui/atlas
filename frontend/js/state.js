@@ -84,6 +84,15 @@ export const S = {
   markers: [],
   dealerMarkers: [],       // titik HQ dealer, terpisah dari titik pos (S.markers)
   salePoints: null,        // dibangkitkan sekali, dipakai ulang
+  // Hitungan titik tiga sumber per kelurahan (docs/FUSION.md 3.1). Diambil dari
+  // server saat salah satu togglenya pertama dinyalakan, lalu dipakai ulang; dibuang
+  // jadi null waktu filter berubah supaya tidak menampilkan angka periode lama.
+  fusionPoints: null,      // {rows:[{villageCode, dealerCode, ktp, servis, kirim}]}
+  fusionPointsLoading: false,
+  // Ambang KPI Jarak (meter) untuk lingkaran radius di peta. null = belum diambil;
+  // selama masih null lingkarannya TIDAK digambar, bukan digambar dengan tebakan.
+  kpiRadiusM: null,
+  kpiRadiusLoading: false,
 
   // --- pilihan ---
   // Pos yang sedang dipilih TIDAK disimpan di sini: dia bagian dari filter halaman,

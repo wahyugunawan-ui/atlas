@@ -1090,6 +1090,22 @@ function build(config) {
     res.json({ period, groupBy, rows, total, sumber });
   });
 
+  /**
+   * Tiga lapisan titik di peta, dalam bentuk HITUNGAN PER KELURAHAN.
+   *
+   * Sengaja bukan daftar titik. Titik KTP dan Servis yang tersimpan adalah centroid
+   * kelurahan, jadi mengirimkannya satu per satu berarti mengirim ribuan koordinat
+   * yang identik. Titik pengiriman sebaliknya GPS rumah sungguhan — itu PII, dan
+   * tidak boleh keluar lewat rute yang tidak berpagar. Yang digambar peta adalah
+   * sebaran berbenih tetap di dalam poligon kelurahan (frontend/js/fusion-points.js).
+   */
+  api.get('/v1/peta/titik', async (req, res) => {
+    const period = await periodeFusi(req.query);
+    if (!period) return res.json({ period: null, rows: [] });
+    const rows = await repo.fusionVillagePoints(period, await saringFusi(req.query));
+    res.json({ period, rows });
+  });
+
   api.get('/v1/konfigurasi/kpi-jarak', async (req, res) => {
     const s = await readSettings();
     res.json({

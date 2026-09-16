@@ -1299,6 +1299,39 @@ async function fusionSourceCoverage(period, filter, groupBy) {
     ORDER BY SUM(r.customer_count) DESC`, params);
 }
 
+/**
+ * Bahan tiga lapisan titik di peta: berapa pelanggan per (kelurahan, dealer), dan
+ * berapa di antaranya punya servis / punya pengiriman.
+ *
+ * Dealer ikut dikelompokkan karena warna titik di peta mengikuti dealer (registry
+ * warna yang sudah ada). Kalau cuma dikelompokkan per kelurahan, titiknya harus
+ * diberi satu warna karangan.
+ *
+ * TIDAK ADA PII di sini, dan itu disengaja: yang keluar cuma hitungan per kelurahan,
+ * tidak pernah koordinat rumah. Titik KTP/Servis yang tersimpan memang centroid
+ * kelurahan, sedangkan titik pengiriman adalah GPS rumah sungguhan — yang terakhir
+ * itulah alasan rute ini menjawab dengan hitungan saja. Koordinat sungguhan hanya
+ * lewat telusur satu Nomor Mesin, yang berpagar piiLimiter + access_log.
+ */
+async function fusionVillagePoints(period, filter) {
+  const where = ['period = ?'];
+  const params = [period];
+  if (filter && filter.cityCode) { where.push('city_code = ?'); params.push(filter.cityCode); }
+  if (filter && filter.dealerCode) { where.push('dealer_code = ?'); params.push(filter.dealerCode); }
+  if (filter && filter.outletCode) { where.push(POS_FILTER); params.push(filter.outletCode); }
+  // Kelurahan tidak diketahui tidak bisa digambar di peta sama sekali.
+  where.push("village_code <> ''");
+
+  return store.all(store.db(), `
+    SELECT village_code AS "villageCode", dealer_code AS "dealerCode",
+           SUM(customer_count) AS ktp,
+           COALESCE(SUM(customer_count) FILTER (WHERE has_service), 0) AS servis,
+           COALESCE(SUM(customer_count) FILTER (WHERE has_delivery), 0) AS kirim
+    FROM source_overlap
+    WHERE ${where.join(' AND ')}
+    GROUP BY village_code, dealer_code`, params);
+}
+
 /** Ringkasan per kota: siapa yang paling banyak, dan seberapa yakin kita. */
 async function fusionByCity(period, filter) {
   // Sampai 2026-09-17 fungsi ini TIDAK menerima saringan sama sekali — panel Peringkat
@@ -1432,7 +1465,7 @@ module.exports = {
   resolveVillageByName,
   latestFusionPeriod, fusionTotals, fusionRows, fusionByCity, fusionByDealer,
   fusionEngineDetail, setAppConfig, fusionMatrix, fusionOverlap, legacyDealerCode,
-  fusionSourceCoverage,
+  fusionSourceCoverage, fusionVillagePoints,
   summary, unmatched, imports, periodSummary,
   customersInVillage, browseCustomers, hasCustomers, logCustomerAccess, updateOutlet,
   resetOutlets, allDealerRings, allPosCoverage, districts, saveDealerRings, savePosCoverage,

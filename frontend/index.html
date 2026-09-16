@@ -578,6 +578,20 @@
         </div>
       </details>
 
+      <!-- Tiga sumber yang disatukan lewat Nomor Mesin (docs/FUSION.md 3.1). Titiknya
+           DISEBAR di dalam kelurahan, bukan alamat sebenarnya — keterangan itu ikut
+           ditulis di layar supaya tidak ada yang membacanya sebagai lokasi rumah. -->
+      <details class="mt-2 pt-2 border-t border-slate-200" open>
+        <summary class="text-[10px] font-bold text-slate-400 uppercase mb-1 cursor-pointer select-none">Titik Tiga Sumber</summary>
+        <div class="mt-1">
+          <label class="toggle-row"><span class="text-xs font-semibold text-slate-600"><span class="inline-block w-2 h-2 rounded-full align-middle mr-1.5" style="background:#0b2f6b"></span>Titik KTP</span><span class="switch"><input type="checkbox" id="opt-titik-ktp" onchange="toggleFusionPoints()"><span class="track"></span></span></label>
+          <label class="toggle-row"><span class="text-xs font-semibold text-slate-600"><span class="inline-block w-2 h-2 rounded-full align-middle mr-1.5" style="background:#ec4899"></span>Titik Servis</span><span class="switch"><input type="checkbox" id="opt-titik-servis" onchange="toggleFusionPoints()"><span class="track"></span></span></label>
+          <label class="toggle-row"><span class="text-xs font-semibold text-slate-600"><span class="inline-block w-2 h-2 rounded-full align-middle mr-1.5 border-2" style="border-color:#f59e0b"></span>Titik Pengiriman</span><span class="switch"><input type="checkbox" id="opt-titik-kirim" onchange="toggleFusionPoints()"><span class="track"></span></span></label>
+          <label class="toggle-row"><span class="text-xs font-semibold text-slate-600">Lingkaran Radius KPI Jarak</span><span class="switch"><input type="checkbox" id="opt-kpi-jarak" onchange="redrawMap()"><span class="track"></span></span></label>
+          <p class="text-[10px] text-slate-400 leading-snug mt-1 px-0.5">Titik disebar merata di dalam kelurahannya, bukan alamat sebenarnya. Radius KPI dipusatkan di pos atau dealer yang sedang dipilih.</p>
+        </div>
+      </details>
+
       <!-- Pengganti Radius jangkauan (3/5/7/10 km) + Lingkaran Radius sejak
            2026-08-31 pagi. Sejak sore itu juga, ring pindah ke DEALER (kecamatan) dan
            pos mendapat coverage baru (kecamatan, 1-8) — dua grup terpisah, aktif

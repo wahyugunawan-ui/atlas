@@ -132,6 +132,24 @@ export function fetchCakupanSumber(filter) {
   return request(`${API}v1/cakupan-sumber?${q}`);
 }
 
+/** Ambang KPI Jarak yang sedang berlaku, untuk menggambar lingkaran radius di peta. */
+export const fetchKpiJarak = () => request(`${API}v1/konfigurasi/kpi-jarak`);
+
+/**
+ * Hitungan titik KTP/Servis/Pengiriman per kelurahan, untuk tiga lapisan peta.
+ *
+ * Jawabannya hitungan, BUKAN koordinat — alasannya ada di rutenya dan di
+ * fusion-points.js. Petanya sendiri yang menyebar titik di dalam poligon kelurahan.
+ */
+export function fetchTitikPeta(filter) {
+  const q = new URLSearchParams();
+  if (filter && filter.periode) q.set('periode', filter.periode);
+  if (filter && filter.kota && filter.kota !== 'ALL') q.set('kota', filter.kota);
+  if (filter && filter.dealer && filter.dealer !== 'ALL') q.set('dealer', filter.dealer);
+  if (filter && filter.pos && filter.pos !== 'ALL') q.set('pos', filter.pos);
+  return request(`${API}v1/peta/titik?${q}`);
+}
+
 /** Rincian satu nomor mesin. RUTE PII — dibatasi laju dan dicatat di server. */
 export const fetchEngineDetail = (engineNo) =>
   request(`${API}v1/mesin/${encodeURIComponent(engineNo)}`);

@@ -288,10 +288,27 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
   BUTUH memberi 439 dari 19.598 di `segment_rollup` MAUPUN `source_overlap`.
   Lihat `docs/DECISIONS.md`.
 
+- **Tiga lapisan titik di peta (KTP/Servis/Kirim) + lingkaran KPI Jarak.**
+  Toggle baru "Titik Tiga Sumber" di Opsi Peta. Titiknya DISEBAR berbenih
+  tetap di dalam poligon kelurahan, karena yang tersimpan adalah centroid
+  kelurahan — kalau digambar apa adanya, seribu orang menumpuk di satu
+  piksel. Keterangan itu ikut ditulis di layar supaya tidak dibaca sebagai
+  alamat. Rute `GET /api/v1/peta/titik` menjawab HITUNGAN per kelurahan,
+  bukan koordinat, jadi tidak ada PII yang menyeberang; titik GPS rumah
+  sungguhan disisakan untuk telusur per Nomor Mesin yang sudah berpagar PII.
+  Data Agustus: 10.373 baris, KTP 19.582 (= 19.598 − 16 tanpa kelurahan),
+  servis 1.291, kirim 0. Lihat `docs/DECISIONS.md` untuk dua penyimpangan
+  dari spesifikasi yang disengaja.
+
 **Belum dikerjakan (sisa Tahap F, lihat tabel tahapan di `docs/FUSION.md`):**
 - Checkbox pilih-sumber + pencarian di panel Cakupan Sumber (daftarnya sudah
   jalan; bagian interaktifnya belum)
-- Tiga jenis titik baru di peta (KTP/Servis/Kirim) + radius KPI Jarak
+- Telusur per Nomor Mesin: lingkaran KPI Jarak di sekitar titik KTP-nya +
+  garis penghubung ke titik Servis/Kirim (sekarang lingkarannya dipusatkan
+  di pos/dealer terpilih, karena layar telusurnya belum ada)
+- Titik Servis berbentuk KOTAK lewat `map.addImage()` sesuai spesifikasi
+  (sekarang lingkaran merah muda — `addImage()` belum pernah dipakai di
+  proyek ini dan hasilnya belum bisa diverifikasi di browser)
 - Drill-down per Nomor Mesin (rute PII-nya sudah ada, layarnya belum)
 - Mode Live/wallboard dan cross-filtering penuh di sidebar
 - Saringan Karesidenan di halaman Fusion (petanya cuma ada di frontend;

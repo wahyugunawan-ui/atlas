@@ -3199,3 +3199,79 @@ mematikan semua.
 **Caveat:** perbaikan halaman kosong ini sendiri belum saya lihat di browser —
 sama seperti sebelumnya, verifikasi saya berhenti sebelum layar. Yang berubah:
 sekarang ada yang bisa memeriksanya.
+
+## [2026-09-17] Tiga lapisan titik di peta + lingkaran KPI Jarak
+
+### Yang menentukan rancangannya: titiknya bukan rumah
+
+Titik KTP dan Servis yang tersimpan adalah **centroid kelurahan**
+(`titikDesa()` di fusion-store.js, dari `villages.lat/lng`) — bukan titik
+rumah. Titik Pengiriman sebaliknya **GPS rumah sungguhan**, dan itu PII.
+
+Dua konsekuensi yang menarik rancangan ini ke arah yang berbeda dari dugaan
+awal:
+
+1. Digambar apa adanya, seluruh pelanggan satu kelurahan menumpuk di SATU
+   piksel. Seribu orang akan terlihat seperti satu, dan petanya berbohong
+   tentang kepadatan. Jadi titiknya **disebar di dalam poligon kelurahan**
+   dengan benih tetap — teknik yang sama persis dengan 18.000 titik penjualan
+   yang sudah ada (`buildSalePoints`). Harganya jujur dan ditulis di layar:
+   posisi di dalam kelurahan TIDAK berarti apa-apa dan tidak boleh dibaca
+   sebagai alamat.
+2. Rutenya menjawab dengan **hitungan per kelurahan, bukan koordinat**. Itu
+   membuat `GET /api/v1/peta/titik` bebas PII sepenuhnya: tidak ada satu pun
+   koordinat rumah yang menyeberang dari `astra_customers`. Titik pengiriman
+   yang sungguhan hanya boleh muncul di telusur satu Nomor Mesin, yang memang
+   sudah berpagar `piiLimiter` + `access_log`.
+
+### Dua penyimpangan dari spesifikasi, keduanya disengaja
+
+**Servis bukan kotak.** `docs/FUSION.md` 3.1 meminta symbol layer berbentuk
+kotak lewat `map.addImage()`. `addImage()` belum pernah dipakai sekali pun di
+proyek ini, dan hasilnya tidak bisa saya lihat di browser. Memperkenalkan API
+baru yang tidak terverifikasi demi bentuk kotak bukan pertukaran yang sepadan.
+Ketiganya circle layer, dibedakan lewat isian dan outline: KTP isian warna
+dealer tanpa outline, Servis isian merah muda tetap dan lebih kecil, Kirim
+isian kosong dengan outline kuning. Prinsip dua saluran tetap dipatuhi — warna
+hanya berbicara soal dealer, tidak pernah soal golongan.
+
+**Lingkaran KPI dipusatkan di pos/dealer terpilih**, bukan di titik KTP satu
+mesin. Spesifikasi menempatkannya di layar telusur per Nomor Mesin; layar itu
+belum ada. Yang dipakai sekarang menjawab pertanyaan yang memang bisa dijawab
+hari ini ("sejauh apa 50 km dari pos ini?"). Selama ambangnya belum datang dari
+server, lingkarannya TIDAK digambar sama sekali — lebih baik tidak ada daripada
+lingkaran berjari-jari tebakan yang terlihat persis seperti yang sungguhan.
+
+### Dua tes merah, dan keduanya kesalahan saya
+
+**`page.test.js` menangkap tabrakan nama yang sungguhan.** Ada penjaga lama
+yang memastikan dua nama lapisan milik fitur "Lingkaran Radius 3/5/7/10 km"
+(dibuang total 2026-08-31) tidak pernah muncul lagi. Nama lapisan saya memuat
+potongan nama itu, jadi penjaganya menyala. Penjaganya benar; nama saya yang
+salah — lapisannya jadi `kpi-jarak-*`. Lalu penjaganya menyala LAGI, kali ini
+karena komentar penjelasan yang saya tulis menyebut nama lamanya secara
+harfiah: penjaganya memindai seluruh isi berkas, komentar ikut terbaca.
+Komentarnya ditulis ulang tanpa menyebut nama itu.
+
+**Tes saya sendiri premisnya keliru.** Saya menguji "poligon terlalu tipis
+dilewati" memakai persegi panjang tipis (10 × 1e-7). Persegi panjang tipis
+MEMENUHI kotak pembatasnya sendiri, jadi hampir semua titik acak justru sah.
+Yang benar-benar menguji jalur "menyerah" adalah bentuk yang luasnya jauh lebih
+kecil daripada kotak pembatasnya — segitiga diagonal pipih.
+
+**Akibat yang harus dicatat:** uji mutasi putaran pertama dijalankan di atas
+baseline yang sudah MERAH, jadi keempat hasil "tertangkap"-nya tidak bermakna —
+mutasi apa pun tampak tertangkap kalau tesnya memang sudah gagal. Diulang
+setelah hijau, lima mutasi, semuanya merah dengan benar. Pelajarannya: uji
+mutasi wajib didahului pemeriksaan bahwa baseline-nya hijau.
+
+### Angka
+
+Data Agustus 2026: 10.373 baris (kelurahan × dealer), KTP **19.582** — persis
+19.598 dikurangi 16 pelanggan berkelurahan tidak diketahui, yang memang tidak
+bisa digambar di peta. Servis 1.291 (satu sisanya ada di baris tanpa
+kelurahan itu). Kirim **0**: lapisannya akan kosong sampai ada produsen ping,
+dan itu keadaan yang benar. 3.403 kelurahan, ketiga ribuannya punya padanan
+poligon — jadi tidak ada titik yang diam-diam tidak tergambar.
+
+**Caveat:** belum dilihat di browser.
