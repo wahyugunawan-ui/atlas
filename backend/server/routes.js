@@ -921,6 +921,56 @@ function build(config) {
     res.json({ period, cities, dealers });
   });
 
+  /**
+   * Matriks Kota x Golongan (docs/FUSION.md 3.2).
+   *
+   * Pivot dilakukan di sini, bukan di SQL, dan urutan kolomnya diambil dari daftar
+   * golongan yang SAMA dengan yang dipakai mesin penggolongan — jadi menambah
+   * golongan ketujuh kelak tidak diam-diam menghilangkan kolom di layar.
+   *
+   * `max` ikut dikirim: heatmap butuh nilai terbesar seluruh tabel untuk menghitung
+   * kepekatan tiap selnya, dan menghitungnya di sini sekali lebih murah daripada
+   * halaman menyapu ulang seluruh baris.
+   */
+  api.get('/v1/matriks', async (req, res) => {
+    const period = await periodeFusi(req.query);
+    const kolom = Object.keys(SEGMENTS);
+    if (!period) return res.json({ period: null, segments: kolom, rows: [], max: 0 });
+
+    const [baris, setelan] = await Promise.all([
+      repo.fusionMatrix(period, {
+        cityCode: CITY.test(String(req.query.kota || '')) ? String(req.query.kota) : null,
+        dealerCode: DEALER.test(String(req.query.dealer || '')) ? String(req.query.dealer) : null,
+      }),
+      readSettings(),
+    ]);
+
+    const per = new Map();
+    baris.forEach((b) => {
+      const kunci = b.cityCode || '';
+      const row = per.get(kunci) || {
+        cityCode: b.cityCode, cityName: b.cityName, counts: {}, total: 0, cwSales: 0,
+      };
+      row.counts[b.segment] = Number(b.n);
+      row.total += Number(b.n);
+      row.cwSales += Number(b.bobot);
+      per.set(kunci, row);
+    });
+
+    let max = 0;
+    const rows = [...per.values()].map((r) => {
+      kolom.forEach((k) => { max = Math.max(max, r.counts[k] || 0); });
+      const rasio = r.total ? r.cwSales / r.total : null;
+      return Object.assign(r, {
+        cwSales: Number(r.cwSales.toFixed(2)),
+        confidenceRatio: rasio,
+        status: statusRatio(rasio, setelan.confidenceSolidMin, setelan.confidenceRapuhMax),
+      });
+    }).sort((a, b) => b.total - a.total);
+
+    res.json({ period, segments: kolom, rows, max });
+  });
+
   api.get('/v1/konfigurasi/kpi-jarak', async (req, res) => {
     const s = await readSettings();
     res.json({

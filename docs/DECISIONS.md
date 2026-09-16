@@ -2926,3 +2926,53 @@ kota bernama, 78 dari 78 dealer bernama, dan `/v1/metrik/kota/34.04`
 mengembalikan 2.829 pelanggan (Confidence Ratio 55,3%) — sebelumnya
 kosong. Jumlah baris tetap 19.598 setelah tiga kali impor, jadi
 idempotensinya terbukti berulang, bukan sekali.
+
+## [2026-09-17] FUSION Tahap F potongan 2: donut dan Matriks Kota × Golongan
+
+**1. Venn-nya ternyata TIDAK diturunkan dari sumber data, melainkan dari
+golongan — dan itu mengubah urutan kerjanya.** Membaca ulang angka di
+gambar acuan: 199 + 228 = 427, persis jumlah Migran/Nomaden di daftar
+sidebarnya. Begitu juga region lain — lingkaran C saja = Warga Terdaftar,
+lensa B∩C = Setia Bengkel, lensa A∩C = Pembeli Terverifikasi, pusat
+A∩B∩C = Warlok, dan angka di luar kotak = Tak Terverifikasi. Ketujuhnya
+berjumlah persis total pelanggan.
+
+Artinya Venn cuma butuh satu hal yang belum ada: **Migran dipecah menurut
+sumber mana yang dimilikinya** (servis saja vs kirim saja).
+`segment_rollup` menyimpan golongan, bukan kepemilikan sumber, jadi itu
+tambahan kecil di pipeline — bukan sekadar pekerjaan menggambar. Karena
+itu Venn ditunda ke potongan berikutnya, dan donut + matriks yang
+dikerjakan lebih dulu: keduanya seluruhnya berasal dari data yang SUDAH
+ada dan sudah diverifikasi, jadi bisa selesai dan terbukti benar hari ini.
+
+**2. Donut digambar SVG sendiri, bukan ApexCharts.** ApexCharts sudah
+di-vendor dan dipakai treemap/tren, jadi memakainya akan terlihat
+konsisten. Tapi untuk enam angka statis, satu instance chart berikut
+siklus hidupnya (destroy/render, simpan handle di `S`) jauh lebih mahal
+daripada enam elemen `<circle>`. Tekniknya `stroke-dasharray`, bukan path
+busur: tidak ada trigonometri yang bisa salah tanda.
+
+Gaya teks di dalam SVG ditulis inline, bukan kelas Tailwind seperti
+`fill-slate-800`. Kelas semacam itu cuma ada di hasil build kalau
+kebetulan dipakai di tempat lain — lupa menjalankan `npm run css` akan
+membuat angkanya tidak terlihat tanpa satu pun error.
+
+**3. Kepekatan heatmap dinormalkan terhadap nilai terbesar SELURUH tabel,
+bukan per baris.** Per baris membuat tiap kota punya satu sel pekat
+sendiri, jadi Sleman (2.604) dan kota dengan 12 pelanggan tampak
+sama-sama "penuh" — justru menghapus perbandingan yang menjadi guna
+matriks ini. Nilai maksimumnya dihitung server sekali dan ikut dikirim.
+
+**4. Pivot dilakukan di rute, bukan SQL.** Query mengembalikan satu baris
+per (kota, golongan); rutenya yang memutar jadi kolom, memakai daftar
+golongan yang SAMA dengan mesin penggolongan. Query dengan enam kolom
+tertulis tangan akan diam-diam kehilangan golongan ketujuh kelak — tanpa
+error, cuma kolom yang hilang di layar.
+
+**Konsekuensi:** `npm test` 32/32 hijau. Diverifikasi atas data sungguhan
+lewat pemanggilan handler langsung: `/v1/matriks` mengembalikan 49 kota,
+dan jumlah seluruh barisnya 19.598 — sama persis dengan total segmentasi,
+jadi pivotnya tidak menggandakan maupun menghilangkan baris. Penyaring
+kota juga benar (kota=34.04 → 1 baris, 2.829). **Belum diverifikasi di
+browser**: seluruh pemeriksaan berhenti tepat sebelum layar, seperti
+potongan sebelumnya.

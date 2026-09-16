@@ -240,8 +240,19 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
   dealer. Daftar golongan punya dua salinan (frontend/backend) yang
   dijaga tes anti-menyimpang.
 
+- Tahap F potongan 2: donut proporsi golongan di sidebar dan panel
+  **Matriks Kota × Golongan** (heatmap 49 kota × 6 golongan, kepekatan sel
+  dihitung terhadap nilai terbesar seluruh tabel, kolom terakhir
+  Confidence Ratio berwarna status). Rute baru `GET /api/v1/matriks`;
+  pivotnya di rute, bukan SQL, supaya menambah golongan ketujuh kelak
+  tidak diam-diam menghilangkan kolom. Diverifikasi atas data sungguhan:
+  jumlah seluruh baris matriks 19.598 — sama persis dengan total
+  segmentasi, jadi pivotnya tidak bocor.
+
 **Belum dikerjakan (sisa Tahap F, lihat tabel tahapan di `docs/FUSION.md`):**
-- Panel Venn irisan sumber, donut, dan Matriks Kota × Golongan
+- Panel Venn irisan sumber. Butuh satu tambahan kecil di pipeline dulu:
+  wilayah Migran harus dipecah menurut sumber mana yang dimiliki
+  (servis saja / kirim saja), dan angka itu belum ada di `segment_rollup`
 - Tiga jenis titik baru di peta (KTP/Servis/Kirim) + radius KPI Jarak
 - Drill-down per Nomor Mesin (rute PII-nya sudah ada, layarnya belum)
 - Mode Live/wallboard dan cross-filtering penuh di sidebar

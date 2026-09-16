@@ -93,6 +93,15 @@ export function fetchPeringkat(filter) {
   return request(`${API}v1/peringkat?${q}`);
 }
 
+/** Matriks Kota x Golongan, sudah dipivot dan diurutkan server. */
+export function fetchMatriks(filter) {
+  const q = new URLSearchParams();
+  if (filter && filter.periode) q.set('periode', filter.periode);
+  if (filter && filter.kota && filter.kota !== 'ALL') q.set('kota', filter.kota);
+  if (filter && filter.dealer && filter.dealer !== 'ALL') q.set('dealer', filter.dealer);
+  return request(`${API}v1/matriks?${q}`);
+}
+
 /** Rincian satu nomor mesin. RUTE PII — dibatasi laju dan dicatat di server. */
 export const fetchEngineDetail = (engineNo) =>
   request(`${API}v1/mesin/${encodeURIComponent(engineNo)}`);

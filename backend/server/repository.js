@@ -1167,6 +1167,30 @@ async function fusionRows(filter) {
     }));
 }
 
+/**
+ * Bahan Matriks Kota x Golongan: satu baris per (kota, golongan).
+ *
+ * Pivot-nya SENGAJA tidak dilakukan di SQL. Jumlah golongan bisa berubah (bobot dan
+ * daftarnya sudah jadi konfigurasi), dan query dengan enam kolom yang ditulis tangan
+ * akan diam-diam kehilangan golongan ketujuh tanpa error — cuma kolom yang hilang di
+ * layar. Rute yang memutarnya, dari daftar golongan yang sama dengan yang dipakai
+ * mesin penggolongannya.
+ */
+async function fusionMatrix(period, filter) {
+  const where = ['period = ?'];
+  const params = [period];
+  if (filter && filter.cityCode) { where.push('city_code = ?'); params.push(filter.cityCode); }
+  if (filter && filter.dealerCode) { where.push('dealer_code = ?'); params.push(filter.dealerCode); }
+
+  return store.all(store.db(), `
+    SELECT r.city_code AS "cityCode",
+           (SELECT MIN(city_name) FROM villages c WHERE c.city_code = r.city_code) AS "cityName",
+           r.segment, SUM(r.customer_count) AS n, SUM(r.weight_sum) AS bobot
+    FROM segment_rollup r
+    WHERE ${where.join(' AND ')}
+    GROUP BY r.city_code, r.segment`, params);
+}
+
 /** Ringkasan per kota: siapa yang paling banyak, dan seberapa yakin kita. */
 async function fusionByCity(period) {
   return store.all(store.db(), `
@@ -1281,7 +1305,7 @@ async function fusionEngineDetail(engineNo) {
 module.exports = {
   resolveVillageByName,
   latestFusionPeriod, fusionTotals, fusionRows, fusionByCity, fusionByDealer,
-  fusionEngineDetail, setAppConfig,
+  fusionEngineDetail, setAppConfig, fusionMatrix,
   summary, unmatched, imports, periodSummary,
   customersInVillage, browseCustomers, hasCustomers, logCustomerAccess, updateOutlet,
   resetOutlets, allDealerRings, allPosCoverage, districts, saveDealerRings, savePosCoverage,

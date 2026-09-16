@@ -16,7 +16,7 @@
  * baru drill-down per nomor mesin — jadi keduanya menjelaskan apa yang akan tampil dan
  * dari mana datangnya, tanpa berpura-pura punya data.
  */
-import { fetchPeringkat, fetchSegmentation } from './api.js';
+import { fetchMatriks, fetchPeringkat, fetchSegmentation } from './api.js';
 import { $, esc, formatNumber } from './dom.js';
 import { SEGMENTS } from './fusion-segments.js';
 
@@ -41,6 +41,102 @@ function barisGolongan(kode, jumlah) {
     `<span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:${esc(s.color)}"></span>` +
     `<span class="text-[11px] text-slate-600 truncate flex-1" title="${esc(s.label)}">${esc(s.short)}</span>` +
     `<span class="text-[11px] font-bold mono text-slate-800">${esc(formatNumber(jumlah || 0))}</span></div>`;
+}
+
+/** '#3B82F6' + alpha -> 'rgba(59,130,246,0.42)'. Untuk kepekatan sel heatmap. */
+function rgba(hex, alpha) {
+  const n = parseInt(String(hex).replace('#', ''), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha.toFixed(2)})`;
+}
+
+/**
+ * Donut proporsi golongan.
+ *
+ * Digambar dengan stroke-dasharray pada lingkaran, BUKAN path busur: satu lingkaran
+ * per golongan, panjang garisnya sepanjang porsinya. Tidak ada trigonometri yang bisa
+ * salah tanda, dan tidak perlu pustaka — ApexCharts sudah ada di proyek ini tapi
+ * memuat satu instance chart untuk enam angka statis jauh lebih mahal daripada enam
+ * elemen SVG.
+ *
+ * Warna diambil dari daftar golongan yang sama dengan sidebar, donut, dan matriks —
+ * satu sumber, supaya hijau di satu panel berarti hal yang sama di panel lain.
+ */
+function donut(counts, total) {
+  if (!total) return '';
+  const R = 42;
+  const KELILING = 2 * Math.PI * R;
+  let mulai = 0;
+
+  const cincin = Object.keys(SEGMENTS).map((kode) => {
+    const n = counts[kode] || 0;
+    if (!n) return '';
+    const panjang = (n / total) * KELILING;
+    const el = `<circle cx="52" cy="52" r="${R}" fill="none" stroke="${esc(SEGMENTS[kode].color)}" ` +
+      `stroke-width="15" stroke-dasharray="${panjang.toFixed(2)} ${(KELILING - panjang).toFixed(2)}" ` +
+      `stroke-dashoffset="${(-mulai).toFixed(2)}" transform="rotate(-90 52 52)">` +
+      `<title>${esc(SEGMENTS[kode].short)}: ${esc(formatNumber(n))}</title></circle>`;
+    mulai += panjang;
+    return el;
+  }).join('');
+
+  // Gaya ditulis inline, bukan kelas Tailwind: kelas seperti `fill-slate-800` cuma
+  // ada di hasil build kalau kebetulan dipakai di tempat lain, dan lupa menjalankan
+  // `npm run css` akan membuat angkanya tidak terlihat tanpa error apa pun.
+  return `<svg viewBox="0 0 104 104" width="104" height="104" class="mx-auto mt-2 block">` +
+    cincin +
+    `<text x="52" y="50" text-anchor="middle" style="fill:#1e293b;font-size:15px;font-weight:800">` +
+    `${esc(formatNumber(total))}</text>` +
+    `<text x="52" y="63" text-anchor="middle" style="fill:#94a3b8;font-size:7.5px">pelanggan</text>` +
+    `</svg>`;
+}
+
+/**
+ * Matriks Kota x Golongan — heatmap ringkas.
+ *
+ * Kolomnya titik warna, bukan teks: enam nama golongan yang ditulis penuh memakan
+ * seluruh lebar panel dan menyisakan ruang nol untuk angkanya. Nama lengkapnya ada di
+ * `title` tiap kolom dan di daftar sidebar yang warnanya sama.
+ *
+ * Kepekatan sel dihitung terhadap nilai TERBESAR seluruh tabel (dikirim server), jadi
+ * satu kota besar tidak membuat seluruh baris lain tampak kosong seperti kalau
+ * dinormalkan per baris.
+ */
+function matriks(data) {
+  if (!data || !data.rows || !data.rows.length) {
+    return '<p class="text-xs text-slate-400 py-4 text-center">Belum ada data.</p>';
+  }
+  const kolom = (data.segments || Object.keys(SEGMENTS)).filter((k) => SEGMENTS[k]);
+  const maksimum = Number(data.max) || 0;
+
+  const kepala = kolom.map((k) =>
+    `<th class="px-1 py-1" title="${esc(SEGMENTS[k].label)}">` +
+    `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;` +
+    `background:${esc(SEGMENTS[k].color)}"></span></th>`).join('');
+
+  const baris = data.rows.map((r) => {
+    const sel = kolom.map((k) => {
+      const n = (r.counts || {})[k] || 0;
+      const pekat = maksimum ? Math.min(n / maksimum, 1) : 0;
+      const latar = n ? `background:${rgba(SEGMENTS[k].color, 0.10 + pekat * 0.55)}` : '';
+      return `<td class="px-1 py-0.5 text-center mono text-[10px] text-slate-700" style="${latar}">` +
+        `${n ? esc(formatNumber(n)) : ''}</td>`;
+    }).join('');
+
+    const warna = WARNA_STATUS[r.status] || 'text-slate-400';
+    const cr = r.confidenceRatio == null ? '—' : `${(r.confidenceRatio * 100).toFixed(0)}%`;
+    return `<tr class="border-b border-slate-50">` +
+      `<td class="px-1 py-0.5 text-[10px] text-slate-700 truncate" style="max-width:130px" ` +
+      `title="${esc(r.cityName || r.cityCode || '')}">${esc(r.cityName || r.cityCode || '—')}</td>` +
+      sel +
+      `<td class="px-1 text-right text-[10px] font-bold mono ${warna}">${esc(cr)}</td></tr>`;
+  }).join('');
+
+  return `<div class="overflow-y-auto" style="max-height:230px">` +
+    `<table class="w-full border-collapse"><thead class="sticky top-0 bg-white">` +
+    `<tr><th class="px-1 py-1 text-left text-[9px] font-bold text-slate-400 uppercase">Kota</th>` +
+    kepala +
+    `<th class="px-1 py-1 text-right text-[9px] font-bold text-slate-400 uppercase">%</th></tr>` +
+    `</thead><tbody>${baris}</tbody></table></div>`;
 }
 
 function panelBelum(judul, keterangan) {
@@ -106,8 +202,11 @@ export async function renderFusion() {
 
   let hasil;
   let peringkat;
+  let matrix;
   try {
-    [hasil, peringkat] = await Promise.all([fetchSegmentation({}), fetchPeringkat({})]);
+    [hasil, peringkat, matrix] = await Promise.all([
+      fetchSegmentation({}), fetchPeringkat({}), fetchMatriks({}),
+    ]);
   } catch (error) {
     wadah.innerHTML = `<div class="p-6 text-center"><p class="text-sm text-red-600">${
       esc(error.message)}</p></div>`;
@@ -145,6 +244,7 @@ export async function renderFusion() {
       `<div class="bg-white rounded-xl border border-slate-200 p-3 w-52 shrink-0">` +
         `<div class="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Golongan final</div>` +
         Object.keys(SEGMENTS).map((k) => barisGolongan(k, counts[k])).join('') +
+        donut(counts, total) +
         `<div class="text-[10px] text-slate-400 mt-2 pt-2 border-t border-slate-100">` +
         `KPI Jarak: ${esc(String(meta.kpiJarakKm ?? '—'))} km</div>` +
       `</div>` +
@@ -162,10 +262,18 @@ export async function renderFusion() {
         'Sebaran titik KTP, Servis, dan Pengiriman memakai peta yang sama dengan ' +
         'halaman Insight & Peta. Belum dibuat.') +
       panelBelum('Irisan sumber data (Venn)',
-        'Irisan KTP / Servis / Kirim berikut yang di luar irisan (Tak Terverifikasi). ' +
-        'Belum dibuat.') +
-      panelBelum('Matriks Kota x Golongan',
-        'Heatmap kota terhadap enam golongan. Belum dibuat.') +
+        'Irisan KTP / Servis / Kirim berikut yang di luar irisan. Belum dibuat: ' +
+        'wilayah Migran perlu dipecah menurut sumber mana yang dimiliki, dan angka ' +
+        'itu belum ada di ringkasan — butuh satu tambahan kecil di pipeline.') +
+    `</div>` +
+    `<div class="bg-white rounded-xl border border-slate-200 p-3 mt-2">` +
+      `<div class="flex items-baseline gap-2 mb-1">` +
+        `<span class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">` +
+        `Matriks Kota &times; Golongan</span>` +
+        `<span class="text-[10px] text-slate-400">${
+          esc(String((matrix && matrix.rows ? matrix.rows.length : 0)))} kota</span>` +
+      `</div>` +
+      matriks(matrix) +
     `</div>`;
 }
 
