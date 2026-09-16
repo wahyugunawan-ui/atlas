@@ -2791,3 +2791,71 @@ ketiga sub-halamannya berpindah, tab Confidence Fusion memunculkan angka
 (atau pesan "belum ada hasil penggolongan" selama Data KTP belum
 diimpor), dan navbar tidak melipat di layar sempit karena sekarang ada
 satu tombol tambahan.
+
+## [2026-09-16] Impor data Agustus 2026 sungguhan: dua cacat yang cuma ketahuan dari data nyata
+
+**Konteks:** seluruh Tahap A–E lolos 32/32 tes, tapi belum sekali pun
+dijalankan atas berkas sungguhan. Data Agustus 2026 (19.598 baris KTP,
+186.471 baris Servis) diimpor lewat CLI. Dua cacat langsung muncul, dan
+keduanya jenis yang TIDAK BISA ditangkap tes buatan sendiri — keduanya
+soal bentuk data yang cuma ada di berkas aslinya.
+
+**1. Seluruh 19.598 tanggal hilang diam-diam.** Kolom `Tgl Mohon` ternyata
+TEKS berpenanda apostrof Excel berisi DDMMYYYY: selnya `'15082026`, bukan
+tanggal sungguhan. `Date.parse("'15082026")` = NaN, dan `toDate()` versi
+pertama memang mengembalikan null untuk yang tidak terbaca — jadi impornya
+"berhasil", 19.598 baris masuk, dan kolom tanggalnya kosong seluruhnya
+tanpa satu pun error. Diperbaiki: apostrof dibuang, DDMMYYYY dicoba lebih
+dulu (dibaca sebagai YYYYMMDD, '15082026' berarti tahun 1508 — mustahil),
+YYYYMMDD jadi cadangan. Bentuk sungguhannya sekarang dipatok
+`test/source-rows.test.js`, bukan cuma diperbaiki.
+
+Sekalian terkonfirmasi: rentang tanggalnya 1–31 Agustus 2026, jadi label
+periode `2026-08` memang benar — sebelumnya itu cuma asumsi dari nama
+berkas.
+
+**2. Empat kabupaten dicari di wilayah kotanya, lalu gagal cocok.** Data
+Servis menyebut kabupaten sebagai TEKS, bukan kode BPS, jadi namanya
+dipetakan dulu lewat `coreCityName()` yang melucuti awalan
+'Kabupaten'/'Kota'. Akibatnya "Kabupaten Magelang" dan "Kota Magelang"
+jadi kunci yang sama persis — dan peta nama→kode versi pertama menyimpan
+SATU kode per nama, jadi yang dibaca belakangan menimpa yang lain. Di
+Jateng ada EMPAT pasang begini: Magelang, Pekalongan, Semarang, Tegal;
+keempatnya dimenangkan kode KOTA. Seluruh desa di empat kabupaten itu
+karena itu dicari di daftar desa kota, dan tidak ketemu.
+
+Diukur sebelum/sesudah pada data yang sama: baris Servis tak cocok
+**19.176 → 5.925** (turun 69%), nama wilayah unik tak cocok 3.537 → 2.825.
+Diperbaiki dengan memetakan nama ke DAFTAR kode dan mencoba tiap kandidat;
+nama kecamatan yang membedakan, karena kecamatan Kabupaten Magelang tidak
+ada di Kota Magelang — jadi kunci tiga tingkat tetap yang memutuskan,
+bukan tebakan.
+
+**3. Yang SEMULA saya kira cacat, ternyata bukan.** 18.291 dari 19.598
+pelanggan (93%) masuk golongan `registered_only` — "tidak ada jejak servis
+maupun kirim". Dugaan pertama: nomor mesinnya tidak menyambung. Diperiksa:
+nomor mesin KTP seragam 12 karakter, trim dan huruf besar tidak mengubah
+irisan sama sekali (1.292 tetap 1.292), dan awalan kode tipe (JME1E,
+JMK1E) muncul di kedua berkas. Jadi penyambungannya benar; yang beririsan
+memang cuma 1.292 dari 19.598 (6,6%).
+
+Itu jawaban yang JUJUR, bukan bug: berkas KTP adalah kohort pembelian satu
+bulan, sedangkan berkas Servis adalah kunjungan seluruh populasi motor
+yang pernah terjual. Orang yang membeli bulan Agustus mayoritas belum
+kembali servis di bulan Agustus juga. Konsekuensi yang harus dipahami
+pembaca dashboard: **pada bulan pertama, angka `registered_only` akan
+selalu mendominasi**, dan itu bukan tanda datanya buruk. Golongan ini baru
+bermakna setelah beberapa bulan menumpuk — dan `recalculate()` memang
+sudah membaca servis/ping LINTAS PERIODE, jadi kohort Agustus akan
+berpindah golongan sendiri begitu servis bulan-bulan berikutnya masuk.
+
+Bukti kecilnya sudah terlihat di impor ulang: memulihkan 13.251 baris
+servis cuma memindahkan 46 mesin (`service_near` 934→980), karena sisanya
+milik motor di luar kohort Agustus.
+
+**Konsekuensi:** `npm test` 32/32 hijau. Keadaan database sesudah impor:
+19.598 baris `customer_ktp` (99,9% desanya tercocokkan), 186.471 baris
+`service_visit`, 19.598 baris `customer_fusion`, 11.089 baris
+`segment_rollup` — Confidence Ratio 55,4%. Tabel `customers` yang lama
+(19.051 baris) tidak disentuh sama sekali. Impornya idempoten: dijalankan
+dua kali dengan periode yang sama, jumlah barisnya tetap.

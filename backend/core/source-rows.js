@@ -91,8 +91,38 @@ const SPECS = {
  * berisi "-" atau "n/a".
  */
 function toDate(value) {
-  const teks = String(value == null ? '' : value).trim();
+  // Apostrof di depan DIBUANG lebih dulu. Berkas CDB Astra menulis tanggal sebagai
+  // TEKS dengan penanda apostrof Excel: sel berisi `'15082026`, bukan tanggal
+  // sungguhan. Diukur pada berkas Agustus 2026: seluruh 19.598 barisnya begitu.
+  const teks = String(value == null ? '' : value).trim().replace(/^'/, '');
   if (!teks) return null;
+
+  const digit = teks.replace(/\D/g, '');
+  const sah = (y, m, d) => y >= 1990 && y <= 2100 && m >= 1 && m <= 12 && d >= 1 && d <= 31;
+
+  if (digit.length === 8) {
+    // DDMMYYYY — bentuk yang dipakai berkas Astra. Dicoba LEBIH DULU daripada
+    // YYYYMMDD, dan urutannya bukan selera: '15082026' dibaca sebagai YYYYMMDD
+    // berarti tahun 1508, yang mustahil. Jadi empat digit terakhirlah tahunnya.
+    const d = Number(digit.slice(0, 2));
+    const m = Number(digit.slice(2, 4));
+    const y = Number(digit.slice(4));
+    if (sah(y, m, d)) {
+      return `${digit.slice(4)}-${digit.slice(2, 4)}-${digit.slice(0, 2)}`;
+    }
+    // YYYYMMDD sebagai cadangan, kalau kelak ada berkas yang menulisnya begitu.
+    const y2 = Number(digit.slice(0, 4));
+    const m2 = Number(digit.slice(4, 6));
+    const d2 = Number(digit.slice(6));
+    if (sah(y2, m2, d2)) {
+      return `${digit.slice(0, 4)}-${digit.slice(4, 6)}-${digit.slice(6)}`;
+    }
+    return null;
+  }
+
+  // Bentuk lain (mis. '2026-08-15' atau tanggal sungguhan dari ExcelJS) dibiarkan
+  // ditangani Date.parse. Yang tidak bisa dibaca jadi null, BUKAN menggagalkan
+  // seluruh impor karena satu sel berisi '-' atau 'n/a'.
   const waktu = Date.parse(teks);
   return Number.isNaN(waktu) ? null : new Date(waktu).toISOString().slice(0, 10);
 }

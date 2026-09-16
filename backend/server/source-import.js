@@ -85,10 +85,26 @@ async function runSourceImport(options) {
     // Data Servis menyebut kabupaten sebagai TEKS ('Sleman'), bukan kode BPS. Kunci
     // pencocokan tiga tingkat butuh kodenya, jadi namanya dipetakan dulu — lewat
     // coreCityName() yang sudah menangani 'Kab.'/'Kabupaten'/'Kota' di kedua sisi.
+    //
+    // Satu nama bisa menunjuk LEBIH DARI SATU kode, dan ini bukan kemungkinan
+    // teoretis: di Jateng ada empat pasang — Kabupaten/Kota Magelang, Pekalongan,
+    // Semarang, dan Tegal. coreCityName() melucuti awalannya, jadi keduanya jadi
+    // nama yang sama persis. Versi pertama kode ini menyimpan satu kode per nama,
+    // jadi yang terakhir dibaca MENIMPA yang lain — dan seluruh desa di empat
+    // KABUPATEN itu dicari di wilayah KOTA-nya, lalu gagal cocok. Diukur pada data
+    // Servis Agustus 2026: 19.176 baris tak cocok, mayoritas desa Kabupaten
+    // Magelang (Mertoyudan, Muntilan, Mungkid, Borobudur, ...).
+    //
+    // Karena itu: nama -> DAFTAR kode, dan tiap kandidat dicoba sampai ada yang
+    // benar-benar cocok. Nama kecamatannya yang membedakan — kecamatan Kabupaten
+    // Magelang tidak ada di Kota Magelang — jadi kunci tiga tingkat tetap yang
+    // memutuskan, bukan tebakan.
     const cityByName = {};
     const perCity = {};
     villages.forEach((v) => {
-      cityByName[coreCityName(v.cityName)] = v.cityCode;
+      const kunci = coreCityName(v.cityName);
+      const daftar = cityByName[kunci] || (cityByName[kunci] = []);
+      if (!daftar.includes(v.cityCode)) daftar.push(v.cityCode);
       (perCity[v.cityCode] = perCity[v.cityCode] || []).push(v);
     });
 
@@ -106,17 +122,28 @@ async function runSourceImport(options) {
     rows.forEach((r) => {
       if (r.status) { hitung[r.status]++; return; }
 
-      const cityCode = r.cityCode
-        ? toDottedCityCode(r.cityCode)
-        : (cityByName[coreCityName(r.cityText)] || '');
+      // Kandidat kode kota: satu kalau berkasnya memang membawa kode (Data KTP),
+      // bisa dua kalau cuma namanya (Data Servis, lihat komentar di atas).
+      const kandidat = r.cityCode
+        ? [toDottedCityCode(r.cityCode)]
+        : (cityByName[coreCityName(r.cityText)] || []);
 
-      const kunci = cityCode + '|' + normalizeName(r.districtText) + '|' +
-        normalizeName(r.villageText);
+      // Kunci cache dibangun dari MASUKAN mentahnya, bukan dari kode kota hasil
+      // pemetaan — dua nama kota berbeda yang memetakan ke kandidat yang sama tetap
+      // harus dihitung sendiri-sendiri.
+      const kunci = (r.cityCode || r.cityText || '') + '|' +
+        normalizeName(r.districtText) + '|' + normalizeName(r.villageText);
       let hasil = cache.get(kunci);
       if (!hasil) {
-        hasil = resolveVillage(
-          { cityCode, districtName: r.districtText, villageName: r.villageText },
-          index, perCity[cityCode] || villages);
+        // Berhenti di kandidat PERTAMA yang benar-benar menghasilkan kode desa.
+        // Kalau tidak ada yang cocok, yang disimpan hasil percobaan terakhir —
+        // lengkap dengan usulannya, supaya laporan "belum cocok" tetap berguna.
+        for (const kk of (kandidat.length ? kandidat : [''])) {
+          hasil = resolveVillage(
+            { cityCode: kk, districtName: r.districtText, villageName: r.villageText },
+            index, perCity[kk] || villages);
+          if (hasil.villageCode) break;
+        }
         cache.set(kunci, hasil);
       }
 

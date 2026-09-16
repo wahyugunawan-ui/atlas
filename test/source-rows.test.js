@@ -99,10 +99,27 @@ function test() {
   assert.throws(() => findColumns(JUDUL_SERVIS, SPECS.ktp), /tidak ketemu/i);
 
   // --- tanggal ---
+  //
+  // Bentuk yang BENAR-BENAR ada di berkas CDB Astra: teks berpenanda apostrof Excel
+  // berisi DDMMYYYY. Versi pertama kode ini memakai Date.parse apa adanya, dan
+  // Date.parse("'15082026") = NaN — seluruh 19.598 tanggal jadi NULL tanpa satu pun
+  // error muncul. Ditemukan waktu mengimpor data Agustus 2026 yang sungguhan.
+  assert.strictEqual(toDate("'15082026"), '2026-08-15',
+    'apostrof penanda teks Excel + DDMMYYYY adalah bentuk sungguhan di berkas Astra');
+  assert.strictEqual(toDate("'04082026"), '2026-08-04');
+  assert.strictEqual(toDate('28082026'), '2026-08-28', 'tanpa apostrof juga harus jalan');
+
+  // DDMMYYYY dicoba lebih dulu: '15082026' sebagai YYYYMMDD berarti tahun 1508.
+  assert.strictEqual(toDate('15082026'), '2026-08-15');
+  // YYYYMMDD tetap terbaca kalau tanggalnya mustahil dibaca sebagai DDMMYYYY
+  // (bulan 20 tidak ada).
+  assert.strictEqual(toDate('20260815'), '2026-08-15');
+
   assert.strictEqual(toDate('2026-08-01'), '2026-08-01');
   assert.strictEqual(toDate(''), null);
   assert.strictEqual(toDate('-'), null, 'sel berisi "-" tidak boleh menggagalkan impor');
   assert.strictEqual(toDate('n/a'), null);
+  assert.strictEqual(toDate('99999999'), null, 'delapan digit yang bukan tanggal jadi null');
 
   // --- kolom yang benar-benar dipakai INSERT cocok jumlahnya dengan nilainya ---
   // Kalau tidak, Postgres menolak seluruh impor dengan pesan yang tidak menyebut

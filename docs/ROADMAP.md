@@ -60,10 +60,20 @@ penggolongan + ringkasan ke `segment_rollup`), dan E (dua belas rute
 menu Data dengan tiga sub-halaman, tiga jenis titik baru di peta, dan
 halaman Confidence Fusion.
 
-Rantainya sudah nyambung dari Excel sampai angka golongan dan sudah bisa
-dibaca lewat API, tapi **belum ada satu pun layar yang menampilkannya** —
-halaman Import belum diubah dan halaman Confidence Fusion belum dibuat,
-jadi seluruh rute baru masih harus dipanggil lewat alat lain.
+**Sudah diuji dengan data sungguhan (2026-09-16).** Data Agustus 2026
+diimpor lewat CLI: 19.598 baris KTP dan 186.471 baris Servis. Rantai
+A–E terbukti jalan ujung ke ujung — 99,9% desa KTP tercocokkan, dan
+`segment_rollup` terisi 11.089 baris dengan Confidence Ratio 55,4%.
+Dua cacat ketahuan dan sudah diperbaiki (seluruh kolom tanggal hilang
+karena format `'DDMMYYYY`, dan empat kabupaten Jateng dicari di wilayah
+kotanya); detailnya di DECISIONS.md. Yang perlu dipahami pembaca
+dashboard: pada bulan pertama golongan "Warga asli" mendominasi (93%)
+dan itu BUKAN tanda data buruk — servis adalah data seluruh populasi
+motor, sedangkan KTP kohort satu bulan.
+
+Halaman Import belum diubah (masih belum ada tombol unggah Data KTP/
+Servis), jadi impor berikutnya masih lewat alat lain sampai Tahap F
+potongan berikutnya selesai.
 
 Satu bagian rancangan yang SENGAJA ditunda: micro-batch 60 detik untuk
 ping realtime (2.2 jalur B). Belum ada produsen ping-nya, jadi yang
