@@ -8,6 +8,15 @@
 # ==========================================================================
 data/
 
+# Berkas Excel di mana pun, bukan cuma di data/. Sumbernya Astra dan hampir
+# semuanya MEMUAT PII — nama, alamat, nomor mesin. Sudah pernah ada beberapa
+# tergeletak di akar proyek sepanjang pengerjaan; satu `git add .` yang tidak
+# hati-hati cukup untuk mengirimnya ke repo publik SELAMANYA. Kalau suatu hari
+# ada berkas Excel contoh yang benar-benar tidak memuat PII, kecualikan satu
+# per satu dengan `!nama-berkas.xlsx`, jangan longgarkan aturan ini.
+*.xlsx
+*.xls
+
 # ==========================================================================
 # Kredensial. Sekali ter-commit, sandi dan rahasia penanda tangan cookie ada di
 # riwayat git SELAMANYA — menghapusnya di commit berikutnya tidak menghapus apa pun.
