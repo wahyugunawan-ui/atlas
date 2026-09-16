@@ -18,6 +18,7 @@
  */
 import { fetchIrisan, fetchMatriks, fetchPeringkat, fetchSegmentation } from './api.js';
 import { $, esc, formatNumber } from './dom.js';
+import { fusionFilter } from './filters.js';
 import { SEGMENTS, SUMBER } from './fusion-segments.js';
 
 /** Satu-satunya tempat status diterjemahkan jadi warna, biar konsisten antar panel. */
@@ -248,9 +249,30 @@ function daftarPeringkat(rows, kunciNama, opsi) {
  * memori — `segment_rollup` tidak ikut payload `/api/summary` dan memang tidak boleh,
  * karena halaman lain tidak membutuhkannya.
  */
+/**
+ * Katakan saringan mana yang TIDAK terpakai di halaman ini.
+ *
+ * Pos dan karesidenan tidak ada di `segment_rollup`. Tanpa catatan ini, memilih satu
+ * pos memberi angka se-provinsi sementara dropdownnya menunjuk pos itu — salah yang
+ * tidak kelihatan salah.
+ */
+function catatanAbaikan(f) {
+  if (!f.abaikan.length) return '';
+  const nama = { pos: 'Pos', karesidenan: 'Karesidenan' };
+  const daftar = f.abaikan.map((k) => nama[k] || k).join(' dan ');
+  return `<div class="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 ` +
+    `text-[11px] text-amber-800">Saringan <b>${esc(daftar)}</b> tidak dipakai di ` +
+    `halaman ini — penggolongan disimpan per kota dan dealer saja. Angka di bawah ` +
+    `mengikuti saringan Kota, Dealer, dan periode.</div>`;
+}
+
 export async function renderFusion() {
   const wadah = $('fusion-isi');
   if (!wadah) return;
+
+  // Saringan dari bilah, bukan objek kosong. Sebelum ini halaman SELALU meminta angka
+  // se-provinsi: bilahnya tampil, tombolnya bergerak, angkanya tidak pernah berubah.
+  const f = fusionFilter();
 
   wadah.innerHTML = '<p class="text-sm text-slate-400 p-6 text-center">Memuat angka golongan…</p>';
 
@@ -260,7 +282,7 @@ export async function renderFusion() {
   let irisan;
   try {
     [hasil, peringkat, matrix, irisan] = await Promise.all([
-      fetchSegmentation({}), fetchPeringkat({}), fetchMatriks({}), fetchIrisan({}),
+      fetchSegmentation(f), fetchPeringkat(f), fetchMatriks(f), fetchIrisan(f),
     ]);
   } catch (error) {
     wadah.innerHTML = `<div class="p-6 text-center"><p class="text-sm text-red-600">${
@@ -289,6 +311,7 @@ export async function renderFusion() {
   const warnaRasio = WARNA_STATUS[meta.status] || 'text-slate-400';
 
   wadah.innerHTML =
+    catatanAbaikan(f) +
     `<div class="flex gap-2 mb-2">` +
       kartuKpi('Pelanggan terfilter', formatNumber(total), `periode ${hasil.period || '—'}`, 'text-blue-500') +
       kartuKpi('CW Sales', formatNumber(Math.round(Number(meta.cwSales) || 0)), 'terkoreksi keyakinan', 'text-purple-500') +

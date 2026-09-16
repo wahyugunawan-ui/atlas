@@ -102,6 +102,39 @@ export function setPeriod(which, value) {
   }
 }
 
+/**
+ * Terjemahkan bilah filter jadi parameter API penyatuan tiga sumber.
+ *
+ * Dua hal yang sengaja BEDA dari halaman lain, dan keduanya kehilangan informasi:
+ *
+ * 1. Bilah memberi RENTANG periode (`from`..`to`), sedangkan `segment_rollup` disimpan
+ *    per satu periode — penggolongan menilai keadaan satu bulan, bukan gabungan
+ *    beberapa bulan. Yang dipakai karena itu `to` (bulan terakhir yang diminta), dan
+ *    `from` diabaikan. Menjumlahkan dua bulan akan menghitung satu pelanggan dua kali.
+ * 2. Pos dan karesidenan tidak ada di rollup sama sekali. Dilaporkan lewat `abaikan`
+ *    supaya halaman bisa mengatakannya, bukan diam-diam menampilkan angka se-provinsi
+ *    seolah itu angka pos yang dipilih.
+ *
+ * @returns {{periode: string|null, kota: string|null, dealer: string|null,
+ *   abaikan: string[]}} `null` berarti "tanpa saringan"; periode null = periode
+ *   terbaru yang ada di server.
+ */
+export function fusionFilter(f) {
+  const filters = f || pageFilters('fusion');
+  const pakai = (nilai) => (nilai && nilai !== 'ALL' ? nilai : null);
+
+  const abaikan = [];
+  if (pakai(filters.outletCode)) abaikan.push('pos');
+  if (pakai(filters.kares)) abaikan.push('karesidenan');
+
+  return {
+    periode: /^\d{4}-\d{2}$/.test(String(filters.to || '')) ? filters.to : null,
+    kota: pakai(filters.cityCode),
+    dealer: pakai(filters.dealerCode),
+    abaikan,
+  };
+}
+
 export function activeRows(page) {
   const f = pageFilters(page);
 

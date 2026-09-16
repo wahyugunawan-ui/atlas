@@ -1212,6 +1212,28 @@ async function fusionOverlap(period, filter) {
     GROUP BY has_service, has_delivery, segment`, params);
 }
 
+/**
+ * Terjemahkan kode dealer dari kosakata halaman ke kosakata rollup.
+ *
+ * Seluruh `/api` memakai `dealers.dealer_code`, kode turunan nama
+ * ('NUSANTARASAKTIGEJAYAN'). `segment_rollup` menyimpan kode numerik Excel ('7348')
+ * karena itu yang ditulis Data KTP. Diukur pada data Agustus 2026: dari 78 dealer,
+ * yang cocok lewat `dealer_code` apa adanya = 0. Tanpa terjemahan ini menyaring per
+ * dealer menghasilkan dashboard KOSONG yang terbaca sebagai "dealer ini tidak punya
+ * data", bukan sebagai kesalahan.
+ *
+ * Menerima kedua kosakata supaya rute tidak perlu tahu yang mana yang dikirim. Kode
+ * yang tidak dikenali dikembalikan apa adanya: hasilnya kosong, dan itu memang jawaban
+ * jujur untuk dealer yang tidak ada.
+ */
+async function legacyDealerCode(code) {
+  if (!code) return null;
+  const rows = await store.all(store.db(),
+    `SELECT legacy_code AS "legacyCode" FROM dealers
+     WHERE dealer_code = ? OR legacy_code = ? LIMIT 1`, [code, code]);
+  return (rows[0] && rows[0].legacyCode) ? rows[0].legacyCode : code;
+}
+
 /** Ringkasan per kota: siapa yang paling banyak, dan seberapa yakin kita. */
 async function fusionByCity(period) {
   return store.all(store.db(), `
@@ -1326,7 +1348,7 @@ async function fusionEngineDetail(engineNo) {
 module.exports = {
   resolveVillageByName,
   latestFusionPeriod, fusionTotals, fusionRows, fusionByCity, fusionByDealer,
-  fusionEngineDetail, setAppConfig, fusionMatrix, fusionOverlap,
+  fusionEngineDetail, setAppConfig, fusionMatrix, fusionOverlap, legacyDealerCode,
   summary, unmatched, imports, periodSummary,
   customersInVillage, browseCustomers, hasCustomers, logCustomerAccess, updateOutlet,
   resetOutlets, allDealerRings, allPosCoverage, districts, saveDealerRings, savePosCoverage,

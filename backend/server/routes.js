@@ -818,6 +818,21 @@ function build(config) {
     return PERIOD.test(diminta) ? diminta : await repo.latestFusionPeriod();
   };
 
+  /**
+   * Kode dealer dari bilah filter, diterjemahkan ke kosakata `segment_rollup`.
+   *
+   * Bilah mengirim `dealers.dealer_code` ('NUSANTARASAKTIGEJAYAN'); rollup menyimpan
+   * kode numerik Excel ('7348'). Keduanya lolos regex DEALER, jadi tanpa terjemahan
+   * ini permintaannya SAH tapi hasilnya kosong — dan dashboard kosong terbaca sebagai
+   * "dealer ini tidak punya konsumen". Diukur pada data Agustus 2026: 0 dari 78 kode
+   * dealer cocok apa adanya. Lihat repo.legacyDealerCode().
+   */
+  const dealerFusi = async (nilai) => {
+    const kode = String(nilai || '');
+    if (!DEALER.test(kode)) return null;
+    return repo.legacyDealerCode(kode);
+  };
+
   api.get('/v1/segmentasi', async (req, res) => {
     const period = await periodeFusi(req.query);
     if (!period) {
@@ -830,7 +845,7 @@ function build(config) {
     const filter = {
       period,
       cityCode: CITY.test(String(req.query.kota || '')) ? String(req.query.kota) : null,
-      dealerCode: DEALER.test(String(req.query.dealer || '')) ? String(req.query.dealer) : null,
+      dealerCode: await dealerFusi(req.query.dealer),
       segment: SEGMENTS[String(req.query.segmentasi || '')] ? String(req.query.segmentasi) : null,
       limit: req.query.limit,
       offset: req.query.offset,
@@ -940,7 +955,7 @@ function build(config) {
     const [baris, setelan] = await Promise.all([
       repo.fusionMatrix(period, {
         cityCode: CITY.test(String(req.query.kota || '')) ? String(req.query.kota) : null,
-        dealerCode: DEALER.test(String(req.query.dealer || '')) ? String(req.query.dealer) : null,
+        dealerCode: await dealerFusi(req.query.dealer),
       }),
       readSettings(),
     ]);
@@ -999,7 +1014,7 @@ function build(config) {
 
     const baris = await repo.fusionOverlap(period, {
       cityCode: CITY.test(String(req.query.kota || '')) ? String(req.query.kota) : null,
-      dealerCode: DEALER.test(String(req.query.dealer || '')) ? String(req.query.dealer) : null,
+      dealerCode: await dealerFusi(req.query.dealer),
     });
 
     const wilayah = (punyaServis, punyaKirim, segment) => {

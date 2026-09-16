@@ -256,6 +256,15 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
   region = 19.598 = total segmentasi, dan tiap region cocok persis dengan
   golongannya (Migran 10 terpecah jadi servis-saja 10). Tabel yang sama
   nanti dipakai panel Cakupan Sumber.
+- **Bilah filter halaman Confidence Fusion disambungkan** — sebelumnya
+  terpasang tapi memanggil semua rutenya dengan `{}`, jadi mengganti Kota
+  atau Dealer memuat ulang dan menampilkan angka yang sama persis. Ikut
+  memperbaiki cacat keempat dari keluarga "dua kosakata kode dealer":
+  menyaring per dealer menghitung **0** konsumen sebelum diterjemahkan,
+  **1.032** sesudah (ASTRA MOTOR CENTER YOGYAKARTA, data Agustus 2026).
+  Periode rentang diciutkan ke batas atas, dan saringan Pos/Karesidenan
+  yang tidak berlaku di halaman ini sekarang dikatakan lewat pita kuning,
+  bukan didiamkan. Lihat `docs/DECISIONS.md`.
 
 **Belum dikerjakan (sisa Tahap F, lihat tabel tahapan di `docs/FUSION.md`):**
 - Panel Cakupan Sumber (datanya sudah ada di `source_overlap`, tinggal

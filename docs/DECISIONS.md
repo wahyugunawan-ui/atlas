@@ -3029,3 +3029,55 @@ Satu pemeriksaan silang yang menyenangkan: `sumber.servis` = 1.292, angka
 yang SAMA persis dengan irisan nomor mesin yang diukur langsung lewat SQL
 waktu menyelidiki "93% Warga asli". Dua jalur kode yang berbeda sampai ke
 angka yang sama — itu yang membuat angkanya bisa dipercaya.
+
+## [2026-09-17] Bilah filter halaman Confidence Fusion: terpasang, tapi tidak tersambung
+
+Ditemukan sebelum menggambar panel berikutnya, bukan dilaporkan pengguna.
+
+`switchTab('fusion')` menyetel `S.filterPage = 'fusion'` dan `REPAINT.fusion`
+memanggil `renderFusion()` tiap bilah berubah — jadi bilahnya tampil, dan
+menggambar ulang benar-benar terjadi. Tapi `renderFusion()` memanggil
+keempat rutenya dengan `{}`. Hasilnya: mengganti Kota atau Dealer memicu
+permintaan baru, memuat ulang, dan menampilkan **angka yang sama persis**.
+Bukan fitur yang belum ada — perilaku yang salah di kode yang sudah dikirim,
+dan karena itu didahulukan daripada panel baru.
+
+**Yang nyaris terjadi waktu memperbaikinya.** Menyambungkan saringannya begitu
+saja akan menukar satu cacat diam dengan cacat diam yang lain. Bilah mengirim
+`dealers.dealer_code`, kode turunan nama (`ASTRAMOTORCENTERYOGYAKARTA`);
+`segment_rollup` menyimpan kode numerik Excel (`9`), karena itu yang ditulis
+Data KTP. Keduanya lolos regex `DEALER`, jadi permintaannya SAH dan jawabannya
+kosong. Diukur pada data Agustus 2026:
+
+| | konsumen terhitung |
+|---|---|
+| kirim `dealer_code` apa adanya (perilaku lama) | **0** |
+| diterjemahkan ke `legacy_code` (sekarang) | **1.032** |
+
+1.032 itu cocok persis dengan angka sebenarnya milik ASTRA MOTOR CENTER
+YOGYAKARTA. Ini cacat KEEMPAT dari keluarga yang sama — dua kosakata kode
+dealer yang hidup berdampingan (lihat entri 2026-09-17 "Tiga sambungan yang
+putus"). Terjemahannya ditaruh di `repo.legacyDealerCode()`, menerima kedua
+kosakata, supaya rute tidak perlu tahu yang mana yang dikirim.
+
+**Dua keputusan yang sengaja membuang informasi**, dan keduanya kelihatan di
+layar, bukan didiamkan:
+
+1. Bilah memberi RENTANG periode; `segment_rollup` disimpan per SATU periode,
+   karena penggolongan menilai keadaan satu bulan. `fusionFilter()` memakai
+   batas ATAS (`to`) dan mengabaikan `from`. Menjumlahkan dua bulan akan
+   menghitung satu pelanggan dua kali.
+2. Pos dan karesidenan tidak ada di rollup sama sekali. Memilih pos dulu akan
+   memberi angka se-provinsi sementara dropdownnya menunjuk satu pos — salah
+   yang tidak kelihatan salah. Sekarang muncul pita kuning yang menyebut
+   saringan mana yang tidak dipakai halaman ini.
+
+`fusionFilter()` ditaruh di `filters.js` (murni, tanpa DOM) supaya bisa diuji
+tanpa browser; `test/fusion-filter.test.js` menjaga sifatnya. Diuji mutasi
+empat kali — saringan dibuang, periode ambil batas bawah, pos didiamkan, dan
+`'ALL'` bocor jadi teks — keempatnya merah. Mutasi periode sempat SKIP karena
+jangkarnya saya ketik ulang dari ingatan dan meleset; diulang dengan jangkar
+yang diambil dari berkas, dan tepat satu tes yang merah.
+
+**Caveat yang masih berlaku:** belum ada satu pun bagian Tahap F yang pernah
+dilihat di browser. Verifikasi berhenti tepat sebelum layar.
