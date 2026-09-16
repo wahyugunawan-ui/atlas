@@ -360,7 +360,23 @@
   <div class="flex items-center gap-1 overflow-x-auto">
     <button onclick="switchTab('peta')" id="nav-peta" class="nav-btn active whitespace-nowrap flex items-center px-3.5 py-1.5 rounded-xl text-sm font-semibold"><i class="ph ph-squares-four text-lg mr-2"></i> Insight &amp; Peta</button>
     <button onclick="switchTab('import')" id="nav-import" class="nav-btn whitespace-nowrap flex items-center px-3.5 py-1.5 rounded-xl text-sm font-semibold"><i class="ph ph-upload-simple text-lg mr-2"></i> Import Data</button>
-    <button onclick="switchTab('konsumen')" id="nav-konsumen" class="nav-btn whitespace-nowrap flex items-center px-3.5 py-1.5 rounded-xl text-sm font-semibold"><i class="ph ph-users-three text-lg mr-2"></i> Data Konsumen</button>
+    <!-- "Data Konsumen" jadi flyout "Data" berisi tiga sub-halaman (docs/FUSION.md
+         Tahap 1.4). Polanya SAMA PERSIS dengan flyout Master di bawah — termasuk
+         position:fixed yang dihitung dari posisi tombol, karena pembungkus baris nav
+         ini `overflow-x-auto` dan akan memotong panel yang melayang. Tab lama
+         `konsumen` TIDAK diganti nama: dia jadi salah satu sub-halaman, jadi seluruh
+         tautan, filter tersimpan, dan tesnya tetap berlaku. -->
+    <div class="pilih" id="nav-data-wrap">
+      <button onclick="toggleDataMenu()" id="nav-data" class="nav-btn whitespace-nowrap flex items-center px-3.5 py-1.5 rounded-xl text-sm font-semibold">
+        <i class="ph ph-users-three text-lg mr-2"></i> Data<i class="ph ph-caret-down pilih-caret ml-1.5"></i>
+      </button>
+      <div id="data-panel" class="pilih-panel" hidden style="width:250px; z-index:300">
+        <button onclick="switchTab('konsumen')" id="nav-konsumen" class="pilih-opsi"><i class="ph ph-identification-card mr-2"></i>berdasarkan KTP</button>
+        <button onclick="switchTab('servis')" id="nav-servis" class="pilih-opsi"><i class="ph ph-wrench mr-2"></i>Lokasi Service</button>
+        <button onclick="switchTab('kirim')" id="nav-kirim" class="pilih-opsi"><i class="ph ph-truck mr-2"></i>berdasarkan Lokasi Delivery</button>
+      </div>
+    </div>
+    <button onclick="switchTab('fusion')" id="nav-fusion" class="nav-btn whitespace-nowrap flex items-center px-3.5 py-1.5 rounded-xl text-sm font-semibold" title="ATLAS Confidence Fusion Dashboard — Controlling Quality of Data"><i class="ph ph-crosshair text-lg mr-2"></i> Confidence Fusion</button>
     <!-- Sejak 2026-08-31 malam: Master Dealer/Master Pos Dealer/Master Kelurahan
          dipindah dari tiga tombol datar ke satu flyout "Master" (permintaan user,
          navbar disederhanakan jadi 4 tombol). Gaya `.pilih`/`.pilih-panel`/`.pilih-opsi`
@@ -940,6 +956,33 @@
       </table>
     </div>
   </div>
+</section>
+
+<!-- Tiga halaman penyatuan tiga sumber (docs/FUSION.md Tahap F). Isinya digambar
+     frontend/js/fusion.js; di sini cuma bingkainya, sama seperti #tab-konsumen dkk.
+     Yang belum jadi ditulis apa adanya di layar sebagai "belum dibuat" — panel kosong
+     tanpa keterangan terbaca sebagai aplikasi rusak. -->
+<section id="tab-servis" class="hidden p-4 md:p-6 h-full flex flex-col gap-4">
+  <div class="flex items-center gap-2 text-sm font-bold text-slate-700">
+    <i class="ph-fill ph-wrench"></i> DATA KONSUMEN &middot; LOKASI SERVICE
+  </div>
+  <div id="servis-isi" class="flex-1 min-h-0"></div>
+</section>
+
+<section id="tab-kirim" class="hidden p-4 md:p-6 h-full flex flex-col gap-4">
+  <div class="flex items-center gap-2 text-sm font-bold text-slate-700">
+    <i class="ph-fill ph-truck"></i> DATA KONSUMEN &middot; BERDASARKAN LOKASI DELIVERY
+  </div>
+  <div id="kirim-isi" class="flex-1 min-h-0"></div>
+</section>
+
+<section id="tab-fusion" class="hidden p-3 md:p-4 h-full flex flex-col gap-2">
+  <div class="flex items-baseline gap-2">
+    <span class="text-[9px] font-bold uppercase tracking-[0.2em] text-blue-500">ATLAS</span>
+    <span class="text-sm font-extrabold text-slate-800">Confidence Fusion Dashboard</span>
+    <span class="text-[10px] text-slate-400">Controlling Quality of Data</span>
+  </div>
+  <div id="fusion-isi" class="flex-1 min-h-0 overflow-y-auto"></div>
 </section>
 </main>
 

@@ -2738,3 +2738,56 @@ lama satu endpoint, bukan lima.
 **7. `recalculate` dibalas 202, dan ditolak selagi impor berjalan.**
 Pekerjaannya bisa menit-menitan (202 = diterima, belum selesai), dan
 keduanya menulis tabel yang sama.
+
+## [2026-09-16] FUSION Tahap F (potongan 1): navigasi, kerangka halaman, angka yang sungguhan
+
+**Konteks:** Tahap F (layar) dikerjakan BERTAHAP, bukan sekali jadi.
+Potongan pertama ini memasang navigasinya, kerangka tiga halaman baru, dan
+angka golongan yang benar-benar diambil dari API — bukan mockup. Panel
+Venn, donut, matriks, peta multi-layer, drill-down, dan mode Live belum,
+dan itu ditulis apa adanya.
+
+**1. Tab lama `konsumen` TIDAK diganti nama waktu jadi sub-halaman.**
+"Data Konsumen" berubah jadi flyout "Data" berisi tiga sub-halaman, tapi
+id tab dan `S.filters.konsumen` yang lama dipertahankan. Mengganti namanya
+akan memutus filter tersimpan, tautan, dan beberapa assertion tes — semua
+demi kerapian nama yang tidak dilihat siapa pun. Yang berubah cuma posisi
+DOM-nya, persis seperti waktu tiga tab Master dipindah ke flyout.
+
+**2. Flyout "Data" SALINAN pola flyout "Master", bukan abstraksi
+bersama.** Keduanya cuma tiga baris logika; menyatukannya berarti satu
+fungsi yang harus tahu dua panel, dua tombol, dan dua daftar tab. Yang
+penting sama — `position:fixed` dihitung dari `getBoundingClientRect()`,
+karena pembungkus baris nav `overflow-x-auto` memotong panel absolut —
+ditulis ulang berikut alasannya di kedua tempat, supaya yang membaca salah
+satunya tidak perlu mencari yang lain.
+
+**3. Daftar golongan punya DUA salinan (frontend dan backend), dan itu
+disengaja.** Aturan proyek: `frontend/` tidak pernah meng-import dari
+`backend/`. Batas itu lebih berharga daripada menghapus enam baris. Yang
+menjaga keduanya tidak menyimpang `test/fusion-segments.test.js`, yang
+membandingkan kode, nama resmi, DAN bobotnya — bobot yang menyimpang
+adalah yang paling berbahaya, karena CW Sales di layar akan berbeda dari
+yang tersimpan di database tanpa ada satu pun yang terlihat salah. Pola
+yang sama dengan dua salinan haversine.
+
+**4. Yang belum jadi ditulis apa adanya di layar.** Panel Venn, matriks,
+dan peta menampilkan kalimat "belum dibuat" berikut penjelasan singkat
+apa yang akan ada di situ. Panel kosong tanpa keterangan terbaca sebagai
+aplikasi rusak, dan orang akan melaporkannya sebagai bug — biaya sosial
+yang jauh lebih mahal daripada satu kalimat jujur. Begitu juga halaman
+Confidence Fusion waktu belum ada data sama sekali: yang ditampilkan
+langkah berikutnya ("impor Data KTP dulu"), bukan angka nol yang
+menyesatkan atau pesan gagal.
+
+**Konsekuensi:** `npm test` 32/32 hijau; `test/page.test.js` sekarang
+membaca 20 modul dan 89 handler, dan penjaga "tidak ada handler yang
+kurang maupun nama hantu" ikut menjaga ketiga handler baru.
+`npm run css` dijalankan ulang (kelas Tailwind baru di tiga section baru).
+**BELUM diverifikasi di browser** — `page.test.js` membaca teks sumber,
+bukan menjalankan halaman, dan saya tidak bisa masuk ke aplikasi untuk
+mengeklik sendiri. Yang perlu dicek manusia: flyout "Data" terbuka dan
+ketiga sub-halamannya berpindah, tab Confidence Fusion memunculkan angka
+(atau pesan "belum ada hasil penggolongan" selama Data KTP belum
+diimpor), dan navbar tidak melipat di layar sempit karena sekarang ada
+satu tombol tambahan.

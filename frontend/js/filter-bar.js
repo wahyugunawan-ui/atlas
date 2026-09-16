@@ -28,6 +28,10 @@ const REPAINT = {
   pos: 'renderOutletTable',
   konsumen: 'renderCustomerTable',
   kelurahan: 'renderVillageTable',
+  // Tiga halaman penyatuan tiga sumber (docs/FUSION.md Tahap F).
+  servis: 'renderServiceTable',
+  kirim: 'renderDeliveryTable',
+  fusion: 'renderFusion',
 };
 
 const setValue = (id, value) => { if ($(id)) $(id).value = value; };

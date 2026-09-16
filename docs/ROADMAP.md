@@ -179,7 +179,7 @@ cuma perluasan ke Sulawesi ke timur.
 Detail rancangan di `docs/FUSION.md`; alasan tiap keputusan arsitekturnya
 di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
 
-**Selesai dan diuji otomatis (31/31 berkas tes):**
+**Selesai dan diuji otomatis (32/32 berkas tes):**
 - Spesifikasi teknis lengkap Tahap 2 (skema, pipeline batch + realtime,
   tabel keputusan 6 golongan, KPI Jarak yang dapat dikustom, rumus CW
   Sales/Confidence Ratio/Retention Index, kontrak API, diagram alur) dan
@@ -222,7 +222,21 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
   mutasi (ambang digeser inklusif/eksklusif dan kosakata rasio/retensi
   ditukar — semuanya merah).
 
-**Belum dikerjakan (Tahap F, lihat tabel tahapan di `docs/FUSION.md`):**
+- Tahap F potongan 1: menu "Data" (flyout tiga sub-halaman: berdasarkan
+  KTP / Lokasi Service / berdasarkan Lokasi Delivery), tab baru
+  "Confidence Fusion", dan kerangka ketiga halamannya. Dashboardnya sudah
+  menampilkan angka SUNGGUHAN dari `/api/v1/segmentasi` dan
+  `/api/v1/peringkat` — KPI, daftar enam golongan, peringkat kota dan
+  dealer. Daftar golongan punya dua salinan (frontend/backend) yang
+  dijaga tes anti-menyimpang.
+
+**Belum dikerjakan (sisa Tahap F, lihat tabel tahapan di `docs/FUSION.md`):**
+- Panel Venn irisan sumber, donut, dan Matriks Kota × Golongan
+- Tiga jenis titik baru di peta (KTP/Servis/Kirim) + radius KPI Jarak
+- Drill-down per Nomor Mesin (rute PII-nya sudah ada, layarnya belum)
+- Mode Live/wallboard dan cross-filtering penuh di sidebar
+- Halaman Import jadi grid 3 panel + tombol unggah Data KTP/Servis
+  (sampai itu ada, ketiga rute impor baru dipanggil lewat alat lain)
 - F UI: menu Data, layer peta baru, halaman Confidence Fusion
 
 ### Rebranding ke ATLAS + polesan UI/UX korporat Astra Motor (2026-09-14 malam)

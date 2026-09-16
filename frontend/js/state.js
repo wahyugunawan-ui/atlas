@@ -40,6 +40,11 @@ export const S = {
     peta: makeFilter(),
     pos: makeFilter(),
     kelurahan: makeFilter(),
+    // Tiga halaman penyatuan tiga sumber (docs/FUSION.md). `fusion` yang dipakai
+    // dashboard Confidence Fusion; `servis`/`kirim` dua sub-halaman Data yang baru.
+    fusion: makeFilter(),
+    servis: makeFilter(),
+    kirim: makeFilter(),
     konsumen: makeFilter(),
   },
 

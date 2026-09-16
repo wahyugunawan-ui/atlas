@@ -45,10 +45,11 @@ import {
   editDealerRingFromTable, editPosCoverageFromTable,
   renderCustomerTable,
   renderOutletTable, renderVillageTable, saveOutletEditor, searchCustomers, showOnMap,
-  switchTab, toggleMasterMenu,
+  switchTab, toggleMasterMenu, toggleDataMenu,
   renderDealerTable, openNewDealer, closeNewDealer, saveNewDealer,
   openDealerEditor, closeDealerEditor, saveDealerEditor, deleteDealerConfirm,
 } from './tables.js';
+import { renderDeliveryTable, renderFusion, renderServiceTable } from './fusion.js';
 import {
   askDeletePeriod, closeDeletePeriod, confirmDeletePeriod, deletePeriodTyped,
   dragLeave, dragOver, dropFile, fileChosen, finishImport, importPeriodChanged,
@@ -77,9 +78,11 @@ const HANDLERS = {
   // peta dan outlet
   selectOutlet, closeSelectionInfo, openVillageDetail, closeVillageDetail,
   // tabel
-  switchTab, toggleMasterMenu, renderOutletTable, renderVillageTable, showOnMap, jumpToVillage, promptPin,
+  switchTab, toggleMasterMenu, toggleDataMenu, renderOutletTable, renderVillageTable, showOnMap, jumpToVillage, promptPin,
   openDealerDetail, openCitySummary, toggleDealerCity, jumpFromDealer,
   renderCustomerTable, searchCustomers, customerPage,
+  // penyatuan tiga sumber (docs/FUSION.md Tahap F)
+  renderFusion, renderServiceTable, renderDeliveryTable,
   editDealerRingFromTable, editPosCoverageFromTable,
   openNewOutlet, closeNewOutlet, newOutletDealerChanged, saveNewOutlet,
   askResetOutlets, closeResetOutlets, resetOutletsTyped, confirmResetOutlets,

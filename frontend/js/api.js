@@ -71,6 +71,32 @@ export function fetchCustomers(villageCode, range) {
 }
 
 /** Daftar kecamatan, untuk pemilih ring. */
+/* --- penyatuan tiga sumber (docs/FUSION.md) ---------------------------------
+   Semua lewat request() yang sama: 401 tetap mengembalikan orang ke halaman
+   masuk, bukan memunculkan pesan di tengah dashboard. */
+
+/** Angka golongan + baris rollup, tersaring kota/dealer/golongan. */
+export function fetchSegmentation(filter) {
+  const q = new URLSearchParams();
+  if (filter && filter.periode) q.set('periode', filter.periode);
+  if (filter && filter.kota && filter.kota !== 'ALL') q.set('kota', filter.kota);
+  if (filter && filter.dealer && filter.dealer !== 'ALL') q.set('dealer', filter.dealer);
+  if (filter && filter.segmentasi) q.set('segmentasi', filter.segmentasi);
+  return request(`${API}v1/segmentasi?${q}`);
+}
+
+/** Peringkat kota dan dealer sekaligus — satu permintaan, dua panel. */
+export function fetchPeringkat(filter) {
+  const q = new URLSearchParams();
+  if (filter && filter.periode) q.set('periode', filter.periode);
+  if (filter && filter.kota && filter.kota !== 'ALL') q.set('kota', filter.kota);
+  return request(`${API}v1/peringkat?${q}`);
+}
+
+/** Rincian satu nomor mesin. RUTE PII — dibatasi laju dan dicatat di server. */
+export const fetchEngineDetail = (engineNo) =>
+  request(`${API}v1/mesin/${encodeURIComponent(engineNo)}`);
+
 export function fetchDistricts() {
   return request(`${API}districts`);
 }

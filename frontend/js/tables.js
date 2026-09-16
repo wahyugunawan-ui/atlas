@@ -1507,8 +1507,14 @@ export async function renderCustomerTable(keepOffset) {
 // bisa menyimpang diam-diam.
 const TAB_MASTER = ['dealer', 'pos', 'kelurahan'];
 
+// Tiga sub-halaman di flyout "Data" (docs/FUSION.md Tahap 1.4). Alasannya sama
+// dengan TAB_MASTER: daftar terpisah supaya dua tempat yang perlu tahu "tab mana
+// yang masuk flyout" tidak bisa menyimpang diam-diam.
+const TAB_DATA = ['konsumen', 'servis', 'kirim'];
+
 export function switchTab(name) {
-  ['peta', 'import', 'pos', 'dealer', 'konsumen', 'kelurahan'].forEach((tab) => {
+  ['peta', 'import', 'pos', 'dealer', 'konsumen', 'kelurahan',
+    'servis', 'kirim', 'fusion'].forEach((tab) => {
     const section = $('tab-' + tab);
     const nav = $('nav-' + tab);
     if (section) section.classList.toggle('hidden', tab !== name);
@@ -1519,6 +1525,10 @@ export function switchTab(name) {
   const navMaster = $('nav-master');
   if (navMaster) navMaster.classList.toggle('active', TAB_MASTER.includes(name));
   closeMasterMenu();
+
+  const navData = $('nav-data');
+  if (navData) navData.classList.toggle('active', TAB_DATA.includes(name));
+  closeDataMenu();
 
   // Urutannya penting: halaman aktif ditetapkan SEBELUM tabelnya digambar, kalau tidak
   // tabelnya membaca filter halaman sebelumnya. Halaman impor tidak punya filter, dan
@@ -1562,6 +1572,44 @@ export function switchTab(name) {
  * perlu menyentuh `.pilih-panel` (dipakai bersama combobox filter) atau
  * melepas `overflow-x-auto` (mungkin memang perlu untuk layar sempit).
  */
+/**
+ * Flyout navbar "Data" — tiga sub-halaman sumber (KTP / Lokasi Service / Lokasi
+ * Delivery), docs/FUSION.md Tahap 1.4.
+ *
+ * Sengaja SALINAN pola Master di bawah, bukan abstraksi bersama: keduanya cuma
+ * tiga baris logika, dan menyatukannya berarti satu fungsi yang harus tahu dua
+ * panel, dua tombol, dan dua daftar tab. Yang penting sama di keduanya —
+ * `position:fixed` dihitung dari posisi tombol — ditulis ulang berikut alasannya
+ * supaya yang membaca salah satunya tidak perlu mencari yang lain.
+ */
+function openDataMenu() {
+  const panel = $('data-panel');
+  if (!panel || !panel.hidden) return;
+  const tombol = document.getElementById('nav-data').getBoundingClientRect();
+  // position:fixed, sama alasannya dengan flyout Master: pembungkus baris nav
+  // `overflow-x-auto`, dan itu memaksa overflow-y ikut memotong panel absolut.
+  panel.style.position = 'fixed';
+  panel.style.top = `${tombol.bottom + 6}px`;
+  panel.style.left = `${tombol.left}px`;
+  panel.hidden = false;
+  const wrap = $('nav-data-wrap');
+  if (wrap) wrap.classList.add('buka');
+}
+
+export function toggleDataMenu() {
+  const panel = $('data-panel');
+  if (!panel) return;
+  if (panel.hidden) openDataMenu(); else closeDataMenu();
+}
+
+function closeDataMenu() {
+  const panel = $('data-panel');
+  if (!panel || panel.hidden) return;
+  panel.hidden = true;
+  const wrap = $('nav-data-wrap');
+  if (wrap) wrap.classList.remove('buka');
+}
+
 function openMasterMenu() {
   const panel = $('master-panel');
   if (!panel || !panel.hidden) return;
