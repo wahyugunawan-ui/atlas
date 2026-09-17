@@ -817,7 +817,7 @@ export async function renderFusion() {
   isiSlot('cakupan-isi', cakupanSumber(cakupan));
 
   // Peta ikut menyesuaikan diri ke lingkup yang sedang dipilih, sama seperti di
-  // halaman Insight & Peta.
+  // halaman Sales Analytics.
   //
   // Harus dipanggil DI SINI, bukan mengandalkan renderAll(): renderAll() berhenti di
   // baris pertama kalau `S.filterPage !== 'peta'` (lihat app.js), jadi di halaman ini

@@ -10,7 +10,7 @@
 /**
  * Nilai filter satu halaman.
  *
- * Tiap halaman punya salinannya sendiri: memfilter di Insight & Peta tidak boleh
+ * Tiap halaman punya salinannya sendiri: memfilter di Sales Analytics tidak boleh
  * mengubah angka yang dilihat orang di Master Pos Dealer. Sebelumnya nilainya tinggal
  * di <select> — dan satu set <select> tidak bisa menyimpan empat halaman sekaligus.
  *
@@ -34,7 +34,7 @@ export function makeFilter() {
  * SATU objek filter untuk SELURUH halaman.
  *
  * MEMBALIKKAN keputusan 2026-08-29 ("Nilai filter di objek per halaman") — permintaan
- * langsung tim 2026-09-17: memilih Kota di halaman Insight & Peta lalu membuka
+ * langsung tim 2026-09-17: memilih Kota di halaman Sales Analytics lalu membuka
  * Confidence Fusion harus memberi Kota yang sama. Filter yang diam-diam berbeda antar
  * halaman membuat dua layar menampilkan angka berbeda untuk pertanyaan yang sama, dan
  * tidak ada yang tahu mana yang benar.

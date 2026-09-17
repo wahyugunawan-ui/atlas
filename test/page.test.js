@@ -227,6 +227,45 @@ function test() {
     'switchTab tidak menyetel halaman filter yang aktif — tabelnya akan digambar ' +
     'dengan filter halaman sebelumnya');
 
+  // Dua kendali milik halaman Confidence Fusion (LIVE dan "Cakupan Sumber") pindah ke
+  // bilah filter GLOBAL pada 2026-09-17 atas permintaan tim, di sebelah ikon Proporsi
+  // Penjualan. Bilah itu dipakai HAMPIR SEMUA halaman, jadi keduanya wajib
+  // disembunyikan di luar halaman Fusion. Kalau tidak: tombol LIVE tampil di Master
+  // Pos Dealer, dan menekannya memutar filter Kota tiap 3,5 detik di halaman yang
+  // bahkan tidak memegang petanya — persis kelas bug "interval tertinggal di halaman
+  // tak terlihat" yang sudah pernah terjadi pada panel Performa.
+  // SEMUA pencarian di blok ini memakai htmlTanpaKomentar, bukan html mentah — alasan
+  // yang sama persis dengan yang ditulis di atas: komentar di sebelah bilah filter
+  // menyebut <main> sebagai prosa, dan pencarian polos akan menemukan kalimat itu,
+  // bukan tagnya. Saya sendiri baru terjebak di situ waktu menulis penjaga ini.
+  assert.ok(htmlTanpaKomentar.includes('id="fx-kendali"'),
+    'blok kendali Fusion (#fx-kendali) hilang dari markup');
+  assert.ok(htmlTanpaKomentar.indexOf('id="fx-kendali"')
+    > htmlTanpaKomentar.indexOf('id="filter-bar"'),
+    '#fx-kendali tidak berada di dalam bilah filter');
+  assert.ok(htmlTanpaKomentar.indexOf('id="fx-kendali"')
+    < htmlTanpaKomentar.indexOf('<main'),
+    '#fx-kendali jatuh ke dalam <main> — bilah filter ada di LUAR area yang menggulir');
+
+  // Kurung tutup pertama sesudahnya memang milik pembungkusnya: isinya cuma <button>,
+  // tidak ada <div> bersarang yang bisa menyesatkan pencarian non-greedy ini.
+  const blokKendali = /<div id="fx-kendali"[\s\S]*?<\/div>/.exec(htmlTanpaKomentar);
+  assert.ok(blokKendali, 'pembungkus #fx-kendali tidak utuh');
+  assert.ok(blokKendali[0].includes('id="fx-live"'),
+    'tombol LIVE tidak ada di dalam #fx-kendali');
+  assert.ok(blokKendali[0].includes('toggleCakupanPanel()'),
+    'tombol Cakupan Sumber tidak ada di dalam #fx-kendali');
+
+  // Id ganda = tombol lama belum dibuang dari kepala halaman Fusion. Gejalanya jahat:
+  // syncTombolLive() cuma menemukan yang pertama, jadi salah satu tombol berhenti
+  // menunjukkan keadaan menyala/mati sementara keduanya tetap bisa ditekan.
+  assert.strictEqual((htmlTanpaKomentar.match(/id="fx-live"/g) || []).length, 1,
+    'id fx-live muncul lebih dari sekali di markup');
+
+  assert.match(switchBodyFn,
+    /fx-kendali'\)[\s\S]*?classList\.toggle\('hidden', name !== 'fusion'\)/,
+    'switchTab tidak menyembunyikan kendali Fusion (#fx-kendali) di halaman lain');
+
   // Tiap ujung rentang punya DUA dropdown: bulan dan tahun (KF-FILTER-4). Versi
   // sebelumnya memakai <input type="month">, dan di situ tahunnya cuma bisa diketik —
   // tidak ada daftarnya. Tim memintanya bisa dipilih juga.

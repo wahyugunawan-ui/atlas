@@ -377,7 +377,7 @@
     <span class="text-white/60 text-[9px] font-bold uppercase tracking-wider">Marketing Intelligence</span>
   </div>
   <div class="flex items-center gap-1 overflow-x-auto">
-    <button onclick="switchTab('peta')" id="nav-peta" class="nav-btn active whitespace-nowrap flex items-center px-3.5 py-1.5 rounded-xl text-sm font-semibold"><i class="ph ph-squares-four text-lg mr-2"></i> Insight &amp; Peta</button>
+    <button onclick="switchTab('peta')" id="nav-peta" class="nav-btn active whitespace-nowrap flex items-center px-3.5 py-1.5 rounded-xl text-sm font-semibold"><i class="ph ph-squares-four text-lg mr-2"></i> Sales Analytics</button>
     <!-- Flyout ketiga, mengikuti pola Master dan Data. BEDA sifatnya dari keduanya:
          ketiga bagian Import ada di SATU halaman, jadi opsinya menggulir ke bagian
          itu, bukan berpindah tab. Tombolnya sendiri tetap membuka halaman Import
@@ -462,6 +462,17 @@
     <!-- Sejak 2026-09-14: "PROPORSI PENJUALAN" tidak lagi kartu inline di halaman —
          cuma tombol ini, buka popup (openTreemapFull(), lihat #modal-treemap). -->
     <button onclick="openTreemapFull()" title="Proporsi Penjualan" class="ml-auto shrink-0 text-slate-400 hover:text-slate-700 px-2"><i class="ph-fill ph-chart-bar text-lg"></i></button>
+    <!-- Dua kendali milik halaman Confidence Fusion, menumpang di bilah global
+         (permintaan tim: di sebelah ikon Proporsi Penjualan). Ditaruh SESUDAH ikon
+         itu, bukan sebelumnya: `ml-auto` di ikon itulah yang merata-kanankan seluruh
+         ujung bilah, jadi menyisipkan di depannya akan menggeser tata letak SEMUA
+         halaman begitu blok ini disembunyikan. switchTab() (tables.js) yang
+         menyembunyikannya di luar halaman Fusion. -->
+    <div id="fx-kendali" class="hidden shrink-0 flex items-center gap-1">
+      <button id="fx-live" onclick="toggleLiveFusion()" title="Putar filter Kota otomatis untuk layar wallboard"
+              class="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph-fill ph-play"></i>LIVE</button>
+      <button onclick="toggleCakupanPanel()" class="px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50">Cakupan Sumber</button>
+    </div>
     <button onclick="resetFilters()" title="Kembali ke seluruh penjualan" class="shrink-0 text-slate-400 hover:text-slate-700 px-2"><i class="ph ph-arrow-counter-clockwise text-lg"></i></button>
   </div>
 </div>
@@ -1066,11 +1077,10 @@
       <input id="telusur-mesin" type="text" placeholder="Telusur Nomor Mesin…"
         onkeydown="if(event.key==='Enter') bukaTelusurMesin()"
         class="px-2 py-1 rounded-lg border border-slate-200 text-[11px] mono w-44">
-      <!-- Mode Live/wallboard. Spesifikasi menaruhnya di sidebar; tata letak grid
-           yang diminta tim tidak punya sidebar, jadi tempatnya di kepala halaman. -->
-      <button id="fx-live" onclick="toggleLiveFusion()" title="Putar filter Kota otomatis untuk layar wallboard"
-              class="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph-fill ph-play"></i>LIVE</button>
-      <button onclick="toggleCakupanPanel()" class="px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50">Cakupan Sumber</button>
+      <!-- LIVE dan "Cakupan Sumber" TIDAK lagi di sini. Sejak 2026-09-17 keduanya
+           menumpang di bilah filter global, di sebelah ikon Proporsi Penjualan
+           (permintaan tim) — lihat #fx-kendali di dekat #filter-bar. Yang tertinggal
+           di kepala halaman cuma telusur, karena ia milik halaman ini seutuhnya. -->
       <button onclick="bukaTelusurMesin()" class="px-2 py-1 rounded-lg text-[11px] font-bold text-white" style="background:var(--astra-navy)">Telusur</button>
     </div>
   </div>

@@ -475,7 +475,7 @@ function scopeSummary(rows) {
 }
 
 /**
- * Kartu ringkasan UTAMA di puncak halaman Insight & Peta — menggantikan 4 KPI
+ * Kartu ringkasan UTAMA di puncak halaman Sales Analytics — menggantikan 4 KPI
  * statis (Dealer Aktif/Total Penjualan/Kelurahan Terlayani/Kelurahan Kosong) yang
  * sebelumnya SELALU sama nilainya berapa pun filternya. Sejak 2026-08-31 malam
  * ikut scope, sama seperti scopeSummary() (ringkas-jangkauan, panel Performa) —

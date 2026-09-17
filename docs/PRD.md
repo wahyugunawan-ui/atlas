@@ -202,7 +202,7 @@ halaman. Ditambahkan 2026-08-29 atas permintaan tim menjelang presentasi HO.
 |---|---|---|
 | KF-FILTER-1 | Bilah penyaring selalu terlihat, tidak ikut menggulir bersama isi halaman | `test/page.test.js` |
 | KF-FILTER-2 | Bilah muncul di semua halaman kecuali Import Data | `test/page.test.js` |
-| KF-FILTER-3 | Nilai penyaring **terpisah per halaman** — menyaring di Insight & Peta tidak mengubah angka di halaman lain | `test/filters.test.js` |
+| KF-FILTER-3 | Nilai penyaring **terpisah per halaman** — menyaring di Sales Analytics tidak mengubah angka di halaman lain | `test/filters.test.js` |
 | KF-FILTER-4 | Periode berupa **rentang** "bulan dari" – "bulan sampai"; bulan dan tahun dua-duanya dipilih dari daftar | `test/page.test.js` |
 | KF-FILTER-5 | Ujung rentang yang menyilang diseret, bukan ditolak — isian tidak pernah jadi jalan buntu | `test/filters.test.js` |
 | KF-FILTER-11 | Memilih tanda hubung berarti "tanpa batas di sisi itu", bukan hasil kosong | `test/filters.test.js` |
@@ -228,7 +228,7 @@ Sebelumnya tabel Master Pos dan Master Kelurahan menyaring barisnya dengan penya
 sendiri tapi menghitung kolom angkanya dengan penyaring halaman Peta — dua halaman
 menjawab pertanyaan yang sama dengan angka yang berbeda.
 
-### KF-PETA — Insight & Peta
+### KF-PETA — Sales Analytics
 
 | ID | Kebutuhan | Dijaga |
 |---|---|---|

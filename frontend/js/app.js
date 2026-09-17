@@ -119,7 +119,7 @@ Object.assign(window, HANDLERS);
    ========================================================================== */
 
 /**
- * Gambar ulang halaman Insight & Peta.
+ * Gambar ulang halaman Sales Analytics.
  *
  * Namanya "semua" karena dia menggambar SELURUH halaman Peta sekaligus, bukan karena
  * dia menggambar seluruh aplikasi. Halaman lain punya penggambarnya sendiri dan

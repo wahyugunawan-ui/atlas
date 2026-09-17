@@ -249,7 +249,7 @@ export function finishImport() {
   STATE.result = null;
   $('imp-input').value = '';
   $('imp-file').classList.add('hidden');
-  toast('Data sudah masuk. Buka tab Insight & Peta untuk melihatnya.', 'ok');
+  toast('Data sudah masuk. Buka tab Sales Analytics untuk melihatnya.', 'ok');
   window.reloadSummary();
 }
 
