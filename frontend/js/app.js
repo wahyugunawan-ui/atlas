@@ -59,6 +59,7 @@ import {
   askDeletePeriod, closeDeletePeriod, confirmDeletePeriod, deletePeriodTyped,
   dragLeave, dragOver, dropFile, fileChosen, finishImport, importPeriodChanged,
   importStep, pickFile, refreshImportTab, reimportPeriod, reviewImport, runUpload,
+  togglePeriodeDetail,
   setupImportTab,
 } from './import.js';
 import {
@@ -100,6 +101,7 @@ const HANDLERS = {
   // impor
   importStep, importPeriodChanged, pickFile, fileChosen, dropFile, dragOver, dragLeave,
   runUpload, reviewImport, finishImport, reimportPeriod, refreshImportTab,
+  togglePeriodeDetail,
   askDeletePeriod, closeDeletePeriod, deletePeriodTyped, confirmDeletePeriod,
   // dipanggil antar modul lewat window supaya tidak ada lingkaran import
   // syncFilterBar ikut didaftarkan sejak mode Live halaman Fusion: fusion.js

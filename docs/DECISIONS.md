@@ -3681,3 +3681,70 @@ tes ber-`document`-tiruan kembali 8/8.
 
 **Caveat:** belum dilihat di browser. Khususnya apakah 3,5 detik terasa pas, dan
 apakah 15 langkah putaran (Semua + 14 kota) terlalu panjang untuk wallboard.
+
+## [2026-09-17] Halaman Import jadi tiga panel, dan checklist yang membaca DATA bukan LOG
+
+Ternyata kedua panel yang diminta sudah ada — "Periode Tersimpan" dan "Riwayat
+Impor" bertumpuk di kolom ketiga. Jadi pekerjaannya memecah tumpukan itu jadi
+kiri dan kanan, lalu menambah checklist tiga jenis data. Bukan membangun dua
+panel baru.
+
+**Empat kolom, bukan tiga.** Wizard 4 tahap mengambil dua kolom; menyempitkannya
+jadi sepertiga demi kerapian akan merusak bagian yang selama ini sudah bekerja.
+
+### Checklist dibaca dari tabel datanya, bukan dari riwayat impor
+
+Ini keputusan pokoknya, dan bukan teoretis. Diukur pada data yang ada: periode
+**2026-09 punya catatan impor penjualan ber-hasil "ok"** (18 Agustus), lalu
+catatan **"hapus"** sebelas hari kemudian. Tabel `sales` tidak punya satu baris
+pun untuk bulan itu. Checklist yang dibaca dari log akan mencentang bulan itu
+sebagai punya data penjualan — pernyataan yang salah, dan salah dengan cara yang
+tidak kelihatan salah.
+
+Log bercerita apa yang pernah TERJADI; panel ini harus menjawab apa yang SEKARANG
+tersimpan. `periodDataSummary()` karena itu menghitung dari `sales`,
+`customer_ktp`, dan `service_visit` langsung. Diverifikasi: 2026-08 → KTP 19.598,
+Servis 186.471; 2026-09 tidak muncul sama sekali, persis seperti seharusnya.
+
+Periodenya **gabungan** dari ketiga sumber, bukan cuma dari `sales`: satu bulan
+bisa sudah punya Data KTP tapi belum punya penjualan, dan bulan seperti itu harus
+tetap terdaftar.
+
+### Tiga keadaan, bukan dua
+
+`ada` / `kosong` / `tak-diketahui`. Yang terakhir muncul kalau database PII tidak
+tersedia — hitungannya `null`, BUKAN nol. Menyamakannya dengan "kosong" membuat
+layar berkata data tidak ada padahal yang benar adalah kita tidak bisa
+memeriksanya, dan akibatnya nyata: orang bisa mengimpor ulang sebulan penuh
+karena mengira datanya hilang. Mengikuti konvensi `if (!db) return null` yang
+sudah dipakai `customersInVillage()`.
+
+Ringkasannya juga tidak mencampur: "1 dari 1 jenis data tersimpan · 2 tidak bisa
+diperiksa", bukan "1 dari 3" — pecahan yang penyebutnya memuat hal yang tidak
+pernah diperiksa itu menyesatkan.
+
+### Batasan yang disampaikan, bukan diakali
+
+`delivery_ping` **tidak punya kolom periode sama sekali**. Data Pengiriman karena
+itu tidak bisa diatribusikan ke bulan mana pun tanpa mengarang, dan sengaja tidak
+ikut di checklist. Menebaknya dari `sent_at` akan menghasilkan angka yang terlihat
+resmi tanpa dasar.
+
+### Cacat yang saya timbulkan sendiri, dan cara menutupnya
+
+`import.js` memakai `checklistPeriode()` dan `ringkasChecklist()` tapi saya tidak
+pernah menambahkan impornya — kelas cacat yang sama untuk kesekian kalinya di
+sesi ini, dan `node --check` memang tidak menangkapnya. Yang menutupnya bukan
+pembacaan mata melainkan **probe impor runtime**: memuat modulnya di Node dengan
+`document` tiruan. Itu memberi jawaban tegas (termuat / gagal), bukan dugaan.
+
+Catatan berulang: pemeriksa statis buatan sendiri kembali menandai satu "masalah"
+yang ternyata ambang hitungan saya yang salah — `checklistPeriode(` memang cuma
+muncul sekali, karena baris impor menulis namanya tanpa tanda kurung. Sudah
+ketujuh kalinya pola ini terjadi sepanjang sesi.
+
+38/38 berkas tes lolos. Empat mutasi merah di atas baseline hijau, termasuk yang
+menciutkan "tidak bisa diperiksa" jadi "kosong" dan yang memasukkannya ke penyebut
+ringkasan.
+
+**Caveat:** belum dilihat di browser.

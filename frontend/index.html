@@ -747,7 +747,21 @@
     <p class="text-sm text-slate-500 mt-0.5">Satu berkas Excel per bulan &middot; data bulan yang sama akan diganti, bulan lain tidak tersentuh</p>
   </div>
 
-  <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+  <!-- Tiga panel sejajar (permintaan tim): kiri Periode Tersimpan, tengah progres
+       4 tahap, kanan Riwayat Impor. EMPAT kolom, bukan tiga sama lebar — wizardnya
+       mengambil dua supaya tetap lapang; menyempitkannya jadi sepertiga akan merusak
+       bagian yang selama ini sudah bekerja demi kerapian saja. -->
+  <div class="grid grid-cols-1 xl:grid-cols-4 gap-4">
+
+    <!-- PANEL KIRI. Warnanya sengaja beda dari dua panel putih di sebelahnya: ini
+         satu-satunya panel yang menjawab "apa yang sudah tersimpan", bukan "apa yang
+         sedang saya kerjakan". -->
+    <div class="rounded-2xl shadow-sm border border-blue-100 p-5 h-max" style="background:#f5f8ff">
+      <div class="text-sm font-bold text-slate-700 mb-1"><i class="ph-fill ph-calendar-check"></i> Periode Tersimpan</div>
+      <p class="text-xs text-slate-400 mb-3">Dibaca dari datanya sendiri, bukan dari riwayat impor. Klik satu bulan untuk rinciannya.</p>
+      <div id="imp-periods" class="space-y-2"></div>
+    </div>
+
     <div class="xl:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
 
       <div class="flex items-center gap-3 mb-6 text-xs font-bold">
@@ -854,17 +868,11 @@
       </div>
     </div>
 
-    <div class="space-y-4">
-      <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
-        <div class="text-sm font-bold text-slate-700 mb-1"><i class="ph-fill ph-calendar-check"></i> Periode Tersimpan</div>
-        <p class="text-xs text-slate-400 mb-3">Tiap bulan berdiri sendiri. Mengimpor ulang satu bulan tidak mengganggu bulan lain.</p>
-        <div id="imp-periods" class="space-y-2"></div>
-      </div>
-      <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
-        <div class="text-sm font-bold text-slate-700 mb-1"><i class="ph-fill ph-clock-counter-clockwise"></i> Riwayat Impor</div>
-        <p class="text-xs text-slate-400 mb-2">Satu akun dipakai bersama, jadi ini satu-satunya jejak siapa mengubah apa dan kapan.</p>
-        <div id="imp-history"></div>
-      </div>
+    <!-- PANEL KANAN -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 h-max">
+      <div class="text-sm font-bold text-slate-700 mb-1"><i class="ph-fill ph-clock-counter-clockwise"></i> Riwayat Impor</div>
+      <p class="text-xs text-slate-400 mb-2">Satu akun dipakai bersama, jadi ini satu-satunya jejak siapa mengubah apa dan kapan.</p>
+      <div id="imp-history"></div>
     </div>
   </div>
 </section>

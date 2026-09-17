@@ -12,6 +12,9 @@ import {
 } from './api.js';
 import { MONTHS } from './config.js';
 import { $, esc, formatNumber, monthLabel, toast } from './dom.js';
+// Checklist jenis data per periode. Logikanya di modul murni supaya bisa diuji tanpa
+// browser — khususnya pembedaan "kosong" vs "tidak bisa diperiksa".
+import { checklistPeriode, ringkasChecklist } from './import-periods.js';
 
 const STATE = {
   step: 1,
@@ -247,30 +250,75 @@ export function finishImport() {
    DAFTAR PERIODE DAN RIWAYAT
    ========================================================================== */
 
+/* Checklist jenis data per periode. Logikanya di modul murni supaya bisa diuji tanpa
+   browser — khususnya pembedaan "kosong" vs "tidak bisa diperiksa". */
+
+/** Periode yang rinciannya sedang dibuka; cuma satu, supaya panel tetap ringkas. */
+let periodeTerbuka = null;
+
+/** Buka/tutup rincian satu periode. Klik periode lain memindahkan, bukan menumpuk. */
+export function togglePeriodeDetail(period) {
+  periodeTerbuka = periodeTerbuka === period ? null : period;
+  refreshImportTab();
+}
+
 export async function refreshImportTab() {
   try {
     const [{ periods }, { imports }] = await Promise.all([fetchPeriods(), fetchImports()]);
     STATE.saved = periods;
 
-    $('imp-periods').innerHTML = periods.length ? periods.map((p) =>
-      `<div class="border border-slate-100 rounded-xl px-3 py-2.5">` +
-      `<div class="flex items-center gap-2">` +
-      `<i class="ph-fill ph-calendar-check text-slate-400"></i>` +
-      `<span class="text-sm font-bold text-slate-800">${esc(monthLabel(p.period))}</span>` +
-      `<span class="ml-auto text-[10px] mono text-slate-400">${esc(p.period)}</span></div>` +
-      `<div class="text-[11px] text-slate-500 mt-1">${esc(formatNumber(p.units))} unit · ` +
-      `${esc(formatNumber(p.villages))} kelurahan · ${esc(formatNumber(p.outlets))} pos</div>` +
-      `<div class="flex items-center gap-3 mt-2">` +
-      `<button onclick="reimportPeriod('${esc(p.period)}')" class="text-[11px] font-bold text-slate-500 hover:text-slate-800">` +
-      `<i class="ph ph-arrow-clockwise"></i> impor ulang bulan ini</button>` +
-      // Didorong ke ujung kanan dan dibiarkan abu-abu sampai disentuh. Dia bersebelahan
-      // dengan tombol impor ulang di kartu yang sama, dan yang satu ini membuang
-      // sebulan data. Yang benar-benar menjaga bukan warnanya, tapi kewajiban mengetik
-      // ulang periodenya di dialog.
-      `<button onclick="askDeletePeriod('${esc(p.period)}')" class="ml-auto text-[11px] font-semibold text-slate-400 hover:text-red-600">` +
-      `<i class="ph ph-trash"></i> hapus</button>` +
-      `</div></div>`).join('')
-      : '<p class="text-xs text-slate-400">Belum ada data. Impor berkas pertama di sebelah kiri.</p>';
+    $('imp-periods').innerHTML = periods.length ? periods.map((p) => {
+      const daftar = checklistPeriode(p);
+      const terbuka = periodeTerbuka === p.period;
+
+      // Tiga keadaan, tiga tampilan. "tak-diketahui" TIDAK boleh terlihat sama dengan
+      // "kosong": yang satu berarti diperiksa dan memang nihil, yang satu lagi berarti
+      // database konsumen tidak tersedia sehingga tidak bisa diperiksa sama sekali.
+      const cip = daftar.map((j) => {
+        const gaya = {
+          ada: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+          kosong: 'bg-slate-50 text-slate-400 border-slate-200',
+          'tak-diketahui': 'bg-amber-50 text-amber-700 border-amber-200',
+        }[j.status];
+        const ikon = { ada: 'ph-check-circle', kosong: 'ph-minus-circle', 'tak-diketahui': 'ph-question' }[j.status];
+        return `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[10px] font-semibold ${gaya}" ` +
+          `title="${esc(j.status === 'tak-diketahui' ? 'Database konsumen tidak tersedia — tidak bisa diperiksa' : `${j.jumlah} baris`)}">` +
+          `<i class="ph-fill ${ikon}"></i>${esc(j.label)}</span>`;
+      }).join('');
+
+      const rincian = terbuka
+        ? `<div class="mt-2 pt-2 border-t border-slate-200/70">` +
+          daftar.map((j) =>
+            `<div class="flex items-baseline gap-2 text-[11px] py-0.5">` +
+            `<span class="text-slate-500 flex-1">${esc(j.label)}</span>` +
+            `<span class="mono ${j.status === 'ada' ? 'text-slate-700' : 'text-slate-400'}">${
+              j.jumlah === null ? 'tidak bisa diperiksa' : esc(formatNumber(j.jumlah))}</span></div>`).join('') +
+          `<div class="text-[10px] text-slate-400 mt-1">Impor terakhir: ${
+            esc(p.importedAt ? String(p.importedAt).slice(0, 10) : '—')}</div>` +
+          `<div class="text-[11px] text-slate-500 mt-1">${esc(formatNumber(p.units))} unit · ` +
+          `${esc(formatNumber(p.villages))} kelurahan · ${esc(formatNumber(p.outlets))} pos</div>` +
+          `<div class="flex items-center gap-3 mt-2">` +
+          `<button onclick="reimportPeriod('${esc(p.period)}')" class="text-[11px] font-bold text-slate-500 hover:text-slate-800">` +
+          `<i class="ph ph-arrow-clockwise"></i> impor ulang</button>` +
+          // Didorong ke ujung kanan dan dibiarkan abu-abu sampai disentuh. Dia
+          // bersebelahan dengan tombol impor ulang, dan yang satu ini membuang sebulan
+          // data. Yang benar-benar menjaga bukan warnanya, tapi kewajiban mengetik
+          // ulang periodenya di dialog.
+          `<button onclick="askDeletePeriod('${esc(p.period)}')" class="ml-auto text-[11px] font-semibold text-slate-400 hover:text-red-600">` +
+          `<i class="ph ph-trash"></i> hapus</button></div></div>`
+        : '';
+
+      return `<div class="bg-white border border-slate-200 rounded-xl px-3 py-2.5">` +
+        `<button onclick="togglePeriodeDetail('${esc(p.period)}')" class="w-full text-left">` +
+        `<div class="flex items-center gap-2">` +
+        `<i class="ph-fill ${terbuka ? 'ph-caret-down' : 'ph-caret-right'} text-slate-400"></i>` +
+        `<span class="text-sm font-bold text-slate-800">${esc(monthLabel(p.period))}</span>` +
+        `<span class="ml-auto text-[10px] mono text-slate-400">${esc(p.period)}</span></div>` +
+        `<div class="flex flex-wrap gap-1 mt-1.5">${cip}</div>` +
+        `<div class="text-[10px] text-slate-400 mt-1">${esc(ringkasChecklist(daftar))}</div>` +
+        `</button>${rincian}</div>`;
+    }).join('')
+      : '<p class="text-xs text-slate-400">Belum ada data. Impor berkas pertama di panel tengah.</p>';
 
     $('imp-history').innerHTML = imports.length ? imports.slice(0, 8).map((h) =>
       `<div class="flex items-center gap-2 px-2 py-1.5 text-[11px] border-b border-slate-50 last:border-0">` +

@@ -122,7 +122,10 @@ function build(config) {
   });
 
   api.get('/periods', async (req, res) => {
-    res.json({ periods: await repo.periodSummary() });
+    // periodDataSummary, bukan periodSummary: halaman Import perlu tahu JENIS data
+    // apa saja yang tersimpan tiap bulan, bukan cuma angka penjualannya. Field lama
+    // tetap ada apa adanya, jadi pemanggil lain tidak perlu berubah.
+    res.json({ periods: await repo.periodDataSummary() });
   });
 
   /**

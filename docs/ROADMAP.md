@@ -382,14 +382,25 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
   `filter-bar.js`; diperbaiki dengan memanggil `syncFilterBar` lewat `window`
   sesuai konvensi yang sudah ada. Lihat `docs/DECISIONS.md`.
 
+- **Halaman Import jadi tiga panel + checklist jenis data per periode.**
+  Kiri "Periode Tersimpan" (warna beda, checklist Penjualan/KTP/Servis, klik
+  untuk rincian + impor ulang + hapus), tengah progres 4 tahap, kanan "Riwayat
+  Impor". Empat kolom, bukan tiga — wizardnya mengambil dua supaya tetap
+  lapang. Checklist dibaca dari TABEL DATANYA, bukan dari log impor: periode
+  2026-09 tercatat "ok" di log tapi tabel `sales`-nya kosong, jadi log akan
+  mencentang data yang sudah tidak ada. Tiga keadaan dibedakan — ada, kosong,
+  dan tidak bisa diperiksa (database PII tidak tersedia). Lihat
+  `docs/DECISIONS.md`.
+
 **Belum dikerjakan (sisa Tahap F, lihat tabel tahapan di `docs/FUSION.md`):**
 - Cross-filtering penuh di sidebar (mode Live-nya sudah jadi, lihat di atas)
-- Halaman Import jadi grid 3 panel: kiri "Periode Tersimpan" (checklist 3
-  jenis data per periode, klik → jumlah/tanggal/hapus), tengah progres 4
-  tahap, kanan "Riwayat Impor" — plus akses lewat dropdown hover menu
-  "Import Data" mengikuti pola menu Master, dan tombol unggah Data
-  KTP/Servis. Sampai itu ada, ketiga rute impor baru dipanggil lewat alat
-  lain.
+- Sisa halaman Import: akses tiga bagiannya lewat dropdown hover menu "Import
+  Data" mengikuti pola menu Master, dan tombol unggah Data KTP/Servis. Sampai
+  tombolnya ada, kedua rute impor itu dipanggil lewat alat lain. (Tata letak
+  tiga panelnya sendiri sudah jadi, lihat di atas.)
+- Kolom periode untuk `delivery_ping` — tanpa itu Data Pengiriman tidak bisa
+  masuk checklist "Periode Tersimpan", karena ping tidak bisa diatribusikan ke
+  bulan mana pun tanpa mengarang.
 - F UI sisa: layer peta baru. (Menu **Data** dengan tiga subhalaman —
   "berdasarkan KTP", "Lokasi Service", "berdasarkan Lokasi Delivery" — dan
   halaman Confidence Fusion SUDAH ada; ketiganya sempat tampak belum ada

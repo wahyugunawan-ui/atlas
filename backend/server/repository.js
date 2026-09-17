@@ -160,6 +160,67 @@ function periodSummary() {
 }
 
 /**
+ * Ringkasan per periode berikut JENIS DATA apa saja yang tersimpan untuk bulan itu.
+ *
+ * Diturunkan dari TABEL DATANYA, bukan dari log impor — dan bedanya nyata. Diukur
+ * pada data yang ada: periode 2026-09 punya catatan impor penjualan ber-hasil "ok",
+ * lalu catatan "hapus" beberapa hari kemudian. Membaca log akan menyatakan bulan itu
+ * punya data penjualan, padahal tabel `sales` tidak punya satu baris pun untuknya.
+ * Log bercerita apa yang pernah TERJADI; panel ini harus menjawab apa yang SEKARANG
+ * tersimpan.
+ *
+ * Periodenya GABUNGAN dari tiga sumber, bukan cuma dari `sales`: satu bulan bisa
+ * sudah punya Data KTP tapi belum punya penjualan, dan bulan seperti itu harus tetap
+ * muncul di daftar.
+ *
+ * KTP dan Servis tinggal di database PII. Kalau database itu tidak ada, hitungannya
+ * `null` — BUKAN nol. Nol berarti "diperiksa, memang kosong"; null berarti "tidak
+ * bisa diperiksa". Menyamakan keduanya membuat layar berkata data tidak ada padahal
+ * yang benar adalah kita tidak tahu. Mengikuti pola `if (!db) return null` yang sudah
+ * dipakai customersInVillage().
+ *
+ * Data Pengiriman SENGAJA tidak ikut: `delivery_ping` tidak punya kolom periode sama
+ * sekali, jadi ping tidak bisa diatribusikan ke bulan mana pun tanpa mengarang.
+ */
+async function periodDataSummary() {
+  const penjualan = await periodSummary();
+
+  const pii = store.customers();
+  const hitungPii = async (tabel) => {
+    if (!pii) return null;
+    const baris = await store.all(pii,
+      `SELECT period, COUNT(*) AS n FROM ${tabel} GROUP BY period`);
+    const peta = {};
+    baris.forEach((b) => { peta[b.period] = Number(b.n); });
+    return peta;
+  };
+
+  const ktp = await hitungPii('customer_ktp');
+  const servis = await hitungPii('service_visit');
+
+  const semua = new Set(penjualan.map((p) => p.period));
+  [ktp, servis].forEach((peta) => {
+    if (peta) Object.keys(peta).forEach((p) => semua.add(p));
+  });
+
+  const perPeriode = {};
+  penjualan.forEach((p) => { perPeriode[p.period] = p; });
+
+  return [...semua].sort().reverse().map((period) => {
+    const dasar = perPeriode[period] || {
+      period, units: 0, villages: 0, outlets: 0, importedAt: null,
+    };
+    return {
+      ...dasar,
+      period,
+      // null = database PII tidak ada, jadi tidak bisa diperiksa.
+      ktpRows: ktp ? (ktp[period] || 0) : null,
+      servisRows: servis ? (servis[period] || 0) : null,
+    };
+  });
+}
+
+/**
  * Konsumen di SATU kelurahan.
  *
  * Wajib pakai kode kelurahan — tidak ada jalan mengambil semuanya sekaligus. Ini
@@ -1520,7 +1581,7 @@ module.exports = {
   latestFusionPeriod, fusionTotals, fusionRows, fusionByCity, fusionByDealer,
   fusionEngineDetail, setAppConfig, fusionMatrix, fusionOverlap, legacyDealerCode,
   fusionSourceCoverage, fusionVillagePoints,
-  summary, unmatched, imports, periodSummary,
+  summary, unmatched, imports, periodSummary, periodDataSummary,
   customersInVillage, browseCustomers, hasCustomers, logCustomerAccess, updateOutlet,
   resetOutlets, allDealerRings, allPosCoverage, districts, saveDealerRings, savePosCoverage,
   resolveDealer, createOutlet, deletePeriod,
