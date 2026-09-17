@@ -52,7 +52,8 @@ import {
 } from './tables.js';
 import {
   bukaTelusurMesin, cariCakupan, renderDeliveryTable, renderFusion, renderServiceTable,
-  setModeGolongan, toggleCakupanPanel, toggleSumberCakupan, tutupTelusurMesin,
+  setModeGolongan, toggleCakupanPanel, toggleLiveFusion, toggleSumberCakupan,
+  tutupTelusurMesin,
 } from './fusion.js';
 import {
   askDeletePeriod, closeDeletePeriod, confirmDeletePeriod, deletePeriodTyped,
@@ -88,7 +89,7 @@ const HANDLERS = {
   // penyatuan tiga sumber (docs/FUSION.md Tahap F)
   renderFusion, renderServiceTable, renderDeliveryTable,
   toggleSumberCakupan, cariCakupan, bukaTelusurMesin, tutupTelusurMesin,
-  setModeGolongan, toggleCakupanPanel,
+  setModeGolongan, toggleCakupanPanel, toggleLiveFusion,
   editDealerRingFromTable, editPosCoverageFromTable,
   openNewOutlet, closeNewOutlet, newOutletDealerChanged, saveNewOutlet,
   askResetOutlets, closeResetOutlets, resetOutletsTyped, confirmResetOutlets,
@@ -101,7 +102,11 @@ const HANDLERS = {
   runUpload, reviewImport, finishImport, reimportPeriod, refreshImportTab,
   askDeletePeriod, closeDeletePeriod, deletePeriodTyped, confirmDeletePeriod,
   // dipanggil antar modul lewat window supaya tidak ada lingkaran import
-  renderAll, reloadSummary, syncHeatmapModeButtons, syncGroupControls,
+  // syncFilterBar ikut didaftarkan sejak mode Live halaman Fusion: fusion.js
+  // memanggilnya lewat window supaya tidak perlu meng-import filter-bar.js —
+  // impor itu menarik combobox.js yang menyentuh `document` saat dimuat, dan
+  // membuat fusion.js tidak bisa lagi di-import di Node oleh tesnya.
+  renderAll, reloadSummary, syncHeatmapModeButtons, syncGroupControls, syncFilterBar,
 };
 Object.assign(window, HANDLERS);
 

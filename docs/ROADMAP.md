@@ -373,8 +373,17 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
   Pita kuning yang tadinya menganggur karena karesidenan sudah didukung kini
   dipakai untuk mengatakannya.
 
+- **Mode Live/wallboard.** Tombol LIVE memutar filter Kota tiap 3,5 detik,
+  termasuk kembali ke "Semua"; Dealer ikut direset tiap perpindahan lewat
+  aturan eksklusivitas `setScope()`. Berhenti sendiri begitu keluar tab Fusion.
+  Beda dari dua mode live yang sudah ada — keduanya cuma menggulir piksel,
+  yang ini menembak lima permintaan tiap langkah, jadi ada penjaga agar ketukan
+  tidak menumpuk. Versi pertamanya sempat memutus tes lain lewat impor
+  `filter-bar.js`; diperbaiki dengan memanggil `syncFilterBar` lewat `window`
+  sesuai konvensi yang sudah ada. Lihat `docs/DECISIONS.md`.
+
 **Belum dikerjakan (sisa Tahap F, lihat tabel tahapan di `docs/FUSION.md`):**
-- Mode Live/wallboard dan cross-filtering penuh di sidebar
+- Cross-filtering penuh di sidebar (mode Live-nya sudah jadi, lihat di atas)
 - Halaman Import jadi grid 3 panel: kiri "Periode Tersimpan" (checklist 3
   jenis data per periode, klik → jumlah/tanggal/hapus), tengah progres 4
   tahap, kanan "Riwayat Impor" — plus akses lewat dropdown hover menu

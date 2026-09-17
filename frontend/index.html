@@ -1022,6 +1022,10 @@
       <input id="telusur-mesin" type="text" placeholder="Telusur Nomor Mesin…"
         onkeydown="if(event.key==='Enter') bukaTelusurMesin()"
         class="px-2 py-1 rounded-lg border border-slate-200 text-[11px] mono w-44">
+      <!-- Mode Live/wallboard. Spesifikasi menaruhnya di sidebar; tata letak grid
+           yang diminta tim tidak punya sidebar, jadi tempatnya di kepala halaman. -->
+      <button id="fx-live" onclick="toggleLiveFusion()" title="Putar filter Kota otomatis untuk layar wallboard"
+              class="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph-fill ph-play"></i>LIVE</button>
       <button onclick="toggleCakupanPanel()" class="px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50">Cakupan Sumber</button>
       <button onclick="bukaTelusurMesin()" class="px-2 py-1 rounded-lg text-[11px] font-bold text-white" style="background:var(--astra-navy)">Telusur</button>
     </div>

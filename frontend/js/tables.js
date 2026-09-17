@@ -1555,7 +1555,12 @@ export function switchTab(name) {
   // kosong — isinya baru muncul kalau orang kebetulan menyentuh filter.
   // Peta dipinjam halaman Fusion, dan WAJIB dikembalikan begitu keluar — kalau
   // tidak, tab Insight & Peta menampilkan kotak kosong tanpa satu pun pesan.
-  if (name === 'fusion') pinjamPetaKeFusion(); else kembalikanPeta();
+  // Peta dipinjam halaman Fusion, dan mode Live-nya ikut berhenti begitu keluar.
+  // Interval yang tertinggal di halaman tak terlihat terus memindahkan filter Kota
+  // di belakang layar — bug yang sudah pernah terjadi di proyek ini pada panel
+  // Performa (lihat closePerformaFull di render.js).
+  if (name === 'fusion') pinjamPetaKeFusion();
+  else { kembalikanPeta(); hentikanLiveFusion(); }
 
   if (name === 'fusion') renderFusion();
   if (name === 'servis') renderServiceTable();

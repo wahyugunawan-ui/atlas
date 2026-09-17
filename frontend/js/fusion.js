@@ -26,7 +26,21 @@ import {
 // map.js TIDAK mengimpor fusion.js, jadi arah impor ini tidak membuat lingkaran.
 import { gambarTelusurDiPeta, hapusTelusurDiPeta } from './map.js';
 import { $, esc, formatNumber } from './dom.js';
-import { fusionFilter, persenSumber } from './filters.js';
+import { ALLOWED_CITY_CODES } from './config.js';
+import { fusionFilter, kotaBerikutnya, pageFilters, persenSumber, setScope } from './filters.js';
+import { S } from './state.js';
+// CATATAN: `syncFilterBar` SENGAJA dipanggil lewat `window`, bukan di-import.
+//
+// Meng-import filter-bar.js dari sini menariknya beserta combobox.js, dan
+// combobox.js memanggil `document.addEventListener` saat modul dimuat. Akibatnya
+// fusion.js tidak lagi bisa di-import di Node — dan itu langsung mematahkan
+// test/fusion-cakupan.test.js yang memang menguji modul ini dengan `document`
+// tiruan seadanya. Sudah kejadian; ini perbaikannya.
+//
+// Pola window ini bukan karangan baru: setScope() di filters.js memanggil
+// window.syncHeatmapModeButtons dan window.syncGroupControls dengan alasan yang
+// sama persis, dan blok HANDLERS di app.js menandai keduanya "dipanggil antar
+// modul lewat window supaya tidak ada lingkaran import".
 import { SEGMENTS, SUMBER } from './fusion-segments.js';
 
 /** Satu-satunya tempat status diterjemahkan jadi warna, biar konsisten antar panel. */
@@ -609,6 +623,80 @@ function catatanAbaikan(f) {
   return f.abaikan.map((k) =>
     `<div class="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 ` +
     `text-[11px] text-amber-800">${esc(pesan[k] || k)}</div>`).join('');
+}
+
+/* ==========================================================================
+   MODE LIVE / WALLBOARD (docs/FUSION.md 3.5)
+   ==========================================================================
+   Filter Kota berpindah sendiri tiap ~3,5 detik, termasuk kembali ke "Semua".
+   Dealer ikut direset tiap perpindahan — itu didapat GRATIS dari aturan
+   eksklusivitas di setScope(), bukan ditulis ulang di sini.
+
+   BEDA dari dua mode live yang sudah ada (Performa dan Wilayah): keduanya cuma
+   menggulir piksel tiap 40 ms tanpa menyentuh jaringan. Yang ini memindahkan
+   filter, dan tiap perpindahan menembak LIMA permintaan ke server — karena itu
+   ada penjaga `sibukLive` di bawah.
+   ========================================================================== */
+
+const JEDA_LIVE_MS = 3500;
+
+/** Putaran kota: "Semua" lalu tiap kota cakupan, berulang. */
+const PUTARAN_LIVE = ['ALL', ...ALLOWED_CITY_CODES];
+
+/** Benar selama satu langkah masih menunggu jawaban server. */
+let sibukLive = false;
+
+function syncTombolLive() {
+  const tombol = $('fx-live');
+  if (!tombol) return;
+  tombol.classList.toggle('live-nyala', Boolean(S.liveFusion));
+  const ikon = tombol.querySelector('i');
+  if (ikon) ikon.className = S.liveFusion ? 'ph-fill ph-stop' : 'ph-fill ph-play';
+}
+
+/**
+ * Satu langkah putaran.
+ *
+ * `force: true` WAJIB: tanpa itu setScope() bersifat toggle, dan menyetel kota yang
+ * sama dua kali justru mematikannya — putarannya akan tersendat di 'ALL'.
+ *
+ * Ketukan dilewati kalau langkah sebelumnya belum dijawab server. Tanpa ini, server
+ * yang lambat membuat permintaan menumpuk dan jawabannya bisa tiba tidak berurutan —
+ * layar menampilkan kota yang BUKAN kota yang sedang ditunjuk dropdown.
+ */
+async function langkahLive() {
+  if (sibukLive) return;
+  sibukLive = true;
+  try {
+    const sekarang = pageFilters('fusion').cityCode;
+    setScope('kota', kotaBerikutnya(sekarang, PUTARAN_LIVE), true);
+    window.syncFilterBar();
+    await renderFusion();
+  } finally {
+    sibukLive = false;
+  }
+}
+
+/** Hentikan putaran TANPA menandai dijeda manusia — dipakai waktu keluar tab. */
+export function hentikanLiveFusion() {
+  if (!S.liveFusion) return;
+  clearInterval(S.liveFusion);
+  S.liveFusion = null;
+  sibukLive = false;
+  syncTombolLive();
+}
+
+/** Tombol LIVE — dipencet manusia, jadi jedanya ikut ditandai. */
+export function toggleLiveFusion() {
+  if (S.liveFusion) {
+    hentikanLiveFusion();
+    S.liveFusionPaused = true;
+    return;
+  }
+  S.liveFusionPaused = false;
+  S.liveFusion = setInterval(langkahLive, JEDA_LIVE_MS);
+  syncTombolLive();
+  langkahLive();          // langsung bergerak, tidak menunggu 3,5 detik pertama
 }
 
 /** Tulis ke satu slot grid. Kerangkanya sendiri tidak pernah disentuh. */

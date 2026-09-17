@@ -177,6 +177,23 @@ export function persenSumber(n, total) {
   return Math.round((Number(n) || 0) / pembagi * 100);
 }
 
+/**
+ * Kota berikutnya dalam putaran mode Live.
+ *
+ * Daftarnya melingkar dan SELALU melewati 'ALL' sekali tiap putaran — permintaan
+ * docs/FUSION.md 3.5 ("termasuk kembali ke Semua"). Tanpa itu layar wallboard tidak
+ * pernah menampilkan angka keseluruhan, padahal itu justru angka yang paling sering
+ * dicari orang yang lewat.
+ *
+ * Kota yang TIDAK ada di daftar (mis. tersisa dari filter manual sebelum Live
+ * dinyalakan) diperlakukan sebagai awal putaran, bukan dibiarkan macet di tempat.
+ */
+export function kotaBerikutnya(sekarang, daftar) {
+  const putaran = Array.isArray(daftar) && daftar.length ? daftar : ['ALL'];
+  const posisi = putaran.indexOf(sekarang || 'ALL');
+  return putaran[(posisi + 1) % putaran.length];
+}
+
 export function activeRows(page) {
   const f = pageFilters(page);
 

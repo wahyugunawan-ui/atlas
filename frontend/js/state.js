@@ -120,6 +120,12 @@ export const S = {
   // di atas.
   liveWilayah: null,
   liveWilayahPaused: false,
+  // Mode Live halaman Confidence Fusion (docs/FUSION.md 3.5) — pola penamaan sama
+  // dengan dua di atas. BEDA sifatnya: dua yang di atas cuma menggulir piksel tiap
+  // 40 ms, yang ini memindahkan filter Kota tiap ~3,5 detik dan tiap perpindahan
+  // menembak lima permintaan ke server.
+  liveFusion: null,
+  liveFusionPaused: false,
   treemapView: 'dealer',
   // Sejak 2026-09-14: "Proporsi Penjualan" cuma popup (bukan lagi kartu inline +
   // versi "besar" modal terpisah) — satu chart, satu state, lihat renderTreemap()

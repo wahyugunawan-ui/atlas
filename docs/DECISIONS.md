@@ -3630,3 +3630,54 @@ atas: "Kota menang atas karesidenan" dan "pita tidak muncul kalau dari = sampai"
 Tes database hijau dengan delapan kombinasi saringan.
 
 **Caveat:** belum dilihat di browser.
+
+## [2026-09-17] Mode Live/wallboard, dan satu regresi yang saya timbulkan sendiri
+
+Tombol LIVE memutar filter Kota tiap 3,5 detik, termasuk kembali ke "Semua"
+(`docs/FUSION.md` 3.5). Dealer ikut direset tiap perpindahan — itu didapat GRATIS
+dari aturan eksklusivitas di `setScope()`, bukan ditulis ulang.
+
+**Strukturnya meniru yang sudah ada, perilakunya tidak.** Dua mode live yang ada
+(`livePerforma`, `liveWilayah`) cuma menggulir piksel tiap 40 ms dan tidak
+menyentuh jaringan. Yang ini memindahkan filter, dan tiap perpindahan menembak
+LIMA permintaan ke server. Karena itu ada `sibukLive`: satu ketukan dilewati
+kalau langkah sebelumnya belum dijawab. Tanpa itu, server yang lambat membuat
+jawaban tiba tidak berurutan dan layar menampilkan kota yang BUKAN kota yang
+sedang ditunjuk dropdown.
+
+`force: true` pada `setScope()` juga wajib: tanpanya fungsi itu bersifat toggle,
+dan menyetel kota yang sama dua kali justru mematikannya.
+
+Penjaga "panel tersembunyi" yang diwajibkan 3.5 diterjemahkan jadi: berhenti
+begitu keluar dari tab Fusion, dicantol di `switchTab()`. Padanannya persis
+`closePerformaFull()` yang sudah ada.
+
+**Tombolnya di kepala halaman, bukan sidebar.** Spesifikasi menaruhnya di
+sidebar; tata letak grid yang diminta tim tidak punya sidebar.
+
+### Regresi yang saya timbulkan, dan kenapa tambalannya saya tolak
+
+Versi pertama meng-`import` `syncFilterBar` dari `filter-bar.js`. Itu menarik
+`combobox.js`, yang memanggil `document.addEventListener` SAAT MODUL DIMUAT —
+dan langsung mematahkan `test/fusion-cakupan.test.js`, yang memang menguji
+`fusion.js` di Node dengan `document` tiruan seadanya. Delapan tes merah.
+
+Godaannya melebarkan tiruannya (tambah `addEventListener: () => {}`). Ditolak:
+itu membuat tes Cakupan Sumber bergantung pada rantai impor yang tidak ada
+hubungannya dengan yang diujinya, dan impor baru apa pun di masa depan akan
+mematahkannya lagi. Yang diperbaiki penyebabnya — `syncFilterBar` dipanggil
+lewat `window`, mengikuti konvensi yang SUDAH ADA di proyek ini: `setScope()`
+memanggil `window.syncHeatmapModeButtons` dan `window.syncGroupControls` dengan
+alasan yang sama persis.
+
+Satu jebakan lanjutan yang nyaris lolos: `syncFilterBar` ternyata **belum
+terdaftar** di HANDLERS — ia diimpor app.js dan dipanggil sekali di sana, tapi
+tidak pernah dipasang ke `window`. Memanggilnya lewat `window` tanpa
+mendaftarkannya akan melempar TypeError tiap 3,5 detik. Sekarang terdaftar.
+
+Tiga mutasi merah di atas baseline hijau (nilai kosong tidak dianggap "ALL",
+putaran tidak melingkar, daftar kosong tanpa cadangan). 37/37 berkas tes lolos;
+tes ber-`document`-tiruan kembali 8/8.
+
+**Caveat:** belum dilihat di browser. Khususnya apakah 3,5 detik terasa pas, dan
+apakah 15 langkah putaran (Semua + 14 kota) terlalu panjang untuk wallboard.

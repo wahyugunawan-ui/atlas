@@ -101,6 +101,32 @@ test('rentang periode yang diciutkan DIKATAKAN, bukan didiamkan', async () => {
   assert.deepStrictEqual(fusionFilter(filter({ to: '2026-08' })).abaikan, []);
 });
 
+test('putaran Live melingkar dan selalu melewati "Semua"', async () => {
+  const { kotaBerikutnya } = await import(MODUL);
+  const daftar = ['ALL', '34.04', '33.01'];
+  assert.strictEqual(kotaBerikutnya('ALL', daftar), '34.04');
+  assert.strictEqual(kotaBerikutnya('34.04', daftar), '33.01');
+  // Kembali ke 'ALL', bukan macet di kota terakhir. Wallboard yang tidak pernah
+  // menampilkan angka keseluruhan kehilangan angka yang paling sering dicari.
+  assert.strictEqual(kotaBerikutnya('33.01', daftar), 'ALL');
+});
+
+test('putaran Live: kota di luar daftar tidak membuat putaran macet', async () => {
+  const { kotaBerikutnya } = await import(MODUL);
+  const daftar = ['ALL', '34.04', '33.01'];
+  // Bisa terjadi kalau orang menyaring manual ke kota di luar daftar lalu menyalakan
+  // Live. indexOf mengembalikan -1; tanpa penanganan, -1 + 1 = 0 kebetulan benar,
+  // tapi itu kebetulan yang pantas dijaga tes supaya tetap begitu.
+  assert.strictEqual(kotaBerikutnya('99.99', daftar), 'ALL');
+  assert.strictEqual(kotaBerikutnya(null, daftar), '34.04');
+});
+
+test('putaran Live: daftar kosong tidak melempar galat', async () => {
+  const { kotaBerikutnya } = await import(MODUL);
+  assert.strictEqual(kotaBerikutnya('ALL', []), 'ALL');
+  assert.strictEqual(kotaBerikutnya('ALL', null), 'ALL');
+});
+
 test('persenSumber membedakan "nol" dari "belum bisa diukur"', async () => {
   const { persenSumber } = await import(MODUL);
   // Bedanya penting di panel Cakupan Sumber: 0% berarti diukur dan hasilnya nol,
