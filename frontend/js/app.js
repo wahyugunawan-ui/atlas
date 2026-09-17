@@ -61,7 +61,8 @@ import {
 import {
   askDeletePeriod, closeDeletePeriod, confirmDeletePeriod, deletePeriodTyped,
   dragLeave, dragOver, dropFile, fileChosen, finishImport, importPeriodChanged,
-  importStep, pickFile, refreshImportTab, reimportPeriod, reviewImport, runUpload,
+  importStep, pickFile, refreshImportTab, reimportPeriod, reimportSumber, reviewImport,
+  runUpload,
   togglePeriodeDetail, pilihSumber, unggahSumber, hapusSumber,
   setupImportTab,
 } from './import.js';
@@ -104,7 +105,7 @@ const HANDLERS = {
   applyPosImport, closePosImport, openPosImport, posImportFileChosen,
   // impor
   importStep, importPeriodChanged, pickFile, fileChosen, dropFile, dragOver, dragLeave,
-  runUpload, reviewImport, finishImport, reimportPeriod, refreshImportTab,
+  runUpload, reviewImport, finishImport, reimportPeriod, reimportSumber, refreshImportTab,
   togglePeriodeDetail, pilihSumber, unggahSumber, hapusSumber,
   askDeletePeriod, closeDeletePeriod, deletePeriodTyped, confirmDeletePeriod,
   // dipanggil antar modul lewat window supaya tidak ada lingkaran import

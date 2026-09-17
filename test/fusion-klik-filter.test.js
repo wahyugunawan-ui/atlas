@@ -4,13 +4,22 @@
  * KENAPA TES INI ADA. Kendali silangnya diminta TANPA sidebar: yang bisa diklik adalah
  * elemen yang memang sudah ada di layar — baris matriks, baris peringkat kota, baris
  * peringkat dealer. Ketiganya dibangun sebagai STRING di dalam fusion.js, bukan ditulis
- * di index.html, dan itu membuat keduanya lolos dari penjaga yang sudah ada:
+ * di index.html.
  *
- * - page.test.js memindai markup STATIS, jadi onclick yang lahir di template literal
- *   tidak pernah dilihatnya — termasuk kalau ia memanggil fungsi yang tidak pernah
- *   didaftarkan ke window. Di markup statis kesalahan itu merah; di sini tidak.
- * - handlers-terikat.test.js menjaga arah sebaliknya (nama HANDLERS punya binding),
- *   bukan "string onclick ini menyebut nama yang ada".
+ * KOREKSI atas versi pertama komentar ini, yang salah dan sempat ikut ter-commit: saya
+ * menulis bahwa page.test.js "cuma memindai markup statis" sehingga onclick yang lahir
+ * di template literal luput dari penjaganya. TIDAK BENAR. Pemindai handler di sana
+ * membaca `onclick=` dari markup DAN dari seluruh sumber modul, jadi nama yang lupa
+ * didaftarkan ke window sudah merah di sana. Yang menunjukkannya uji mutasi: mutasi
+ * yang mencabut sebuah nama dari HANDLERS merah di penjaga LAMA, bukan di asersi saya.
+ *
+ * Asersi HANDLERS di bawah karena itu memang kembar dengan penjaga itu. Dibiarkan
+ * karena berkas ini dijalankan sendiri waktu memperbaiki klik-untuk-menyaring, dan
+ * pesannya menyebut gejalanya langsung — tapi ia BUKAN satu-satunya yang menjaga, dan
+ * tidak boleh dibaca begitu.
+ *
+ * Yang benar-benar tidak dijaga siapa pun selain berkas ini: kode mana yang dikirim
+ * ke setScope(), dan apakah kedua pemanggil daftarPeringkat() menyebut jenisnya.
  *
  * DAN SATU JEBAKAN YANG HAMPIR SAYA MASUKI. Peringkat Dealer punya DUA kode di tiap
  * barisnya: `dealerCode` numerik ('7348', kosakata rollup) dan `dealerFilterCode`

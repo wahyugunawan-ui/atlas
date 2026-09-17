@@ -358,6 +358,45 @@ function test() {
   assert.ok(source['tables.js'].includes('export function toggleImportMenu'),
     'toggleImportMenu tidak lagi diekspor tables.js');
 
+  /* --------------------------------------------------------------------
+     IMPOR ULANG PER JENIS DATA
+     --------------------------------------------------------------------
+     Hapus sudah bisa per jenis sejak 2026-09-17 (hapusSumber), tapi impor ulang TIDAK:
+     reimportPeriod() cuma menyetel bulan lalu menggiring orang ke wizard PENJUALAN.
+     "Perbaiki Data Servis bulan ini saja" karena itu tidak punya jalan sama sekali.
+
+     Tombolnya dibangun sebagai STRING di dalam template literal import.js, bukan
+     ditulis di index.html. Yang TIDAK perlu dijaga di sini: pendaftaran ke window —
+     pemindai handler di bagian 3 berkas ini membaca `onclick=` dari markup statis DAN
+     dari SELURUH sumber modul (lihat loop `for (const name of files)` di atas), jadi
+     nama yang lupa didaftarkan sudah merah di sana. Saya sempat mengira sebaliknya dan
+     menulis asersi HANDLERS kembar di sini; uji mutasi yang menunjukkannya — mutasinya
+     merah di penjaga lama, bukan di asersi saya.
+
+     Yang benar-benar tidak dijaga siapa pun, dan karena itu diperiksa di bawah:
+     tombolnya ADA, dan urutan pemanggilan di dalam reimportSumber() benar.
+     -------------------------------------------------------------------- */
+  assert.ok(source['import.js'].includes('export function reimportSumber'),
+    'import.js tidak lagi mengekspor reimportSumber()');
+  // `onclick="` ikut dicocokkan, bukan cuma nama fungsinya: deklarasinya sendiri
+  // (`export function reimportSumber(`) memuat nama itu juga, jadi memeriksa namanya
+  // saja adalah asersi yang TIDAK PERNAH bisa merah selama fungsinya ada — penjaga
+  // yang terlihat bekerja padahal tidak memeriksa apa pun.
+  assert.ok(source['import.js'].includes('onclick="reimportSumber('),
+    'daftar jenis data di Periode Tersimpan tidak lagi punya tombol impor ulang');
+
+  // Urutannya bagian dari kebenarannya, bukan gaya penulisan: pilihSumber() MENOLAK
+  // kalau bulannya belum dipilih, jadi memanggilnya sebelum periodenya disetel akan
+  // memunculkan "pilih bulan dulu" untuk bulan yang jelas-jelas sudah ditunjuk orangnya.
+  const badanReimport = source['import.js'].slice(
+    source['import.js'].indexOf('export function reimportSumber'));
+  const badanReimportFn = badanReimport.slice(0, badanReimport.indexOf('\n}'));
+  assert.ok(badanReimportFn.includes('pilihSumber('),
+    'reimportSumber() tidak membuka pemilih berkas; tombolnya cuma memindahkan bulan');
+  assert.ok(badanReimportFn.indexOf('imp-bulan') < badanReimportFn.indexOf('pilihSumber('),
+    'reimportSumber() memanggil pilihSumber() SEBELUM menyetel periodenya — ' +
+    'pemilih berkasnya akan menolak dengan "pilih bulan dulu"');
+
   // Tiap ujung rentang punya DUA dropdown: bulan dan tahun (KF-FILTER-4). Versi
   // sebelumnya memakai <input type="month">, dan di situ tahunnya cuma bisa diketik —
   // tidak ada daftarnya. Tim memintanya bisa dipilih juga.

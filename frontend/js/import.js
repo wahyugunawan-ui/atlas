@@ -410,10 +410,20 @@ export async function refreshImportTab() {
             // hanya untuk jenis yang bisa dihapus per bulan. Tombol yang selalu
             // tampil lalu menolak waktu ditekan cuma melatih orang mengabaikannya.
             const bisaHapus = j.status === 'ada' && (j.kunci === 'ktp' || j.kunci === 'servis');
+            // Impor ulang TIDAK menuntut datanya sudah ada — beda dari hapus. Bulan yang
+            // Data Servisnya belum pernah masuk justru yang paling butuh tombol ini;
+            // menyembunyikannya di situ berarti satu-satunya jalan masuk hilang persis
+            // pada keadaan yang memerlukannya.
+            const bisaImpor = j.kunci === 'ktp' || j.kunci === 'servis';
             return `<div class="flex items-baseline gap-2 text-[11px] py-0.5">` +
               `<span class="text-slate-500 flex-1">${esc(j.label)}</span>` +
               `<span class="mono ${j.status === 'ada' ? 'text-slate-700' : 'text-slate-400'}">${
                 j.jumlah === null ? 'tidak bisa diperiksa' : esc(formatNumber(j.jumlah))}</span>` +
+              (bisaImpor
+                ? `<button onclick="reimportSumber('${esc(j.kunci)}','${esc(p.period)}')" ` +
+                  `title="${j.status === 'ada' ? 'Impor ulang' : 'Impor'} ${esc(j.label)} bulan ini" ` +
+                  `class="text-slate-300 hover:text-slate-700"><i class="ph ph-arrow-clockwise"></i></button>`
+                : '<span class="w-3"></span>') +
               (bisaHapus
                 ? `<button onclick="hapusSumber('${esc(j.kunci)}','${esc(p.period)}')" ` +
                   `title="Hapus ${esc(j.label)} bulan ini" ` +
@@ -469,6 +479,38 @@ export function reimportPeriod(period) {
   $('imp-bulan').value = month;
   importPeriodChanged();
   setStep(2);
+}
+
+/**
+ * Impor ulang SATU jenis data (Data KTP / Data Servis) untuk satu periode.
+ *
+ * Sampai 2026-09-17 hapus sudah bisa per jenis (hapusSumber) tapi impor ulang TIDAK:
+ * reimportPeriod() cuma menyetel bulan lalu menggiring orang ke wizard PENJUALAN.
+ * Akibatnya "perbaiki Data Servis bulan ini saja" tidak punya jalan sama sekali —
+ * satu-satunya cara adalah menghapusnya dulu lalu mencari sendiri panel unggahnya.
+ *
+ * Periodenya disetel lebih dulu KARENA pilihSumber() menolak kalau bulannya belum
+ * dipilih. Urutan ini bukan kebetulan: memanggil pemilih berkas duluan akan memunculkan
+ * toast "pilih bulan dulu" untuk bulan yang jelas-jelas sudah ditunjuk orangnya.
+ *
+ * Impornya sendiri idempoten (hapus baris periode itu, tulis ulang), jadi ini memang
+ * "impor ulang" dan bukan "impor kedua" — tidak ada baris yang berlipat.
+ */
+export function reimportSumber(source, period) {
+  const [year, month] = String(period).split('-');
+  $('imp-tahun').value = year;
+  $('imp-bulan').value = month;
+  importPeriodChanged();
+  setStep(2);
+
+  // Digulir ke panel prosesnya supaya jelas apa yang barusan terjadi; tanpa ini dialog
+  // berkas muncul di atas halaman yang masih memperlihatkan daftar periode.
+  const sasaran = $('imp-bagian-proses');
+  if (sasaran) sasaran.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  // Masih di dalam penanganan klik, jadi membuka pemilih berkas di sini sah — browser
+  // menolak dialog berkas yang tidak lahir dari gerakan orang.
+  pilihSumber(source);
 }
 
 /* ==========================================================================
