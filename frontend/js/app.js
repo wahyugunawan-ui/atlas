@@ -18,13 +18,13 @@ import {
 import { fillFilterBar, onPeriodChange, resetFilters, syncFilterBar } from './filter-bar.js';
 import { activeRows, applyScope, scopeValue } from './filters.js';
 import {
-  addLayers, fitToScope, invalidateSalePoints, paintChoropleth, redrawMap, setBasemap,
+  addLayers, fitToScope, invalidateSalePoints, redrawMap, refreshMapVisual, setBasemap,
   setCoverageViewPos, setHeatmapMode, setRingViewDealer, syncGroupControls,
   syncHeatmapModeButtons, toggleDistrictNames, setupMap, toggleFullscreen,
   toggleFusionPoints,
 } from './map.js';
 import {
-  closeSelectionInfo, drawDealerMarkers, drawMarkers, selectOutlet, showVillageTooltip,
+  closeSelectionInfo, selectOutlet, showVillageTooltip,
 } from './outlets.js';
 import {
   closeDealerCard, closeTreemapFull, renderDealerCard, renderDealerLegend, renderTopSummary,
@@ -138,15 +138,21 @@ export function renderAll() {
 
   const rows = activeRows();
 
-  let perVillage;
-  let breaks;
-  if (S.layersReady) {
-    ({ perVillage, breaks } = paintChoropleth(rows));
-    renderLegend(perVillage, breaks);
-  } else {
-    perVillage = {};
-    rows.forEach((r) => { perVillage[r.village] = (perVillage[r.village] || 0) + r.units; });
-  }
+  // Bagian VISUAL peta (heatmap, titik, marker) dipindah ke refreshMapVisual() di
+  // map.js supaya halaman Confidence Fusion bisa memakai yang SAMA. Sebelum ini
+  // satu-satunya yang menggambarnya adalah fungsi ini — dan fungsi ini berhenti di
+  // baris pertama begitu halamannya bukan 'peta', jadi peta yang sedang menumpang di
+  // halaman Fusion tidak pernah ikut berganti waktu filternya berpindah.
+  //
+  // Legendanya tetap digambar DI SINI, bukan ikut masuk refreshMapVisual(): `#legend`
+  // adalah saudara `#map` di dalam `#map-shell`, jadi ia tidak ikut pindah ke halaman
+  // Fusion dan tidak ada yang bisa membacanya di sana.
+  //
+  // Cabang `else` yang lama (menghitung perVillage waktu lapisan belum siap) DIBUANG:
+  // nilainya tidak pernah dibaca satu baris pun sesudahnya — kode mati yang terbaca
+  // seperti sedang menjaga sesuatu.
+  const visual = refreshMapVisual();
+  if (visual) renderLegend(visual.perVillage, visual.breaks);
 
   renderTopSummary(rows);
   renderTreemap(rows);
@@ -172,11 +178,11 @@ export function renderAll() {
   $('mkel-pending').textContent = S.pendingNames;
   $('mkel-pending').classList.toggle('hidden', !S.pendingNames);
 
-  if (S.layersReady) {
-    drawMarkers();
-    drawDealerMarkers();
-    redrawMap();
-  }
+  // drawMarkers/drawDealerMarkers/redrawMap sekarang dijalankan refreshMapVisual() di
+  // atas, satu paket dengan paintChoropleth. Urutannya jadi lebih awal daripada
+  // sebelumnya, dan itu aman: ketiganya cuma membaca activeRows() dan S.outlets/S.map,
+  // tidak satu pun bergantung pada panel yang digambar di antara keduanya.
+
   // Panel geser digambar ulang mengikuti ISINYA, bukan selalu dianggap kelurahan.
   // Dealer dan kota memakai S.panelView; keduanya cuma dibuka lewat aksi eksplisit
   // (tombol/dropdown), jadi menutupnya tetap "nempel" — tidak ada baris di sini yang

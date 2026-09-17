@@ -24,7 +24,9 @@ import {
   formatJarak, jangkauanDiagram, kalimatAlasan, titikRelatif,
 } from './fusion-alasan.js';
 // map.js TIDAK mengimpor fusion.js, jadi arah impor ini tidak membuat lingkaran.
-import { fitToScope, gambarTelusurDiPeta, hapusTelusurDiPeta } from './map.js';
+import {
+  fitToScope, gambarTelusurDiPeta, hapusTelusurDiPeta, refreshMapVisual,
+} from './map.js';
 import { $, esc, formatNumber } from './dom.js';
 import { ALLOWED_CITY_CODES } from './config.js';
 import { fusionFilter, kotaBerikutnya, pageFilters, persenSumber, setScope } from './filters.js';
@@ -822,6 +824,16 @@ export async function renderFusion() {
   // ia tidak pernah berjalan. Argumen `true` = otomatis: durasinya lebih lambat dan
   // tidak memunculkan toast "tidak ada data" — pemanggilan ini bukan hasil orang
   // menekan tombol Fokuskan.
+  //
+  // Alasan yang sama persis berlaku untuk ISI petanya, bukan cuma bingkainya. Sampai
+  // sekarang peta di halaman ini cuma bergeser dan membesar-mengecil; warna heatmap,
+  // titik, dan markernya tetap memperlihatkan filter yang lama. Paling kentara di mode
+  // LIVE: dropdown-nya berganti kota tiap 3,5 detik sementara petanya diam.
+  //
+  // langkahLive() memanggil renderFusion() juga, jadi satu baris ini melayani dua-duanya
+  // — perpindahan filter biasa DAN tiap ketukan LIVE.
+  refreshMapVisual();
+
   if (S.layersReady) fitToScope(true);
 }
 

@@ -14,6 +14,11 @@ import {
 } from './fusion-points.js';
 import { fiturTelusur } from './fusion-alasan.js';
 import { contributionsForRows, fixedContributionClass } from './sales-stats.js';
+// outlets.js TIDAK meng-import berkas ini (ia cuma memakai colors, dom, filters, dan
+// state), jadi impor ini tidak membuat lingkaran modul. Lihat catatan serupa di
+// outlets.js yang memakai window.openDealerDetail justru untuk menghindari lingkaran
+// ke tables.js.
+import { drawDealerMarkers, drawMarkers } from './outlets.js';
 import { S } from './state.js';
 
 /**
@@ -844,6 +849,35 @@ export function setHeatmapMode(mode) {
   S.heatmapMode = mode;
   syncHeatmapModeButtons();
   window.renderAll();
+}
+
+/**
+ * Bagian VISUAL peta saja: warna heatmap, titik, dan marker — tanpa satu pun panel.
+ *
+ * Dipisah dari renderAll() (app.js) karena renderAll() berhenti di baris pertama waktu
+ * `S.filterPage !== 'peta'`. Penjaga itu benar dan tidak dibuang: renderAll() juga
+ * mengisi treemap, panel performa, panel wilayah, dan kartu dealer yang hanya ada di
+ * halaman Peta. Akibat sampingannya, peta yang sedang menumpang di halaman Confidence
+ * Fusion tidak pernah ikut berganti waktu filternya berpindah — termasuk tiap langkah
+ * mode LIVE, yang justru seluruh gunanya memperlihatkan wilayah berganti-ganti.
+ *
+ * Legendanya SENGAJA tidak digambar di sini. `#legend` adalah SAUDARA `#map` di dalam
+ * `#map-shell`, bukan anaknya, jadi ia tidak ikut pindah ke halaman Fusion dan tidak
+ * terlihat di sana. Nilainya dikembalikan supaya renderAll() yang menggambarnya —
+ * dengan begitu map.js tidak perlu meng-import render.js, dan lingkaran modul
+ * map -> render -> tables -> map tidak pernah terbentuk.
+ *
+ * @returns {{perVillage: Object, breaks: Array}|null} null kalau lapisan belum siap
+ */
+export function refreshMapVisual() {
+  if (!S.layersReady) return null;
+
+  const rows = activeRows();
+  const { perVillage, breaks } = paintChoropleth(rows);
+  drawMarkers();
+  drawDealerMarkers();
+  redrawMap();
+  return { perVillage, breaks };
 }
 
 export function redrawMap() {
