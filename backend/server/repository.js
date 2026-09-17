@@ -1104,16 +1104,17 @@ async function latestFusionPeriod() {
  * basi diam-diam begitu cakupan pos disunting. Jadi yang disimpan tetap kelurahan,
  * dan pos diterjemahkan jadi daftar kelurahan SAAT DITANYA.
  */
-const POS_FILTER = 'village_code IN (SELECT village_code FROM coverage WHERE outlet_code = ?)';
+const POS_FILTER =
+  'r.village_code IN (SELECT village_code FROM coverage WHERE outlet_code = ?)';
 
 /** Susun WHERE dari penyaring yang benar-benar diisi. */
 function fusionWhere(filter) {
-  const where = ['period = ?'];
+  const where = ['r.period = ?'];
   const params = [filter.period];
-  if (filter.cityCode) { where.push('city_code = ?'); params.push(filter.cityCode); }
-  if (filter.dealerCode) { where.push('dealer_code = ?'); params.push(filter.dealerCode); }
+  if (filter.cityCode) { where.push('r.city_code = ?'); params.push(filter.cityCode); }
+  if (filter.dealerCode) { where.push('r.dealer_code = ?'); params.push(filter.dealerCode); }
   if (filter.outletCode) { where.push(POS_FILTER); params.push(filter.outletCode); }
-  if (filter.segment) { where.push('segment = ?'); params.push(filter.segment); }
+  if (filter.segment) { where.push('r.segment = ?'); params.push(filter.segment); }
   return { text: where.join(' AND '), params };
 }
 
@@ -1130,7 +1131,7 @@ async function fusionTotals(filter) {
   const w = fusionWhere(filter);
   const rows = await store.all(store.db(), `
     SELECT segment, SUM(customer_count) AS n, SUM(weight_sum) AS bobot
-    FROM segment_rollup WHERE ${w.text} GROUP BY segment`, w.params);
+    FROM segment_rollup r WHERE ${w.text} GROUP BY segment`, w.params);
 
   const counts = {};
   let total = 0;
@@ -1189,10 +1190,13 @@ async function fusionRows(filter) {
  * mesin penggolongannya.
  */
 async function fusionMatrix(period, filter) {
-  const where = ['period = ?'];
+  const where = ['r.period = ?'];
   const params = [period];
-  if (filter && filter.cityCode) { where.push('city_code = ?'); params.push(filter.cityCode); }
-  if (filter && filter.dealerCode) { where.push('dealer_code = ?'); params.push(filter.dealerCode); }
+  if (filter && filter.cityCode) { where.push('r.city_code = ?'); params.push(filter.cityCode); }
+  if (filter && filter.dealerCode) {
+    where.push('r.dealer_code = ?');
+    params.push(filter.dealerCode);
+  }
   if (filter && filter.outletCode) { where.push(POS_FILTER); params.push(filter.outletCode); }
 
   return store.all(store.db(), `
@@ -1212,16 +1216,19 @@ async function fusionMatrix(period, filter) {
  * sama dengan mesin penggolongan dan itu tinggal di satu tempat.
  */
 async function fusionOverlap(period, filter) {
-  const where = ['period = ?'];
+  const where = ['r.period = ?'];
   const params = [period];
-  if (filter && filter.cityCode) { where.push('city_code = ?'); params.push(filter.cityCode); }
-  if (filter && filter.dealerCode) { where.push('dealer_code = ?'); params.push(filter.dealerCode); }
+  if (filter && filter.cityCode) { where.push('r.city_code = ?'); params.push(filter.cityCode); }
+  if (filter && filter.dealerCode) {
+    where.push('r.dealer_code = ?');
+    params.push(filter.dealerCode);
+  }
   if (filter && filter.outletCode) { where.push(POS_FILTER); params.push(filter.outletCode); }
 
   return store.all(store.db(), `
     SELECT has_service AS "hasService", has_delivery AS "hasDelivery", segment,
            SUM(customer_count) AS n
-    FROM source_overlap
+    FROM source_overlap r
     WHERE ${where.join(' AND ')}
     GROUP BY has_service, has_delivery, segment`, params);
 }
@@ -1266,10 +1273,13 @@ async function legacyDealerCode(code) {
  * @param {string} groupBy 'kota' | 'dealer'
  */
 async function fusionSourceCoverage(period, filter, groupBy) {
-  const where = ['period = ?'];
+  const where = ['r.period = ?'];
   const params = [period];
-  if (filter && filter.cityCode) { where.push('city_code = ?'); params.push(filter.cityCode); }
-  if (filter && filter.dealerCode) { where.push('dealer_code = ?'); params.push(filter.dealerCode); }
+  if (filter && filter.cityCode) { where.push('r.city_code = ?'); params.push(filter.cityCode); }
+  if (filter && filter.dealerCode) {
+    where.push('r.dealer_code = ?');
+    params.push(filter.dealerCode);
+  }
   if (filter && filter.outletCode) { where.push(POS_FILTER); params.push(filter.outletCode); }
 
   const hitung = `
@@ -1314,20 +1324,23 @@ async function fusionSourceCoverage(period, filter, groupBy) {
  * lewat telusur satu Nomor Mesin, yang berpagar piiLimiter + access_log.
  */
 async function fusionVillagePoints(period, filter) {
-  const where = ['period = ?'];
+  const where = ['r.period = ?'];
   const params = [period];
-  if (filter && filter.cityCode) { where.push('city_code = ?'); params.push(filter.cityCode); }
-  if (filter && filter.dealerCode) { where.push('dealer_code = ?'); params.push(filter.dealerCode); }
+  if (filter && filter.cityCode) { where.push('r.city_code = ?'); params.push(filter.cityCode); }
+  if (filter && filter.dealerCode) {
+    where.push('r.dealer_code = ?');
+    params.push(filter.dealerCode);
+  }
   if (filter && filter.outletCode) { where.push(POS_FILTER); params.push(filter.outletCode); }
   // Kelurahan tidak diketahui tidak bisa digambar di peta sama sekali.
-  where.push("village_code <> ''");
+  where.push("r.village_code <> ''");
 
   return store.all(store.db(), `
     SELECT village_code AS "villageCode", dealer_code AS "dealerCode",
            SUM(customer_count) AS ktp,
            COALESCE(SUM(customer_count) FILTER (WHERE has_service), 0) AS servis,
            COALESCE(SUM(customer_count) FILTER (WHERE has_delivery), 0) AS kirim
-    FROM source_overlap
+    FROM source_overlap r
     WHERE ${where.join(' AND ')}
     GROUP BY village_code, dealer_code`, params);
 }
@@ -1336,10 +1349,13 @@ async function fusionVillagePoints(period, filter) {
 async function fusionByCity(period, filter) {
   // Sampai 2026-09-17 fungsi ini TIDAK menerima saringan sama sekali — panel Peringkat
   // Kota diam saja waktu Dealer diganti, persis keluhan "filternya tidak berefek".
-  const where = ['period = ?'];
+  const where = ['r.period = ?'];
   const params = [period];
-  if (filter && filter.cityCode) { where.push('city_code = ?'); params.push(filter.cityCode); }
-  if (filter && filter.dealerCode) { where.push('dealer_code = ?'); params.push(filter.dealerCode); }
+  if (filter && filter.cityCode) { where.push('r.city_code = ?'); params.push(filter.cityCode); }
+  if (filter && filter.dealerCode) {
+    where.push('r.dealer_code = ?');
+    params.push(filter.dealerCode);
+  }
   if (filter && filter.outletCode) { where.push(POS_FILTER); params.push(filter.outletCode); }
 
   return store.all(store.db(), `
@@ -1366,10 +1382,8 @@ async function fusionByDealer(period, filter) {
     where.push('r.dealer_code = ?');
     params.push(filter.dealerCode);
   }
-  // POS_FILTER menyebut `village_code` tanpa awalan tabel; di query ini kolomnya ada
-  // di `r`, dan subquery-nya sendiri menyebut `coverage`, jadi tidak ada ambiguitas.
   if (filter && filter.outletCode) {
-    where.push(`r.${POS_FILTER}`);
+    where.push(POS_FILTER);
     params.push(filter.outletCode);
   }
 

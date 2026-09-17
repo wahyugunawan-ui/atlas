@@ -320,6 +320,15 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
   membuat KTP tanpa koordinat dihitung terhadap khatulistiwa. Lihat
   `docs/DECISIONS.md`.
 
+- **Perbaikan: "terjadi kesalahan di server" saat mengganti Kota/Dealer/Pos.**
+  Kolom `city_code`/`dealer_code`/`village_code` ambigu di `fusionRows()`
+  karena join ke `villages` dan `dealers`. Ketiga saringan gagal, dan sudah
+  rusak sejak filter dinyatakan selesai — verifikasi saya waktu itu memakai
+  `fusionTotals()` (tanpa join) dan SQL tulisan tangan, dua-duanya jalur yang
+  memang bekerja. Sekarang semua query fusion memakai alias `r` dan semua
+  penyusun WHERE memberi awalan `r.`. Dijaga `test/fusion-filter-sql.test.js`,
+  tes pertama di jalur ini yang benar-benar menyentuh Postgres.
+
 **Belum dikerjakan (sisa Tahap F, lihat tabel tahapan di `docs/FUSION.md`):**
 - Lingkaran KPI Jarak + garis penghubung di PETA SUNGGUHAN saat menelusuri
   satu Nomor Mesin. Panel telusurnya sudah menggambar keduanya, tapi sebagai

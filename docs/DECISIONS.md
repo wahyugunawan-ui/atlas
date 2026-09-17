@@ -3391,3 +3391,47 @@ batas meter/km digeser, skala diagram abaikan titik terjauh, "gagal diukur"
 disamakan dengan terukur, dan arah utara-selatan dibalik — semuanya merah.
 
 **Caveat:** belum dilihat di browser. Khususnya panel geser dan diagram SVG-nya.
+
+## [2026-09-17] "Terjadi kesalahan di server" — kolom ambigu, dan kenapa verifikasi saya melewatkannya
+
+Dilaporkan pengguna: mengganti Kota, Dealer, atau Pos di halaman Confidence
+Fusion menjawab galat server. Log menyebutnya jelas:
+`column reference "dealer_code" is ambiguous`.
+
+**Sebabnya.** `fusionRows()` meng-join `segment_rollup` dengan `villages` (punya
+`city_code` DAN `village_code`) dan `dealers` (punya `dealer_code`), sedangkan
+`fusionWhere()` menyebut ketiga kolom itu tanpa awalan tabel. Postgres menolak.
+Diukur: ketiga saringan gagal, bukan cuma satu.
+
+**Ini bukan cacat baru dari pekerjaan Pos.** `city_code`/`dealer_code` sudah
+tanpa awalan sejak awal, jadi mengganti Kota atau Dealer sudah rusak sejak saya
+menyatakan filter itu "beres" beberapa jam sebelumnya.
+
+**Kenapa verifikasi saya melewatkannya — bagian yang paling perlu diingat.**
+Waktu itu saya membuktikan perbaikan dealer dengan dua cara: `fusionTotals()`
+dan SQL yang saya tulis sendiri. `fusionTotals()` membaca SATU tabel tanpa join,
+dan SQL tulisan tangan saya juga. Keduanya bagian yang memang bekerja. Saya
+menguji jalur yang benar dan tidak pernah menyentuh jalur yang rusak, lalu
+melaporkan "0 → 1.032" seolah seluruh filter terbukti. Angkanya benar;
+kesimpulannya terlalu luas.
+
+**Perbaikannya sebuah aturan, bukan tambalan.** SEMUA query fusion sekarang
+memakai alias `r`, dan SEMUA penyusun WHERE menyebut kolom dengan awalan `r.`
+(termasuk konstanta saringan pos). Menambal per-tempat akan menyisakan kelas
+cacat yang sama untuk join berikutnya.
+
+**Tes regresinya harus menyentuh Postgres, dan itu inti masalahnya.**
+37 berkas tes hijau sepanjang waktu, dan memang tidak bisa menangkapnya:
+ambiguitas kolom tidak ada di logika murni. `test/fusion-filter-sql.test.js`
+membuat database uji sendiri, menyemai dua kelurahan/dua dealer/satu pos, lalu
+memanggil KEDELAPAN fungsi fusion dengan LIMA kombinasi saringan — dan memeriksa
+angkanya, bukan sekadar "tidak melempar galat". Saringan yang diam-diam berhenti
+menyaring jauh lebih sulit terlihat daripada galat SQL, karena angkanya tetap
+tampil dan tetap masuk akal.
+
+Uji mutasi (baseline diperiksa hijau lebih dulu): empat dari lima merah —
+awalan `r.` hilang dari `city_code`, dari `dealer_code`, dari `village_code`,
+dan saringan kota berhenti menyaring. Yang kelima, menghapus `r.` dari `period`,
+**LOLOS — dan itu jujur**: hanya tabel rollup yang punya kolom `period`, jadi
+tanpa awalan pun tidak ambigu. Mutasinya mandul, bukan tesnya yang buta. Awalan
+`r.` di sana bersifat pencegahan kalau kelak ada join yang membawa `period`.
