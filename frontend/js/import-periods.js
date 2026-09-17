@@ -52,6 +52,31 @@ export function checklistPeriode(baris) {
 }
 
 /**
+ * Ringkasan hasil impor Data KTP / Data Servis.
+ *
+ * Field-nya mengikuti apa yang BENAR-BENAR dikembalikan `runSourceImport()`
+ * (`rowsRead`, `rowsUsed`, `unmatchedNames`) — bukan field panel penjualan seperti
+ * "Pos baru", yang kalau dipakai di sini akan tampil `undefined` dan terlihat resmi.
+ *
+ * `perluPerhatian` menegakkan satu aturan proyek: baris yang tidak cocok JANGAN
+ * dibuang diam-diam. Selisih dibaca-vs-terpakai dihitung dan ditandai, supaya impor
+ * yang membuang separuh berkasnya tidak lewat sebagai "berhasil" begitu saja.
+ */
+export function ringkasHasilSumber(hasil) {
+  const h = hasil || {};
+  const dibaca = Number(h.rowsRead) || 0;
+  const terpakai = Number(h.rowsUsed) || 0;
+  const namaTakCocok = Number(h.unmatchedNames) || 0;
+  return {
+    dibaca,
+    terpakai,
+    terbuang: Math.max(0, dibaca - terpakai),
+    namaTakCocok,
+    perluPerhatian: namaTakCocok > 0 || terpakai < dibaca,
+  };
+}
+
+/**
  * Ringkasan satu kalimat untuk kepala kartu periode.
  *
  * Menyebut yang ADA saja. Kalau ada yang tidak bisa diperiksa, itu disebut terpisah

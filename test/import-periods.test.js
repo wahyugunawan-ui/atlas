@@ -49,6 +49,40 @@ test('database PII tidak ada: jumlahnya null, bukan nol', async () => {
   assert.strictEqual(hasil[2].jumlah, null);
 });
 
+test('hasil impor sumber: selisih dibaca-vs-terpakai dihitung dan ditandai', async () => {
+  const { ringkasHasilSumber } = await import(MODUL);
+  // Aturan proyek: baris yang tidak cocok JANGAN dibuang diam-diam. Impor yang
+  // membuang separuh berkasnya tidak boleh lewat sebagai "berhasil" begitu saja.
+  const separuh = ringkasHasilSumber({ rowsRead: 1000, rowsUsed: 400, unmatchedNames: 12 });
+  assert.strictEqual(separuh.terbuang, 600);
+  assert.strictEqual(separuh.namaTakCocok, 12);
+  assert.strictEqual(separuh.perluPerhatian, true);
+});
+
+test('hasil impor sumber: semuanya cocok berarti tidak perlu perhatian', async () => {
+  const { ringkasHasilSumber } = await import(MODUL);
+  const bersih = ringkasHasilSumber({ rowsRead: 500, rowsUsed: 500, unmatchedNames: 0 });
+  assert.strictEqual(bersih.terbuang, 0);
+  assert.strictEqual(bersih.perluPerhatian, false);
+});
+
+test('hasil impor sumber: nama tak cocok saja sudah cukup untuk ditandai', async () => {
+  const { ringkasHasilSumber } = await import(MODUL);
+  // Bisa terjadi: semua baris terpakai, tapi sebagian kelurahannya tidak dikenali
+  // dan menunggu dicocokkan manusia. Itu tetap harus terlihat.
+  const hasil = ringkasHasilSumber({ rowsRead: 500, rowsUsed: 500, unmatchedNames: 3 });
+  assert.strictEqual(hasil.perluPerhatian, true);
+});
+
+test('hasil impor sumber: jawaban kosong tidak melempar galat', async () => {
+  const { ringkasHasilSumber } = await import(MODUL);
+  const kosong = ringkasHasilSumber(null);
+  assert.deepStrictEqual(
+    [kosong.dibaca, kosong.terpakai, kosong.terbuang, kosong.namaTakCocok],
+    [0, 0, 0, 0]);
+  assert.strictEqual(kosong.perluPerhatian, false);
+});
+
 test('ringkasan tidak mencampur "tidak diketahui" ke dalam pecahan', async () => {
   const { checklistPeriode, ringkasChecklist } = await import(MODUL);
   // 1 ada + 2 tak diketahui. "1 dari 3" akan berbohong: penyebutnya memuat dua hal

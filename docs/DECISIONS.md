@@ -3794,3 +3794,62 @@ yang sama persis dengan `uploadImport()` yang sudah ada.
 
 **Caveat:** belum dilihat di browser, termasuk jeda hover 150 ms yang saya salin
 dari Master tanpa menguji rasanya.
+
+## [2026-09-17] Tombol unggah KTP/Servis — dan ReferenceError yang mematikan seluruh halaman
+
+### Alur terpisah, bukan lewat wizard 4 tahap
+
+Panel hasil tahap 3 itu **khusus penjualan**: "Baris dibaca", "Tidak cocok",
+"Pos baru". `runSourceImport()` mengembalikan bentuk yang berbeda — `rowsRead`,
+`rowsUsed`, `status`, `unmatched[]`, `unmatchedNames`. Mendorong KTP/Servis lewat
+panel yang sama akan menampilkan field penjualan dengan nilai kosong: terlihat
+resmi, dan salah. Jadi blok unggahnya berdiri sendiri, dengan ringkasan yang
+memakai field yang benar-benar dikembalikan server — dibaca dari sumbernya, bukan
+ditebak.
+
+`ringkasHasilSumber()` menegakkan satu aturan proyek: baris yang tidak cocok
+JANGAN dibuang diam-diam. Selisih dibaca-vs-terpakai dihitung dan ditandai, jadi
+impor yang membuang separuh berkasnya tidak lewat sebagai "berhasil" begitu saja.
+
+Bulannya diambil dari pemilih di tahap 1, yang TERSEMBUNYI begitu wizard berpindah
+tahap. Nilainya tetap ada, tapi orang tidak melihatnya — jadi blok ini menuliskan
+bulan tujuannya sendiri. Mengunggah ke bulan yang tidak terlihat adalah cara
+paling mudah memasukkan data ke periode yang salah.
+
+### Cacat yang jauh lebih penting daripada fiturnya
+
+Probe impor runtime menemukan `app.js` gagal dievaluasi:
+**`bukaBagianImport is not defined`** — dari slice SEBELUMNYA, yang sudah
+ter-commit dan ter-push. Namanya didaftarkan di HANDLERS tapi tidak pernah
+di-import dari tables.js. Karena `Object.assign(window, HANDLERS)` dievaluasi saat
+modul dimuat, itu bukan satu tombol yang mati melainkan SELURUH halaman.
+
+Tiga hal yang membuatnya lolos, dan ketiganya pantas dicatat:
+
+1. **38 berkas tes hijau sepanjang waktu.** `page.test.js` memeriksa dua arah —
+   handler yang dipanggil markup harus terdaftar, dan nama terdaftar harus
+   diekspor SUATU modul. Keduanya lolos. Yang tidak pernah diperiksa: apakah
+   app.js sendiri menariknya.
+2. **Pemeriksa statis saya sendiri memberi lolos palsu.** Saya menulis
+   `a.includes('bukaBagianImport')` atas seluruh isi app.js, dan itu benar —
+   karena baris HANDLERS memuat namanya. Saya menyimpulkan "diimpor" dari bukti
+   yang tidak membuktikan apa pun.
+3. **Yang menemukannya probe runtime**, bukan pembacaan. Untuk kelas cacat ini,
+   memuat modulnya memberi jawaban tegas; menghitung substring tidak.
+
+### Penjaganya, dan buktinya
+
+`test/handlers-terikat.test.js`, dua lapis: statis (tiap nama HANDLERS wajib
+punya binding impor/deklarasi di app.js) dan runtime (app.js harus selesai
+dievaluasi tanpa "is not defined").
+
+Dibuktikan dengan mutasi — dan mutasinya sempat SKIP lebih dulu karena jangkar
+dua-baris saya memakai `\n` sementara berkasnya CRLF. Diulang dengan jangkar satu
+baris yang diambil dari berkas: **tertangkap**, dan pesannya menyebut nama yang
+menggantung. Sekalian diuji hal yang sebenarnya jadi pertanyaan: `page.test.js`
+**TETAP HIJAU** terhadap cacat yang sama. Celahnya nyata, bukan dugaan.
+
+39/39 berkas tes lolos. Empat mutasi lain (ringkasan hasil impor sumber) juga
+merah di atas baseline hijau.
+
+**Caveat:** belum dilihat di browser.

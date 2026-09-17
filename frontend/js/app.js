@@ -46,7 +46,7 @@ import {
   editDealerRingFromTable, editPosCoverageFromTable,
   renderCustomerTable,
   renderOutletTable, renderVillageTable, saveOutletEditor, searchCustomers, showOnMap,
-  switchTab, toggleMasterMenu, toggleDataMenu,
+  switchTab, toggleMasterMenu, toggleDataMenu, bukaBagianImport,
   renderDealerTable, openNewDealer, closeNewDealer, saveNewDealer,
   openDealerEditor, closeDealerEditor, saveDealerEditor, deleteDealerConfirm,
 } from './tables.js';
@@ -59,7 +59,7 @@ import {
   askDeletePeriod, closeDeletePeriod, confirmDeletePeriod, deletePeriodTyped,
   dragLeave, dragOver, dropFile, fileChosen, finishImport, importPeriodChanged,
   importStep, pickFile, refreshImportTab, reimportPeriod, reviewImport, runUpload,
-  togglePeriodeDetail,
+  togglePeriodeDetail, pilihSumber, unggahSumber,
   setupImportTab,
 } from './import.js';
 import {
@@ -101,7 +101,7 @@ const HANDLERS = {
   // impor
   importStep, importPeriodChanged, pickFile, fileChosen, dropFile, dragOver, dragLeave,
   runUpload, reviewImport, finishImport, reimportPeriod, refreshImportTab,
-  togglePeriodeDetail,
+  togglePeriodeDetail, pilihSumber, unggahSumber,
   askDeletePeriod, closeDeletePeriod, deletePeriodTyped, confirmDeletePeriod,
   // dipanggil antar modul lewat window supaya tidak ada lingkaran import
   // syncFilterBar ikut didaftarkan sejak mode Live halaman Fusion: fusion.js

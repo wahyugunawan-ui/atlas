@@ -8,13 +8,13 @@
  * berkas yang salah bulan sudah terlanjur terkirim sebelum ada yang menyadarinya.
  */
 import {
-  deletePeriod, fetchImports, fetchPeriods, fetchUnmatched, uploadImport,
+  deletePeriod, fetchImports, fetchPeriods, fetchUnmatched, uploadImport, uploadSumber,
 } from './api.js';
 import { MONTHS } from './config.js';
 import { $, esc, formatNumber, monthLabel, toast } from './dom.js';
 // Checklist jenis data per periode. Logikanya di modul murni supaya bisa diuji tanpa
 // browser — khususnya pembedaan "kosong" vs "tidak bisa diperiksa".
-import { checklistPeriode, ringkasChecklist } from './import-periods.js';
+import { checklistPeriode, ringkasChecklist, ringkasHasilSumber } from './import-periods.js';
 
 const STATE = {
   step: 1,
@@ -60,6 +60,12 @@ export function importPeriodChanged() {
   }
   $('imp-label-2').textContent = monthLabel(period);
   $('imp-label-4').textContent = monthLabel(period);
+  // Blok Data KTP/Servis memakai periode yang SAMA, tapi pemilihnya ada di tahap 1
+  // yang tersembunyi begitu wizard berpindah. Bulannya ditulis di blok itu supaya
+  // tidak ada yang mengunggah ke bulan yang tidak sedang dia lihat.
+  if ($('impx-periode')) {
+    $('impx-periode').textContent = period ? monthLabel(period) : '—';
+  }
 }
 
 /* ==========================================================================
@@ -249,6 +255,82 @@ export function finishImport() {
 /* ==========================================================================
    DAFTAR PERIODE DAN RIWAYAT
    ========================================================================== */
+
+/* ==========================================================================
+   DATA KTP & DATA SERVIS
+   ==========================================================================
+   Alur terpisah dari wizard 4 tahap: panel hasilnya khusus penjualan, dan
+   runSourceImport() mengembalikan bentuk yang berbeda (rowsRead/rowsUsed/
+   unmatchedNames). Memakai panel yang sama akan menampilkan field penjualan
+   dengan nilai kosong — terlihat resmi dan salah.
+   ========================================================================== */
+
+const LABEL_SUMBER = { ktp: 'Data KTP', servis: 'Data Servis' };
+
+/** Buka pemilih berkas. Periodenya diperiksa DULU, sebelum orang memilih berkas. */
+export function pilihSumber(source) {
+  if (!currentPeriod()) {
+    toast('Pilih bulan dan tahun dulu di tahap 1.', 'error');
+    return;
+  }
+  const input = $(`impx-${source}-input`);
+  if (input) { input.value = ''; input.click(); }
+}
+
+/** Unggah, lalu tampilkan ringkasan dari field yang benar-benar dikembalikan server. */
+export async function unggahSumber(source, input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const period = currentPeriod();
+  if (!period) { toast('Pilih bulan dan tahun dulu di tahap 1.', 'error'); return; }
+
+  const status = $('impx-status');
+  const kotak = $('impx-hasil');
+  status.classList.remove('hidden');
+  status.textContent = `Mengunggah ${LABEL_SUMBER[source]}… 0%`;
+  kotak.innerHTML = '';
+
+  try {
+    const hasil = await uploadSumber({
+      source,
+      file,
+      period,
+      onProgress: (rasio) => {
+        status.textContent =
+          `Mengunggah ${LABEL_SUMBER[source]}… ${Math.round(rasio * 100)}%`;
+      },
+    });
+
+    status.textContent = `${LABEL_SUMBER[source]} selesai diproses.`;
+    const r = ringkasHasilSumber(hasil);
+
+    // Baris yang tidak cocok TIDAK dibuang diam-diam: jumlah dan namanya ikut
+    // ditampilkan, sesuai aturan proyek.
+    const daftar = (hasil.unmatched || []).slice(0, 8).map((u) =>
+      `<div class="flex items-baseline gap-2 text-[11px] py-0.5">` +
+      `<span class="text-slate-600 flex-1 truncate">${esc(u.name)}</span>` +
+      `<span class="mono text-slate-400">${esc(formatNumber(u.count))}</span></div>`).join('');
+
+    kotak.innerHTML =
+      `<div class="rounded-xl border ${r.perluPerhatian ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'} p-3">` +
+      `<div class="text-xs font-bold ${r.perluPerhatian ? 'text-amber-900' : 'text-emerald-800'}">` +
+      `${esc(LABEL_SUMBER[source])} · ${esc(monthLabel(period))}</div>` +
+      `<div class="text-[11px] text-slate-600 mt-1">` +
+      `${esc(formatNumber(r.dibaca))} baris dibaca · ${esc(formatNumber(r.terpakai))} masuk` +
+      (r.terbuang ? ` · <b>${esc(formatNumber(r.terbuang))} tidak masuk</b>` : '') +
+      `</div>` +
+      (r.namaTakCocok
+        ? `<div class="text-[11px] text-amber-900 mt-2"><b>${esc(formatNumber(r.namaTakCocok))} nama wilayah belum cocok</b> — terbanyak:</div>${daftar}`
+        : '') +
+      `</div>`;
+
+    await refreshImportTab();
+    window.reloadSummary();
+  } catch (error) {
+    status.classList.add('hidden');
+    kotak.innerHTML = `<p class="text-xs text-red-600">${esc(error.message)}</p>`;
+  }
+}
 
 /* Checklist jenis data per periode. Logikanya di modul murni supaya bisa diuji tanpa
    browser — khususnya pembedaan "kosong" vs "tidak bisa diperiksa". */

@@ -342,6 +342,49 @@ export function uploadImport({ file, period, onProgress }) {
 }
 
 /**
+ * Unggah Data KTP atau Data Servis.
+ *
+ * Bentuknya SAMA PERSIS dengan uploadImport() di atas — multipart `period` + `file`,
+ * XMLHttpRequest demi progress — karena `importSumber` di server memang memakai
+ * parser multipart yang sama. Dipisah jadi fungsi sendiri, bukan parameter tambahan
+ * di uploadImport(), supaya rutenya tidak pernah bisa tertukar: yang satu menulis
+ * data penjualan, yang satu lagi data penyatuan tiga sumber.
+ *
+ * `source` dibatasi dua nilai. Menyusun URL dari teks bebas berarti satu salah ketik
+ * menghasilkan permintaan ke rute yang tidak ada, dan pesannya akan membingungkan.
+ */
+export function uploadSumber({ source, file, period, onProgress }) {
+  if (source !== 'ktp' && source !== 'servis') {
+    return Promise.reject(new Error(`Jenis data "${source}" tidak dikenal.`));
+  }
+
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append('period', period);
+    form.append('file', file);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${API}v1/import/${source}`);
+
+    xhr.upload.addEventListener('progress', (e) => {
+      if (onProgress && e.lengthComputable) onProgress(e.loaded / e.total);
+    });
+
+    xhr.addEventListener('load', () => {
+      let body = {};
+      try { body = JSON.parse(xhr.responseText); } catch { /* bukan JSON */ }
+      if (xhr.status === 401) { location.replace('/login'); return; }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(body);
+      else reject(new Error(body.error || `Server menjawab ${xhr.status}.`));
+    });
+    xhr.addEventListener('error', () =>
+      reject(new Error('Sambungan terputus saat mengunggah.')));
+
+    xhr.send(form);
+  });
+}
+
+/**
  * Baca sheet "Dealer" dari Excel dan bandingkan dengan pos yang sudah ada. Tidak
  * mengubah apa pun di server — cuma menghitung bedanya dan menyimpan hasilnya
  * sebentar di balik previewToken.

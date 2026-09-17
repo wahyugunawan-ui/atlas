@@ -399,12 +399,21 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
   sifat — satu halaman tiga bagian, jadi menggulir, bukan berpindah tab. Lihat
   `docs/DECISIONS.md`.
 
+- **Tombol unggah Data KTP dan Data Servis** di halaman Import — kedua rute
+  impor itu tidak lagi harus dipanggil lewat alat baris perintah. Alurnya
+  SENGAJA terpisah dari wizard 4 tahap: panel hasil tahap 3 khusus penjualan,
+  dan memakainya untuk KTP/Servis akan menampilkan field penjualan bernilai
+  kosong. Ringkasannya memakai field yang benar-benar dikembalikan server, dan
+  menandai selisih dibaca-vs-terpakai supaya baris yang tidak cocok tidak
+  lewat diam-diam.
+- **Penjaga baru `test/handlers-terikat.test.js`.** Menangkap kelas cacat yang
+  sudah dua kali lolos dalam satu sesi: nama didaftarkan di HANDLERS tapi tidak
+  pernah di-import app.js, yang berarti ReferenceError saat modul dimuat dan
+  SELURUH halaman mati. Dibuktikan: `page.test.js` tetap hijau terhadap cacat
+  yang sama. Lihat `docs/DECISIONS.md`.
+
 **Belum dikerjakan (sisa Tahap F, lihat tabel tahapan di `docs/FUSION.md`):**
 - Cross-filtering penuh di sidebar (mode Live-nya sudah jadi, lihat di atas)
-- Tombol unggah Data KTP/Servis di halaman Import. Sampai ada, kedua rute
-  impor itu dipanggil lewat alat lain. Kontraknya sudah diketahui: multipart
-  dengan field `period` + berkas, sama seperti unggahan bulanan yang ada.
-  (Tata letak tiga panel dan dropdown hover-nya sudah jadi, lihat di atas.)
 - Jalan ke dropdown "Import Data" untuk layar sentuh — panelnya sekarang hanya
   terbuka saat hover, karena tombolnya sendiri langsung membuka halamannya.
 - Kolom periode untuk `delivery_ping` — tanpa itu Data Pengiriman tidak bisa
