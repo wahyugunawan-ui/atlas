@@ -321,9 +321,11 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
   `docs/DECISIONS.md`.
 
 **Belum dikerjakan (sisa Tahap F, lihat tabel tahapan di `docs/FUSION.md`):**
-- Telusur per Nomor Mesin: lingkaran KPI Jarak di sekitar titik KTP-nya +
-  garis penghubung ke titik Servis/Kirim (sekarang lingkarannya dipusatkan
-  di pos/dealer terpilih, karena layar telusurnya belum ada)
+- Lingkaran KPI Jarak + garis penghubung di PETA SUNGGUHAN saat menelusuri
+  satu Nomor Mesin. Panel telusurnya sudah menggambar keduanya, tapi sebagai
+  diagram skematik di dalam panel, bukan di atas peta; di peta, lingkaran KPI
+  masih dipusatkan di pos/dealer terpilih. (Butir ini sempat tertulis "karena
+  layar telusurnya belum ada" — sudah tidak benar sejak layar itu jadi.)
 - Titik Servis berbentuk KOTAK lewat `map.addImage()` sesuai spesifikasi
   (sekarang lingkaran merah muda — `addImage()` belum pernah dipakai di
   proyek ini dan hasilnya belum bisa diverifikasi di browser)

@@ -337,10 +337,15 @@ function bangunTitikFusi(jenis) {
 /**
  * Lingkaran radius KPI Jarak, dipusatkan di pos atau dealer yang sedang dipilih.
  *
- * Spesifikasi menggambarnya di sekitar titik KTP saat telusur satu Nomor Mesin;
- * layar telusur itu belum ada. Sampai ada, pusatnya dibuat pos/dealer terpilih —
- * itu pertanyaan yang bisa dijawab sekarang ("sejauh apa 50 km dari pos ini?"),
- * bukan lingkaran karangan di tengah peta.
+ * Spesifikasi menggambarnya di sekitar titik KTP saat telusur satu Nomor Mesin.
+ * Layar telusur itu SUDAH ada (panel `#telusur-panel`, fusion.js), tapi ia
+ * menggambar lingkarannya sebagai diagram skematik di dalam panel — bukan di atas
+ * peta ini. Menyambungkan keduanya berarti mengirim koordinat KTP satu mesin ke
+ * lapisan peta, dan itu keputusan PII tersendiri yang belum diambil.
+ *
+ * Di peta, pusatnya karena itu tetap pos/dealer terpilih — pertanyaan yang bisa
+ * dijawab tanpa PII sama sekali ("sejauh apa 50 km dari pos ini?"), bukan
+ * lingkaran karangan di tengah peta.
  */
 function bangunRadiusKpi() {
   if (!S.kpiRadiusM) return EMPTY_COLLECTION;
