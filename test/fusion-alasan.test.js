@@ -96,6 +96,47 @@ test('sumber tanpa hitungan tidak melahirkan titik', async () => {
   assert.deepStrictEqual(titikRelatif(tanpaKtp), []);
 });
 
+test('fitur peta: KTP jadi pangkal, tiap sumber dapat titik DAN garis', async () => {
+  const { fiturTelusur } = await import(MODUL);
+  const fitur = fiturTelusur(CONTOH);
+  const jenis = fitur.map((x) => `${x.properties.jenis}/${x.geometry.type}`);
+  // KTP titik, lalu garis KTP->servis, lalu titik servis. Kirim tidak ada (count 0).
+  assert.deepStrictEqual(jenis,
+    ['ktp/Point', 'servis/LineString', 'servis/Point']);
+  // Garisnya WAJIB berpangkal di KTP, bukan di titik lain.
+  const garis = fitur.find((x) => x.geometry.type === 'LineString');
+  assert.deepStrictEqual(garis.geometry.coordinates[0], [110.4, -7.8]);
+  // Dan ujungnya WAJIB titik servis, dengan bujur-lintang pada urutan yang benar.
+  // GeoJSON memakai [lng, lat]; tertukar, garisnya menunjuk tempat yang sama sekali
+  // lain dan tidak ada satu pun tes lain yang akan merah.
+  assert.deepStrictEqual(garis.geometry.coordinates[1], [110.6, -7.9]);
+  const titikServis = fitur.find(
+    (x) => x.geometry.type === 'Point' && x.properties.jenis === 'servis');
+  assert.deepStrictEqual(titikServis.geometry.coordinates, [110.6, -7.9]);
+});
+
+test('fitur peta: tanpa koordinat KTP tidak menggambar apa pun', async () => {
+  const { fiturTelusur } = await import(MODUL);
+  // Number(null) = 0, dan 0 itu lintang/bujur yang sah — titik nol derajat jatuh di
+  // Teluk Guinea. Garis ke sana akan terlihat seperti data, padahal cuma penjaga
+  // yang jebol. Jebakan yang sama sudah pernah kejadian di berkas ini.
+  assert.deepStrictEqual(fiturTelusur({ ...CONTOH, ktpLat: null }), []);
+  assert.deepStrictEqual(fiturTelusur({ ...CONTOH, ktpLng: '' }), []);
+  assert.deepStrictEqual(fiturTelusur(null), []);
+});
+
+test('fitur peta: sumber berjumlah nol tidak digambar', async () => {
+  const { fiturTelusur } = await import(MODUL);
+  const adaKirim = {
+    ...CONTOH, deliveryLat: -7.85, deliveryLng: 110.5, deliveryCount: 1,
+  };
+  assert.strictEqual(fiturTelusur(adaKirim).length, 5, 'ktp + 2x(garis+titik)');
+  const tanpaServis = { ...adaKirim, serviceCount: 0 };
+  assert.deepStrictEqual(
+    fiturTelusur(tanpaServis).map((x) => x.properties.jenis),
+    ['ktp', 'kirim', 'kirim']);
+});
+
 test('diagram selalu memuat titik terjauh, bukan cuma lingkaran ambang', async () => {
   const { jangkauanDiagram, titikRelatif } = await import(MODUL);
   // Titik 120 km dengan ambang 50 km: kalau skalanya cuma mengikuti ambang, titik

@@ -11,7 +11,7 @@
  * Jadi kalimatnya selalu menyebut ambang yang DIPAKAI waktu golongan itu dihitung,
  * bukan ambang hari ini.
  */
-import { SEGMENTS } from './fusion-segments.js';
+import { SEGMENTS, SUMBER } from './fusion-segments.js';
 
 /** Angka gaya Indonesia: koma sebagai desimal. */
 function koma(nilai, desimal) {
@@ -143,6 +143,54 @@ export function titikRelatif(f) {
  * lingkaran. Kalau titik yang jauh dibiarkan terpotong, "jauh" jadi tidak terlihat
  * jauh — padahal itu justru yang ingin ditunjukkan.
  */
+/**
+ * Fitur GeoJSON satu mesin untuk digambar di PETA SUNGGUHAN: tiga titik dan garis
+ * penghubung dari KTP ke tiap titik lain.
+ *
+ * Berbeda dari `titikRelatif()` yang menghasilkan offset meter untuk diagram
+ * skematik; di sini yang dipakai koordinat aslinya, karena petanya punya latar.
+ *
+ * Tentang PII: koordinat ini datang dari jawaban telusur yang sudah berpagar
+ * (`piiLimiter` + `logCustomerAccess`) dan hanya untuk SATU mesin yang memang sedang
+ * dibuka. Ini beda dengan lapisan titik massal, yang sengaja TIDAK pernah membawa
+ * pengenal per orang — lihat fusion-points.js.
+ *
+ * Titik KTP selalu jadi pangkal. Tanpa koordinat KTP tidak ada yang bisa digambar
+ * sama sekali: garis tanpa pangkal akan tersambung ke titik nol derajat, dan itu
+ * jatuh di Teluk Guinea — kelihatan seperti data, padahal bukan.
+ */
+export function fiturTelusur(f) {
+  const fusion = f || {};
+  const lat0 = angka(fusion.ktpLat);
+  const lng0 = angka(fusion.ktpLng);
+  if (!Number.isFinite(lat0) || !Number.isFinite(lng0)) return [];
+
+  const titik = (jenis, lng, lat) => ({
+    type: 'Feature',
+    properties: { jenis, warna: SUMBER[jenis].color },
+    geometry: { type: 'Point', coordinates: [lng, lat] },
+  });
+
+  const fitur = [titik('ktp', lng0, lat0)];
+
+  [['servis', fusion.serviceLat, fusion.serviceLng, fusion.serviceCount],
+    ['kirim', fusion.deliveryLat, fusion.deliveryLng, fusion.deliveryCount],
+  ].forEach(([jenis, lat, lng, jumlah]) => {
+    if (!Number(jumlah)) return;
+    const la = angka(lat);
+    const ln = angka(lng);
+    if (!Number.isFinite(la) || !Number.isFinite(ln)) return;
+    fitur.push({
+      type: 'Feature',
+      properties: { jenis, warna: SUMBER[jenis].color },
+      geometry: { type: 'LineString', coordinates: [[lng0, lat0], [ln, la]] },
+    });
+    fitur.push(titik(jenis, ln, la));
+  });
+
+  return fitur;
+}
+
 export function jangkauanDiagram(f, titik) {
   const ambang = Number((f || {}).kpiRadiusM) || 0;
   const terjauh = (titik || []).reduce(

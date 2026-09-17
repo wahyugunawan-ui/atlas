@@ -12,6 +12,7 @@ import { circle, EMPTY_COLLECTION } from './geo.js';
 import {
   cincinPerDesa, pembangkitAcak, sebarDiPoligon, titikPerDesa,
 } from './fusion-points.js';
+import { fiturTelusur } from './fusion-alasan.js';
 import { contributionsForRows, fixedContributionClass } from './sales-stats.js';
 import { S } from './state.js';
 
@@ -250,6 +251,90 @@ export function addLayers() {
       'line-opacity': 0.8,
     },
   });
+
+  /* ---- telusur SATU mesin (docs/FUSION.md 3.1 dan 3.4) ---------------------
+     Ditambahkan PALING AKHIR supaya berada di atas lapisan titik massal: yang
+     sedang ditelusuri satu orang, dan ia harus terlihat di antara ribuan titik
+     lain. Kosong sampai ada yang membuka panel telusur.
+
+     Lingkaran ambangnya terpisah dari milik pos/dealer karena pusatnya berbeda
+     (titik KTP mesin itu, bukan pos) dan keduanya boleh tampil bersamaan. */
+  S.map.addSource('telusur', { type: 'geojson', data: EMPTY_COLLECTION });
+  S.map.addSource('telusur-lingkaran', { type: 'geojson', data: EMPTY_COLLECTION });
+
+  S.map.addLayer({
+    id: 'telusur-lingkaran-isi', type: 'fill', source: 'telusur-lingkaran',
+    layout: { visibility: 'none' },
+    paint: { 'fill-color': '#0b2f6b', 'fill-opacity': 0.07 },
+  });
+  S.map.addLayer({
+    id: 'telusur-lingkaran-tepi', type: 'line', source: 'telusur-lingkaran',
+    layout: { visibility: 'none' },
+    paint: {
+      'line-color': '#0b2f6b', 'line-width': 1.6, 'line-dasharray': [3, 2],
+      'line-opacity': 0.9,
+    },
+  });
+  S.map.addLayer({
+    id: 'telusur-garis', type: 'line', source: 'telusur',
+    filter: ['==', ['geometry-type'], 'LineString'],
+    layout: { visibility: 'none', 'line-cap': 'round' },
+    paint: { 'line-color': ['get', 'warna'], 'line-width': 2, 'line-opacity': 0.9 },
+  });
+  S.map.addLayer({
+    id: 'telusur-titik', type: 'circle', source: 'telusur',
+    filter: ['==', ['geometry-type'], 'Point'],
+    layout: { visibility: 'none' },
+    paint: {
+      'circle-radius': 6,
+      'circle-color': ['get', 'warna'],
+      'circle-stroke-width': 2,
+      'circle-stroke-color': '#ffffff',
+    },
+  });
+}
+
+/** Semua lapisan telusur, dinyalakan dan dimatikan bersama. */
+const LAPISAN_TELUSUR = ['telusur-lingkaran-isi', 'telusur-lingkaran-tepi',
+  'telusur-garis', 'telusur-titik'];
+
+/**
+ * Gambar satu mesin di peta: tiga titik, garis penghubung, dan lingkaran ambang
+ * KPI Jarak yang BERPUSAT DI TITIK KTP-nya — inilah bentuk yang diminta
+ * docs/FUSION.md 3.4, dan yang membuat alasan penggolongan bisa DILIHAT, bukan cuma
+ * dibaca: kalau titik servis jatuh di dalam lingkaran, "berdekatan" jadi kasatmata.
+ *
+ * Ambang yang dipakai yang TERSIMPAN di baris mesin itu (`kpiRadiusM`), bukan setelan
+ * hari ini — sama seperti kalimat alasannya. Kalau tidak, lingkarannya bisa
+ * bertentangan dengan golongan yang sedang dijelaskan.
+ */
+export function gambarTelusurDiPeta(detail) {
+  if (!S.layersReady || !S.map) return;
+  const f = (detail && detail.fusion) || {};
+  const fitur = fiturTelusur(f);
+  if (!fitur.length) { hapusTelusurDiPeta(); return; }
+
+  S.map.getSource('telusur').setData({ type: 'FeatureCollection', features: fitur });
+
+  const ambang = Number(f.kpiRadiusM) || 0;
+  const pusat = fitur[0].geometry.coordinates;      // selalu titik KTP
+  S.map.getSource('telusur-lingkaran').setData(ambang
+    ? { type: 'FeatureCollection', features: [circle(pusat[0], pusat[1], ambang)] }
+    : EMPTY_COLLECTION);
+
+  LAPISAN_TELUSUR.forEach((id) => S.map.setLayoutProperty(id, 'visibility', 'visible'));
+
+  // Bawa peta ke mesinnya. Tanpa ini orang harus mencari sendiri titik yang baru
+  // saja digambar, di antara belasan ribu titik lain.
+  S.map.easeTo({ center: pusat, zoom: Math.max(S.map.getZoom(), 10), duration: 600 });
+}
+
+/** Bersihkan jejak telusur dari peta. */
+export function hapusTelusurDiPeta() {
+  if (!S.layersReady || !S.map) return;
+  S.map.getSource('telusur').setData(EMPTY_COLLECTION);
+  S.map.getSource('telusur-lingkaran').setData(EMPTY_COLLECTION);
+  LAPISAN_TELUSUR.forEach((id) => S.map.setLayoutProperty(id, 'visibility', 'none'));
 }
 
 /* ==========================================================================

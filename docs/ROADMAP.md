@@ -340,12 +340,16 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
   (2 kolom) · Peringkat kota · Peringkat dealer. Cakupan Sumber jadi tombol.
   Lihat `docs/DECISIONS.md`.
 
+- **Telusur satu mesin digambar di peta sungguhan** — lingkaran KPI Jarak
+  berpusat di titik KTP mesin itu, plus garis penghubung ke titik Servis dan
+  Kirim, di atas lapisan titik massal. Baru mungkin setelah halaman Fusion
+  punya blok peta: sebelumnya panel dan peta ada di dua halaman berbeda.
+  Bukan pelanggaran keputusan PII sebelumnya — koordinatnya dari jawaban
+  telusur yang sudah berpagar, satu mesin saja, hanya saat dibuka sengaja.
+  Jejaknya dihapus saat panel ditutup dan saat pencarian gagal. Lihat
+  `docs/DECISIONS.md`.
+
 **Belum dikerjakan (sisa Tahap F, lihat tabel tahapan di `docs/FUSION.md`):**
-- Lingkaran KPI Jarak + garis penghubung di PETA SUNGGUHAN saat menelusuri
-  satu Nomor Mesin. Panel telusurnya sudah menggambar keduanya, tapi sebagai
-  diagram skematik di dalam panel, bukan di atas peta; di peta, lingkaran KPI
-  masih dipusatkan di pos/dealer terpilih. (Butir ini sempat tertulis "karena
-  layar telusurnya belum ada" — sudah tidak benar sejak layar itu jadi.)
 - Titik Servis berbentuk KOTAK lewat `map.addImage()` sesuai spesifikasi
   (sekarang lingkaran merah muda — `addImage()` belum pernah dipakai di
   proyek ini dan hasilnya belum bisa diverifikasi di browser)

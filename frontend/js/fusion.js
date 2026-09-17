@@ -23,6 +23,8 @@ import {
 import {
   formatJarak, jangkauanDiagram, kalimatAlasan, titikRelatif,
 } from './fusion-alasan.js';
+// map.js TIDAK mengimpor fusion.js, jadi arah impor ini tidak membuat lingkaran.
+import { gambarTelusurDiPeta, hapusTelusurDiPeta } from './map.js';
 import { $, esc, formatNumber } from './dom.js';
 import { fusionFilter, persenSumber } from './filters.js';
 import { SEGMENTS, SUMBER } from './fusion-segments.js';
@@ -384,12 +386,21 @@ export async function bukaTelusurMesin() {
   isi.innerHTML = '<p class="text-xs text-slate-400 p-4 text-center">Mencari…</p>';
 
   try {
-    isi.innerHTML = isiTelusur(await fetchEngineDetail(nomor));
+    const detail = await fetchEngineDetail(nomor);
+    isi.innerHTML = isiTelusur(detail);
+    // Sekalian di PETA SUNGGUHAN. Sejak halaman ini punya blok peta, panel dan peta
+    // ada di layar yang sama — jadi alasan penggolongannya bisa dilihat langsung:
+    // titik servis di dalam lingkaran ambang berarti "berdekatan", kasatmata.
+    gambarTelusurDiPeta(detail);
   } catch (error) {
     // 404 dan 429 punya arti yang sangat berbeda, dan pesan servernya sudah
     // membedakannya — jadi yang ditampilkan pesan itu, bukan "terjadi kesalahan".
     isi.innerHTML = `<p class="text-xs text-red-600 p-4 text-center">${
       esc(error.message)}</p>`;
+    // Jejak mesin SEBELUMNYA harus hilang. Kalau tidak, peta masih menunjukkan
+    // mesin lama sementara panelnya bilang pencarian gagal — dua pesan yang
+    // bertentangan di layar yang sama.
+    hapusTelusurDiPeta();
   }
 }
 
@@ -397,6 +408,10 @@ export async function bukaTelusurMesin() {
 export function tutupTelusurMesin() {
   const panel = $('telusur-panel');
   if (!panel) return;
+  // Peta dibersihkan SEGERA, bukan menunggu animasi panel selesai — titik dan
+  // lingkaran yang tertinggal sesudah panelnya tertutup tidak lagi punya penjelasan
+  // apa pun di layar.
+  hapusTelusurDiPeta();
   panel.classList.add('translate-x-full');
   setTimeout(() => {
     panel.classList.add('hidden');

@@ -3493,3 +3493,53 @@ membaca barisnya. Alat itu berguna untuk MENUNJUK tempat, tidak untuk memutuskan
 yang tidak bisa saya uji dari sini — apakah gridnya benar-benar muat tanpa gulir
 di 1366×768, dan apakah memindahkan elemen peta bolak-balik meninggalkan sisa
 tampilan.
+
+## [2026-09-17] Telusur satu mesin digambar di peta sungguhan
+
+Penutup butir `docs/FUSION.md` 3.1: "saat pengguna membuka drill-down satu Nomor
+Mesin, peta menggambar lingkaran radius KPI Jarak di sekitar titik KTP-nya, plus
+garis penghubung ke titik Servis dan Kirim".
+
+**Kenapa baru sekarang bisa.** Sampai halaman Fusion punya blok peta, panel
+telusur dan peta hidup di dua halaman berbeda — menggambar di peta berarti
+menyuruh orang berpindah tab untuk melihat alasan yang sedang dibacanya. Setelah
+peta menumpang di grid halaman ini, keduanya ada di satu layar, dan fitur ini
+jadi masuk akal. Urutan pengerjaannya kebetulan benar.
+
+**Tentang PII, karena ini terlihat mirip dengan sesuatu yang saya TOLAK.**
+Yang dulu ditolak: menaruh nomor mesin di lapisan titik massal, yang dikirim ke
+setiap browser yang membuka peta. Yang dilakukan sekarang berbeda: koordinatnya
+datang dari jawaban telusur yang sudah berpagar `piiLimiter` + `logCustomerAccess`,
+hanya untuk SATU mesin, hanya saat seseorang sengaja membukanya. Tidak ada data
+tambahan yang menyeberang — yang digambar adalah data yang sudah ada di tangan
+orang itu.
+
+**Lingkarannya terpisah dari lingkaran KPI milik pos/dealer.** Pusatnya berbeda
+(titik KTP mesin itu, bukan pos), keduanya boleh tampil bersamaan, dan ambang
+yang dipakai yang TERSIMPAN di baris mesin itu — sama seperti kalimat alasannya.
+Kalau memakai setelan hari ini, lingkarannya bisa bertentangan dengan golongan
+yang sedang dijelaskan.
+
+Lapisannya ditambahkan PALING AKHIR di `addLayers()` supaya berada di atas
+lapisan titik massal: yang ditelusuri satu orang, dan ia harus terlihat di antara
+belasan ribu titik lain. Peta ikut bergeser ke mesinnya (`easeTo`), karena tanpa
+itu orang harus mencari sendiri titik yang baru saja digambar. Jejaknya dihapus
+saat panel ditutup DAN saat pencarian gagal — peta yang masih menunjukkan mesin
+lama sementara panelnya bilang "tidak ditemukan" adalah dua pesan yang
+bertentangan di layar yang sama.
+
+**Celah di tes saya sendiri, ditemukan sebelum sempat jadi bug.** Tes awal
+memeriksa bahwa garis berpangkal di KTP, tapi tidak pernah memeriksa UJUNGNYA.
+Artinya kalau `lat` dan `lng` tertukar saat membangun fitur — kesalahan yang
+sangat mudah terjadi karena GeoJSON memakai urutan `[lng, lat]` yang terbalik
+dari kebiasaan — semua tes tetap hijau dan garisnya menunjuk tempat yang sama
+sekali lain. Assertion ujung garis ditambahkan, dan mutasi yang menukar keduanya
+memang tertangkap olehnya. Lima dari lima mutasi merah di atas baseline hijau.
+
+**Catatan berulang tentang alat ukur saya.** Pemeriksa statis buatan sendiri
+menandai satu masalah lagi di slice ini — "penghapusan jejak saat telusur gagal
+tidak ada" — yang ternyata ada, cuma terdorong keluar dari jendela 400 karakter
+regex saya oleh komentar. Itu false positive kelima sepanjang sesi ini. Alat itu
+berguna untuk menunjuk tempat, tidak pernah untuk memutuskan.
+
+**Caveat:** belum dilihat di browser.
