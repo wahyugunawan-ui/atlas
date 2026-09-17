@@ -266,6 +266,65 @@ function test() {
     /fx-kendali'\)[\s\S]*?classList\.toggle\('hidden', name !== 'fusion'\)/,
     'switchTab tidak menyembunyikan kendali Fusion (#fx-kendali) di halaman lain');
 
+  /* --------------------------------------------------------------------
+     TATA LETAK 12x12 HALAMAN CONFIDENCE FUSION
+     --------------------------------------------------------------------
+     Letak tiap blok DIMINTA tim secara spesifik, kolom dan baris disebut satu per
+     satu. Penjaga lain di berkas ini cuma memastikan id-nya ada dan handlernya
+     terdaftar — semuanya tetap hijau walaupun seluruh tata letaknya bergeser.
+
+     Letaknya ditulis eksplisit (col-start/row-start) justru supaya bisa dijaga:
+     dengan penempatan otomatis CSS grid, blok bertinggi beda-beda bisa terselip ke
+     celah yang kebetulan kosong, dan tidak ada string apa pun yang bisa diperiksa.
+     -------------------------------------------------------------------- */
+  const gridFusion = /<div id="fusion-isi"([^>]*)>/.exec(htmlTanpaKomentar);
+  assert.ok(gridFusion, 'kerangka grid #fusion-isi hilang dari markup');
+  assert.match(gridFusion[1], /grid-cols-12/, '#fusion-isi bukan lagi 12 kolom');
+  assert.match(gridFusion[1], /grid-rows-12/, '#fusion-isi bukan lagi 12 baris');
+
+  // kolom & baris persis seperti yang diminta, satu baris per blok.
+  const letakDiminta = [
+    ['Pelanggan Terfilter', 'col-start-1 col-span-3 row-start-1 row-span-2'],
+    ['CW Sales', 'col-start-4 col-span-2 row-start-1 row-span-2'],
+    ['Confidence Ratio', 'col-start-6 col-span-2 row-start-1 row-span-2'],
+    ['Tampilan Peta', 'col-start-1 col-span-7 row-start-3 row-span-7'],
+    ['Golongan + Venn', 'col-start-1 col-span-7 row-start-10 row-span-3'],
+    ['Matriks / Peringkat Kota', 'col-start-8 col-span-3 row-start-1 row-span-12'],
+    ['Peringkat Dealer', 'col-start-11 col-span-2 row-start-1 row-span-12'],
+  ];
+  for (const [blok, kelas] of letakDiminta) {
+    assert.ok(htmlTanpaKomentar.includes(kelas),
+      `blok "${blok}" tidak lagi di posisi yang diminta tim (${kelas})`);
+  }
+
+  // Peta harus benar-benar DI DALAM blok baris 3-9, bukan sekadar kebetulan ada
+  // kelas itu di suatu tempat. Diperiksa lewat urutan kemunculan.
+  const posPeta = htmlTanpaKomentar.indexOf('col-start-1 col-span-7 row-start-3');
+  const posHost = htmlTanpaKomentar.indexOf('id="fx-peta-host"');
+  const posGolongan = htmlTanpaKomentar.indexOf('col-start-1 col-span-7 row-start-10');
+  assert.ok(posPeta < posHost && posHost < posGolongan,
+    '#fx-peta-host tidak berada di dalam blok Tampilan Peta (kolom 1-7, baris 3-9)');
+
+  // Tiga KPI jadi TIGA sel terpisah. Dulu ketiganya menumpuk di satu #fx-summary;
+  // kalau id lama itu hidup lagi, tata letak barunya diam-diam tidak terpakai.
+  for (const id of ['fx-catatan', 'fx-kpi-pelanggan', 'fx-kpi-cw', 'fx-kpi-ratio']) {
+    assert.ok(htmlTanpaKomentar.includes(`id="${id}"`), `slot #${id} hilang dari markup`);
+  }
+  assert.ok(!htmlTanpaKomentar.includes('id="fx-summary"'),
+    '#fx-summary hidup lagi — tiga KPI kembali menumpuk di satu sel');
+  assert.ok(!source['fusion.js'].includes("'fx-summary'"),
+    "fusion.js masih mengisi 'fx-summary' yang sudah tidak ada di markup");
+  assert.ok(!source['fusion.js'].includes("'fx-kota'"),
+    "fusion.js masih mengisi 'fx-kota'; blok itu sudah jadi mode di dalam #fx-matriks");
+
+  // Matriks dan Peringkat Kota SATU blok dua mode, polanya sama dengan Golongan/Venn.
+  for (const mode of ['matriks', 'kota']) {
+    assert.ok(htmlTanpaKomentar.includes(`id="fx-mode-${mode}"`),
+      `tombol mode "${mode}" hilang dari blok gabungan`);
+    assert.ok(htmlTanpaKomentar.includes(`setModeMatriks('${mode}')`),
+      `tombol mode "${mode}" tidak memanggil setModeMatriks('${mode}')`);
+  }
+
   // Tiap ujung rentang punya DUA dropdown: bulan dan tahun (KF-FILTER-4). Versi
   // sebelumnya memakai <input type="month">, dan di situ tahunnya cuma bisa diketik —
   // tidak ada daftarnya. Tim memintanya bisa dipilih juga.

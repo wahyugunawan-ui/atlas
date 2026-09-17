@@ -733,6 +733,46 @@ export function setModeGolongan(mode) {
   gambarGolongan();
 }
 
+/**
+ * Blok Matriks Kota x Golongan dan Peringkat Kota DISATUKAN jadi satu blok dua mode
+ * (permintaan tim, tata letak 12x12). Bawaannya matriks.
+ *
+ * Polanya sengaja disalin dari modeGolongan di atas, bukan diabstraksikan jadi satu
+ * fungsi bersama: keduanya cuma tiga baris, dan penyatuannya berarti satu fungsi yang
+ * harus tahu dua daftar mode, dua wadah, dan dua cara menggambar. Sama alasannya
+ * dengan flyout Master/Data di tables.js yang juga sengaja dibiarkan kembar.
+ */
+let modeMatriks = 'matriks';
+
+/** Angka peringkat & matriks terakhir, supaya ganti mode tidak meminta ulang ke server. */
+let peringkatTerakhir = null;
+let matriksTerakhir = null;
+
+/** Gambar ulang HANYA blok Matriks/Peringkat Kota. */
+function gambarMatriks() {
+  ['matriks', 'kota'].forEach((m) => {
+    const tombol = $(`fx-mode-${m}`);
+    if (tombol) tombol.classList.toggle('fx-mode-aktif', modeMatriks === m);
+  });
+
+  if (modeMatriks === 'kota') {
+    const kota = (peringkatTerakhir && peringkatTerakhir.cities) || [];
+    isiSlot('fx-matriks', daftarPeringkat(kota, 'cityName'));
+    isiSlot('fx-matriks-jumlah', `Peringkat kota · ${esc(String(kota.length))} kota`);
+    return;
+  }
+
+  const baris = (matriksTerakhir && matriksTerakhir.rows) ? matriksTerakhir.rows.length : 0;
+  isiSlot('fx-matriks', matriks(matriksTerakhir));
+  isiSlot('fx-matriks-jumlah', `Matriks Kota × Golongan · ${esc(String(baris))} kota`);
+}
+
+/** Ganti tampilan blok antara Matriks Kota x Golongan dan Peringkat Kota. */
+export function setModeMatriks(mode) {
+  modeMatriks = mode === 'kota' ? 'kota' : 'matriks';
+  gambarMatriks();
+}
+
 /** Munculkan/sembunyikan panel Cakupan Sumber. */
 export function toggleCakupanPanel() {
   const panel = $('fx-cakupan-panel');
@@ -747,7 +787,7 @@ export async function renderFusion() {
   // se-provinsi: bilahnya tampil, tombolnya bergerak, angkanya tidak pernah berubah.
   const f = fusionFilter();
 
-  isiSlot('fx-summary',
+  isiSlot('fx-kpi-pelanggan',
     '<p class="text-xs text-slate-400 p-2">Memuat angka golongan…</p>');
 
   let hasil;
@@ -763,7 +803,7 @@ export async function renderFusion() {
   } catch (error) {
     // Galat ditulis di sel Summary saja. Menimpa seluruh kerangka akan mencabut
     // elemen peta yang sedang menumpang di #fx-peta-host.
-    isiSlot('fx-summary',
+    isiSlot('fx-kpi-pelanggan',
       `<p class="text-xs text-red-600 p-2">${esc(error.message)}</p>`);
     return;
   }
@@ -780,36 +820,49 @@ export async function renderFusion() {
   // Belum ada data sama sekali = keadaan yang WAJAR sampai Data KTP diimpor, bukan
   // error. Yang ditampilkan karena itu langkah berikutnya, bukan pesan gagal.
   if (!total) {
-    isiSlot('fx-summary',
+    // Keterangannya ditaruh di #fx-catatan yang selebar halaman, bukan dijejalkan ke
+    // salah satu sel KPI selebar tiga kolom — kalimatnya panjang dan di sel sesempit
+    // itu ia terpotong jadi tidak terbaca.
+    isiSlot('fx-catatan',
       `<div class="bg-white rounded-xl border border-slate-200 p-3">` +
       `<div class="text-xs font-bold text-slate-700">Belum ada hasil penggolongan</div>` +
       `<p class="text-[10px] text-slate-500 mt-1 leading-relaxed">Golongan Warlok ` +
       `dihitung dari Data KTP, Data Servis, dan Data Pengiriman yang disatukan lewat ` +
       `Nomor Mesin. Impor Data KTP dulu lewat rute ` +
       `<span class="mono">/api/v1/import/ktp</span>.</p></div>`);
-    ['fx-golongan', 'fx-matriks', 'fx-kota', 'fx-dealer'].forEach((id) => isiSlot(id, ''));
+    ['fx-kpi-pelanggan', 'fx-kpi-cw', 'fx-kpi-ratio', 'fx-golongan', 'fx-matriks',
+      'fx-matriks-jumlah', 'fx-dealer'].forEach((id) => isiSlot(id, ''));
     return;
   }
 
   const rasio = meta.confidenceRatio;
   const warnaRasio = WARNA_STATUS[meta.status] || 'text-slate-400';
 
-  isiSlot('fx-summary',
-    catatanAbaikan(f) +
-    kartuKpi('Pelanggan terfilter', formatNumber(total),
-      `periode ${hasil.period || '—'}`, 'text-blue-500') +
-    kartuKpi('CW Sales', formatNumber(Math.round(Number(meta.cwSales) || 0)),
-      'terkoreksi keyakinan', 'text-purple-500') +
-    kartuKpi('Confidence Ratio', rasio == null ? '—' : `${(rasio * 100).toFixed(1)}%`,
-      meta.status || 'belum ada data', warnaRasio));
+  // Tiga KPI kini TIGA sel grid terpisah (kolom 1-3, 4-5, 6-7), bukan satu kolom
+  // #fx-summary yang menumpuk ketiganya. kartuKpi() sudah menghasilkan kartu utuh
+  // sendiri, jadi tiap sel cukup diisi satu kartu apa adanya.
+  isiSlot('fx-catatan', catatanAbaikan(f));
+  isiSlot('fx-kpi-pelanggan', kartuKpi('Pelanggan terfilter', formatNumber(total),
+    `periode ${hasil.period || '—'}`, 'text-blue-500'));
+  isiSlot('fx-kpi-cw', kartuKpi('CW Sales',
+    formatNumber(Math.round(Number(meta.cwSales) || 0)),
+    'terkoreksi keyakinan', 'text-purple-500'));
+  isiSlot('fx-kpi-ratio', kartuKpi('Confidence Ratio',
+    rasio == null ? '—' : `${(rasio * 100).toFixed(1)}%`,
+    meta.status || 'belum ada data', warnaRasio));
 
   gambarGolongan();
 
-  isiSlot('fx-kota', daftarPeringkat(peringkat.cities, 'cityName'));
+  // Matriks dan Peringkat Kota sekarang SATU blok dua mode. Angkanya disimpan dulu,
+  // baru digambar — dengan begitu menekan tombol mode memanggil gambarMatriks() lagi
+  // tanpa menyentuh jaringan sama sekali, persis seperti blok Golongan/Venn.
+  // #fx-kota sudah tidak ada lagi di markup; merujuknya akan membuat page.test.js
+  // merah dengan "modul merujuk id yang tidak ada di markup".
+  peringkatTerakhir = peringkat;
+  matriksTerakhir = matrix;
+  gambarMatriks();
+
   isiSlot('fx-dealer', daftarPeringkat(peringkat.dealers, 'dealerName', { denganKota: true }));
-  isiSlot('fx-matriks', matriks(matrix));
-  isiSlot('fx-matriks-jumlah',
-    `${esc(String((matrix && matrix.rows ? matrix.rows.length : 0)))} kota`);
 
   isiSlot('fx-cakupan-per',
     `per ${esc(cakupan && cakupan.groupBy === 'dealer' ? 'dealer' : 'kota')}`);

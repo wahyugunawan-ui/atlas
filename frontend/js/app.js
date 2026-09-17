@@ -52,7 +52,8 @@ import {
 } from './tables.js';
 import {
   bukaTelusurMesin, cariCakupan, kirimPage, renderDeliveryTable, renderFusion,
-  renderServiceTable, servisPage, setKpiServis, setModeGolongan, toggleCakupanPanel,
+  renderServiceTable, servisPage, setKpiServis, setModeGolongan, setModeMatriks,
+  toggleCakupanPanel,
   toggleLiveFusion,
   toggleSumberCakupan, tutupTelusurMesin,
 } from './fusion.js';
@@ -92,7 +93,7 @@ const HANDLERS = {
   renderFusion, renderServiceTable, renderDeliveryTable, servisPage, kirimPage,
   setKpiServis,
   toggleSumberCakupan, cariCakupan, bukaTelusurMesin, tutupTelusurMesin,
-  setModeGolongan, toggleCakupanPanel, toggleLiveFusion,
+  setModeGolongan, setModeMatriks, toggleCakupanPanel, toggleLiveFusion,
   editDealerRingFromTable, editPosCoverageFromTable,
   openNewOutlet, closeNewOutlet, newOutletDealerChanged, saveNewOutlet,
   askResetOutlets, closeResetOutlets, resetOutletsTyped, confirmResetOutlets,
