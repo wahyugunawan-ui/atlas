@@ -1530,6 +1530,9 @@ export function switchTab(name) {
   const navData = $('nav-data');
   if (navData) navData.classList.toggle('active', TAB_DATA.includes(name));
   closeDataMenu();
+  // Import tidak punya daftar tab sendiri: ia SATU tab, jadi penyorotan tombolnya
+  // sudah ditangani loop di atas. Yang perlu di sini cuma menutup flyoutnya.
+  closeImportMenu();
 
   // Urutannya penting: halaman aktif ditetapkan SEBELUM tabelnya digambar, kalau tidak
   // tabelnya membaca filter halaman sebelumnya. Halaman impor tidak punya filter, dan
@@ -1625,6 +1628,74 @@ function closeDataMenu() {
   panel.hidden = true;
   const wrap = $('nav-data-wrap');
   if (wrap) wrap.classList.remove('buka');
+}
+
+/**
+ * Flyout "Import Data" — salinan ketiga pola yang sama.
+ *
+ * SALINAN, bukan abstraksi bersama, mengikuti keputusan yang sudah ditulis di atas
+ * openDataMenu(): logikanya tiga baris, dan menyatukan ketiganya berarti satu fungsi
+ * yang harus tahu tiga panel, tiga tombol, dan tiga perilaku yang TIDAK sama. Yang
+ * ketiga itu justru bedanya: Master dan Data berpindah TAB, sedangkan ketiga bagian
+ * Import ada di SATU halaman — opsinya menggulir, bukan mengganti tab. Abstraksi
+ * bersama harus menampung perbedaan itu dan akan jadi lebih panjang dari tiga salinan.
+ *
+ * `position:fixed` dihitung dari posisi tombol, alasan sama dengan dua flyout lain:
+ * baris nav `overflow-x-auto`, dan itu memaksa overflow-y ikut memotong panel absolut.
+ */
+function openImportMenu() {
+  const panel = $('import-panel');
+  if (!panel || !panel.hidden) return;
+  const tombol = document.getElementById('nav-import').getBoundingClientRect();
+  panel.style.position = 'fixed';
+  panel.style.top = `${tombol.bottom + 6}px`;
+  panel.style.left = `${tombol.left}px`;
+  panel.hidden = false;
+  const wrap = $('nav-import-wrap');
+  if (wrap) wrap.classList.add('buka');
+}
+
+export function closeImportMenu() {
+  const panel = $('import-panel');
+  if (!panel || panel.hidden) return;
+  panel.hidden = true;
+  const wrap = $('nav-import-wrap');
+  if (wrap) wrap.classList.remove('buka');
+}
+
+/**
+ * Buka halaman Import dan gulir ke salah satu dari tiga bagiannya.
+ *
+ * `switchTab` dipanggil lebih dulu karena bagiannya tidak punya tinggi selama
+ * halamannya masih `hidden` — scrollIntoView pada elemen tersembunyi tidak
+ * melakukan apa pun, dan itu akan terlihat seperti menu yang rusak.
+ */
+export function bukaBagianImport(bagian) {
+  closeImportMenu();
+  switchTab('import');
+  const sasaran = $(`imp-bagian-${bagian}`);
+  if (sasaran) sasaran.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#nav-import-wrap')) closeImportMenu();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeImportMenu();
+});
+
+// Hover, mengikuti Master (menu Data sengaja tidak saya sentuh — ia memang belum
+// punya hover, dan menambahkannya bukan bagian dari yang diminta).
+let importHoverTimer = null;
+const navImportWrap = document.getElementById('nav-import-wrap');
+if (navImportWrap) {
+  navImportWrap.addEventListener('mouseenter', () => {
+    clearTimeout(importHoverTimer);
+    openImportMenu();
+  });
+  navImportWrap.addEventListener('mouseleave', () => {
+    importHoverTimer = setTimeout(closeImportMenu, 150);
+  });
 }
 
 function openMasterMenu() {

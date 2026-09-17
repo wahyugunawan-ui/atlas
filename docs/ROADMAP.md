@@ -392,12 +392,21 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
   dan tidak bisa diperiksa (database PII tidak tersedia). Lihat
   `docs/DECISIONS.md`.
 
+- **Dropdown hover menu "Import Data"** dengan tiga opsi yang menggulir ke
+  bagiannya (Periode Tersimpan / Proses Impor / Riwayat Impor). Salinan KETIGA
+  pola flyout, disengaja: kode ini memuat keputusan eksplisit menolak abstraksi
+  bersama, dan rencana refactor saya dibatalkan karena itu. Import juga beda
+  sifat — satu halaman tiga bagian, jadi menggulir, bukan berpindah tab. Lihat
+  `docs/DECISIONS.md`.
+
 **Belum dikerjakan (sisa Tahap F, lihat tabel tahapan di `docs/FUSION.md`):**
 - Cross-filtering penuh di sidebar (mode Live-nya sudah jadi, lihat di atas)
-- Sisa halaman Import: akses tiga bagiannya lewat dropdown hover menu "Import
-  Data" mengikuti pola menu Master, dan tombol unggah Data KTP/Servis. Sampai
-  tombolnya ada, kedua rute impor itu dipanggil lewat alat lain. (Tata letak
-  tiga panelnya sendiri sudah jadi, lihat di atas.)
+- Tombol unggah Data KTP/Servis di halaman Import. Sampai ada, kedua rute
+  impor itu dipanggil lewat alat lain. Kontraknya sudah diketahui: multipart
+  dengan field `period` + berkas, sama seperti unggahan bulanan yang ada.
+  (Tata letak tiga panel dan dropdown hover-nya sudah jadi, lihat di atas.)
+- Jalan ke dropdown "Import Data" untuk layar sentuh — panelnya sekarang hanya
+  terbuka saat hover, karena tombolnya sendiri langsung membuka halamannya.
 - Kolom periode untuk `delivery_ping` — tanpa itu Data Pengiriman tidak bisa
   masuk checklist "Periode Tersimpan", karena ping tidak bisa diatribusikan ke
   bulan mana pun tanpa mengarang.

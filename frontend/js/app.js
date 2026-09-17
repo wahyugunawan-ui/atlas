@@ -84,7 +84,7 @@ const HANDLERS = {
   // peta dan outlet
   selectOutlet, closeSelectionInfo, openVillageDetail, closeVillageDetail,
   // tabel
-  switchTab, toggleMasterMenu, toggleDataMenu, renderOutletTable, renderVillageTable, showOnMap, jumpToVillage, promptPin,
+  switchTab, toggleMasterMenu, toggleDataMenu, bukaBagianImport, renderOutletTable, renderVillageTable, showOnMap, jumpToVillage, promptPin,
   openDealerDetail, openCitySummary, toggleDealerCity, jumpFromDealer,
   renderCustomerTable, searchCustomers, customerPage,
   // penyatuan tiga sumber (docs/FUSION.md Tahap F)

@@ -3748,3 +3748,49 @@ menciutkan "tidak bisa diperiksa" jadi "kosong" dan yang memasukkannya ke penyeb
 ringkasan.
 
 **Caveat:** belum dilihat di browser.
+
+## [2026-09-17] Flyout "Import Data": keputusan lama yang nyaris saya balik
+
+Saya menemukan pola flyout sudah diduplikasi dua kali (Master dan Data), nyaris
+identik, dan langsung berniat menyatukannya jadi satu helper sebelum menambah
+yang ketiga. Duplikasi yang boleh menyimpang memang kelas cacat yang berulang
+kali muncul di sesi ini.
+
+**Tapi kode itu sudah memuat keputusan eksplisit yang menolaknya.** Komentar di
+atas `openDataMenu()`: *"Sengaja SALINAN pola Master di bawah, bukan abstraksi
+bersama: keduanya cuma tiga baris logika, dan menyatukannya berarti satu fungsi
+yang harus tahu dua panel, dua tombol, dan dua daftar tab."* CLAUDE.md melarang
+membalik keputusan arsitektur diam-diam, jadi rencana refactor saya dibatalkan
+dan saya mengikuti konvensinya: salinan ketiga yang disengaja, dengan alasannya
+ditulis ulang di tempatnya.
+
+Dan ternyata salinan ketiga ini justru **memperkuat** argumen aslinya. Master dan
+Data berpindah TAB; ketiga bagian Import ada di SATU halaman, jadi opsinya
+menggulir, bukan mengganti tab. Abstraksi bersama harus menampung perbedaan itu
+dan akan jadi lebih panjang daripada tiga salinan tiga baris.
+
+**Satu asimetri yang saya laporkan, bukan saya perbaiki sendiri:** menu Data
+tidak punya listener hover — hanya Master yang punya. Permintaannya "mengikuti
+pola menu Master", jadi Import dapat hover. Menambahkan hover ke menu Data akan
+mengubah perilaku menu ketiga yang tidak diminta siapa pun.
+
+`switchTab('import')` dipanggil SEBELUM `scrollIntoView`: bagiannya tidak punya
+tinggi selama halamannya masih `hidden`, dan menggulir ke elemen tersembunyi
+tidak melakukan apa pun — hasilnya akan terlihat seperti menu yang rusak.
+
+**Keterbatasan yang disengaja dan perlu diketahui:** tombol "Import Data" tetap
+membuka halamannya waktu diklik, jadi panelnya HANYA muncul saat hover. Artinya
+pengguna layar sentuh tidak punya jalan ke dropdown itu — ketiga bagiannya masih
+bisa dicapai dengan menggulir halaman biasa, tapi jalan pintasnya tidak ada.
+
+38/38 berkas tes lolos. Diverifikasi juga dengan probe impor runtime `tables.js`:
+flyout ini memasang listener `document` saat modul dimuat, dan kesalahan di situ
+mematikan navigasi tanpa tertangkap pemeriksaan statis mana pun.
+
+**Belum dikerjakan dari permintaan yang sama:** tombol unggah Data KTP/Servis.
+Kontraknya sudah diketahui — `importSumber` menerima multipart dengan field
+`period` (wajib, lolos regex PERIOD) dan berkas .xlsx/.xlsm/.csv/.txt, bentuk
+yang sama persis dengan `uploadImport()` yang sudah ada.
+
+**Caveat:** belum dilihat di browser, termasuk jeda hover 150 ms yang saya salin
+dari Master tanpa menguji rasanya.
