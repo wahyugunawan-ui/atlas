@@ -102,6 +102,20 @@
      elemen sendiri — yang di atas tinggal di dalam kotak peta, sedangkan yang ini di
      halaman Confidence Fusion. Menggeser dari KANAN. */
   #telusur-panel { transition: transform 0.3s cubic-bezier(0.16,1,0.3,1); }
+
+  /* Peta yang sedang MENUMPANG di halaman Confidence Fusion.
+     .map-container memaku tinggi ke calc(100vh - 290px) pada elemen #map sendiri,
+     bukan mewarisinya dari induk. Dibawa apa adanya ke sel grid, peta itu akan
+     melar melewati selnya dan merusak tuntutan "sekali lihat tanpa gulir". Selektor
+     id+kelas ini lebih spesifik daripada .map-container, jadi ia menang. */
+  #map.di-fusion { height: 100%; min-height: 0; border-radius: 10px; }
+
+  /* Tombol mode Golongan/Venn — satu blok, dua tampilan. */
+  .fx-mode { font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 999px;
+    color: #64748b; background: #f1f5f9; }
+  .fx-mode:hover { background: #e2e8f0; }
+  .fx-mode-aktif { background: var(--astra-navy); color: #fff; }
+  .fx-mode-aktif:hover { background: var(--astra-navy); }
   .step-dot { width: 26px; height: 26px; border-radius: 999px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; }
   .step-dot.done { background: #10b981; color: #fff; }
   .step-dot.now { background: var(--astra-navy); color: #fff; }
@@ -1008,10 +1022,74 @@
       <input id="telusur-mesin" type="text" placeholder="Telusur Nomor Mesin…"
         onkeydown="if(event.key==='Enter') bukaTelusurMesin()"
         class="px-2 py-1 rounded-lg border border-slate-200 text-[11px] mono w-44">
+      <button onclick="toggleCakupanPanel()" class="px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50">Cakupan Sumber</button>
       <button onclick="bukaTelusurMesin()" class="px-2 py-1 rounded-lg text-[11px] font-bold text-white" style="background:var(--astra-navy)">Telusur</button>
     </div>
   </div>
-  <div id="fusion-isi" class="flex-1 min-h-0 overflow-y-auto"></div>
+
+  <!-- KERANGKA GRID STATIS. Slotnya diisi satu per satu oleh renderFusion(), dan
+       kerangkanya sendiri TIDAK PERNAH ditimpa innerHTML.
+       Itu syarat mutlak sejak peta sungguhan menumpang di #fx-peta-host: menimpa
+       induknya berarti mencabut elemen #map dari DOM dan mematikan instance
+       MapLibre-nya. Sebelumnya seluruh halaman ini satu innerHTML besar.
+       Dua baris, empat kolom: Summary | Peta (2) | Golongan+Venn — lalu
+       Matriks (2) | Peringkat kota | Peringkat dealer. Tanpa gulir halaman. -->
+  <div id="fusion-isi" class="flex-1 min-h-0 grid grid-cols-4 grid-rows-2 gap-2">
+
+    <div id="fx-summary" class="min-h-0 flex flex-col gap-2 overflow-y-auto"></div>
+
+    <div class="col-span-2 min-h-0 bg-white rounded-xl border border-slate-200 p-2 flex flex-col">
+      <div class="flex items-baseline gap-2 mb-1 shrink-0">
+        <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Tampilan peta</span>
+        <span class="text-[10px] text-slate-400">peta yang sama dengan Insight &amp; Peta</span>
+      </div>
+      <!-- Elemen #map DIPINDAHKAN ke sini saat tab Fusion aktif, lalu dikembalikan ke
+           #map-shell saat keluar. Satu instance peta, bukan dua: S.map global dan
+           hampir semua kode peta bergantung padanya. Panel Opsi Peta tidak ikut
+           karena ia SAUDARA #map, bukan anaknya — jadi "hanya peta" didapat apa adanya. -->
+      <div id="fx-peta-host" class="flex-1 min-h-0 rounded-lg overflow-hidden bg-slate-50"></div>
+    </div>
+
+    <div class="min-h-0 bg-white rounded-xl border border-slate-200 p-3 flex flex-col">
+      <div class="flex items-center gap-1 mb-1 shrink-0">
+        <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wide mr-auto">Golongan</span>
+        <button id="fx-mode-golongan" onclick="setModeGolongan('golongan')" class="fx-mode fx-mode-aktif">Final</button>
+        <button id="fx-mode-venn" onclick="setModeGolongan('venn')" class="fx-mode">Venn</button>
+      </div>
+      <div id="fx-golongan" class="flex-1 min-h-0 overflow-y-auto"></div>
+    </div>
+
+    <div class="col-span-2 min-h-0 bg-white rounded-xl border border-slate-200 p-3 flex flex-col">
+      <div class="flex items-baseline gap-2 mb-1 shrink-0">
+        <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Matriks Kota &times; Golongan</span>
+        <span id="fx-matriks-jumlah" class="text-[10px] text-slate-400"></span>
+      </div>
+      <div id="fx-matriks" class="flex-1 min-h-0 overflow-y-auto"></div>
+    </div>
+
+    <div class="min-h-0 bg-white rounded-xl border border-slate-200 p-3 flex flex-col">
+      <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1 shrink-0">Peringkat kota</div>
+      <div id="fx-kota" class="flex-1 min-h-0 overflow-y-auto"></div>
+    </div>
+
+    <div class="min-h-0 bg-white rounded-xl border border-slate-200 p-3 flex flex-col">
+      <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1 shrink-0">Peringkat dealer</div>
+      <div id="fx-dealer" class="flex-1 min-h-0 overflow-y-auto"></div>
+    </div>
+  </div>
+
+  <!-- Cakupan Sumber: tidak lagi memakan satu sel grid permanen. Dimunculkan lewat
+       tombol di kepala halaman, karena ia alat pemeriksa sesekali, bukan angka yang
+       perlu dilihat terus-menerus. -->
+  <div id="fx-cakupan-panel" class="hidden absolute top-12 right-4 w-80 max-w-[90%] max-h-[75%] map-panel p-3 z-20 overflow-y-auto">
+    <div class="flex items-baseline gap-2 mb-1">
+      <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Cakupan sumber</span>
+      <span id="fx-cakupan-per" class="text-[10px] text-slate-400"></span>
+      <button onclick="toggleCakupanPanel()" class="ml-auto text-slate-400 hover:text-slate-700"><i class="ph ph-x"></i></button>
+    </div>
+    <div id="fx-cakupan-kendali"></div>
+    <div id="cakupan-isi"></div>
+  </div>
 
   <!-- Panel geser telusur. Memuat NAMA dan ALAMAT konsumen: rute PII, dibatasi laju
        dan tercatat di access_log oleh server. -->

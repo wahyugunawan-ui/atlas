@@ -18,7 +18,7 @@ import {
 import { renderDeliveryTable, renderFusion, renderServiceTable } from './fusion.js';
 import { selectOutlet } from './outlets.js';
 import { dealerCardHtml } from './render.js';
-import { fitToScope } from './map.js';
+import { fitToScope, kembalikanPeta, pinjamPetaKeFusion } from './map.js';
 import {
   contributionPercent, contributionsForRows, groupByCity, referenceGap, referenceRatio,
   relativePosition,
@@ -1553,6 +1553,10 @@ export function switchTab(name) {
   // memang menggambar ulang lewat REPAINT (filter-bar.js), tapi itu cuma jalan waktu
   // filternya BERUBAH. Tanpa tiga baris ini, membuka tabnya menampilkan bingkai
   // kosong — isinya baru muncul kalau orang kebetulan menyentuh filter.
+  // Peta dipinjam halaman Fusion, dan WAJIB dikembalikan begitu keluar — kalau
+  // tidak, tab Insight & Peta menampilkan kotak kosong tanpa satu pun pesan.
+  if (name === 'fusion') pinjamPetaKeFusion(); else kembalikanPeta();
+
   if (name === 'fusion') renderFusion();
   if (name === 'servis') renderServiceTable();
   if (name === 'kirim') renderDeliveryTable();

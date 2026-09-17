@@ -594,6 +594,47 @@ function catatanAbaikan(f) {
     `bawah mengikuti saringan Kota, Dealer, Pos, dan periode.</div>`;
 }
 
+/** Tulis ke satu slot grid. Kerangkanya sendiri tidak pernah disentuh. */
+function isiSlot(id, html) {
+  const el = $(id);
+  if (el) el.innerHTML = html;
+}
+
+/** Blok Golongan punya DUA tampilan dalam satu sel; bawaannya Golongan final. */
+let modeGolongan = 'golongan';
+
+/** Angka terakhir yang diterima, supaya ganti mode tidak meminta ulang ke server. */
+let fusiTerakhir = null;
+
+/** Gambar ulang HANYA sel Golongan/Venn. */
+function gambarGolongan() {
+  ['golongan', 'venn'].forEach((m) => {
+    const tombol = $(`fx-mode-${m}`);
+    if (tombol) tombol.classList.toggle('fx-mode-aktif', modeGolongan === m);
+  });
+  if (!fusiTerakhir) return;
+
+  const { counts, total, irisan, meta } = fusiTerakhir;
+  isiSlot('fx-golongan', modeGolongan === 'venn'
+    ? venn(irisan)
+    : Object.keys(SEGMENTS).map((k) => barisGolongan(k, counts[k])).join('') +
+      donut(counts, total) +
+      `<div class="text-[10px] text-slate-400 mt-2 pt-2 border-t border-slate-100">` +
+      `KPI Jarak: ${esc(String(meta.kpiJarakKm ?? '—'))} km</div>`);
+}
+
+/** Ganti tampilan sel Golongan antara daftar golongan dan Venn. */
+export function setModeGolongan(mode) {
+  modeGolongan = mode === 'venn' ? 'venn' : 'golongan';
+  gambarGolongan();
+}
+
+/** Munculkan/sembunyikan panel Cakupan Sumber. */
+export function toggleCakupanPanel() {
+  const panel = $('fx-cakupan-panel');
+  if (panel) panel.classList.toggle('hidden');
+}
+
 export async function renderFusion() {
   const wadah = $('fusion-isi');
   if (!wadah) return;
@@ -602,7 +643,8 @@ export async function renderFusion() {
   // se-provinsi: bilahnya tampil, tombolnya bergerak, angkanya tidak pernah berubah.
   const f = fusionFilter();
 
-  wadah.innerHTML = '<p class="text-sm text-slate-400 p-6 text-center">Memuat angka golongan…</p>';
+  isiSlot('fx-summary',
+    '<p class="text-xs text-slate-400 p-2">Memuat angka golongan…</p>');
 
   let hasil;
   let peringkat;
@@ -615,89 +657,60 @@ export async function renderFusion() {
       fetchCakupanSumber(f),
     ]);
   } catch (error) {
-    wadah.innerHTML = `<div class="p-6 text-center"><p class="text-sm text-red-600">${
-      esc(error.message)}</p></div>`;
+    // Galat ditulis di sel Summary saja. Menimpa seluruh kerangka akan mencabut
+    // elemen peta yang sedang menumpang di #fx-peta-host.
+    isiSlot('fx-summary',
+      `<p class="text-xs text-red-600 p-2">${esc(error.message)}</p>`);
     return;
   }
 
-  // Disimpan supaya checkbox dan kotak cari bisa menggambar ulang tanpa meminta
-  // apa pun lagi ke server.
+  // Disimpan supaya checkbox, kotak cari, dan tombol mode bisa menggambar ulang
+  // tanpa meminta apa pun lagi ke server.
   cakupanTerakhir = cakupan;
 
   const meta = hasil.meta || {};
   const counts = meta.counts || {};
   const total = Number(meta.total) || 0;
+  fusiTerakhir = { counts, total, irisan, meta };
 
   // Belum ada data sama sekali = keadaan yang WAJAR sampai Data KTP diimpor, bukan
   // error. Yang ditampilkan karena itu langkah berikutnya, bukan pesan gagal.
   if (!total) {
-    wadah.innerHTML = `<div class="bg-white rounded-xl border border-slate-200 p-6 text-center">` +
-      `<div class="text-sm font-bold text-slate-700">Belum ada hasil penggolongan</div>` +
-      `<p class="text-xs text-slate-500 mt-2 leading-relaxed max-w-lg mx-auto">` +
-      `Golongan Warlok dihitung dari Data KTP, Data Servis, dan Data Pengiriman yang ` +
-      `disatukan lewat Nomor Mesin. Impor Data KTP dulu lewat rute ` +
-      `<span class="mono">/api/v1/import/ktp</span> — begitu masuk, penggolongan jalan ` +
-      `otomatis dan halaman ini terisi sendiri.</p></div>`;
+    isiSlot('fx-summary',
+      `<div class="bg-white rounded-xl border border-slate-200 p-3">` +
+      `<div class="text-xs font-bold text-slate-700">Belum ada hasil penggolongan</div>` +
+      `<p class="text-[10px] text-slate-500 mt-1 leading-relaxed">Golongan Warlok ` +
+      `dihitung dari Data KTP, Data Servis, dan Data Pengiriman yang disatukan lewat ` +
+      `Nomor Mesin. Impor Data KTP dulu lewat rute ` +
+      `<span class="mono">/api/v1/import/ktp</span>.</p></div>`);
+    ['fx-golongan', 'fx-matriks', 'fx-kota', 'fx-dealer'].forEach((id) => isiSlot(id, ''));
     return;
   }
 
   const rasio = meta.confidenceRatio;
   const warnaRasio = WARNA_STATUS[meta.status] || 'text-slate-400';
 
-  wadah.innerHTML =
+  isiSlot('fx-summary',
     catatanAbaikan(f) +
-    `<div class="flex gap-2 mb-2">` +
-      kartuKpi('Pelanggan terfilter', formatNumber(total), `periode ${hasil.period || '—'}`, 'text-blue-500') +
-      kartuKpi('CW Sales', formatNumber(Math.round(Number(meta.cwSales) || 0)), 'terkoreksi keyakinan', 'text-purple-500') +
-      kartuKpi('Confidence Ratio', rasio == null ? '—' : `${(rasio * 100).toFixed(1)}%`,
-        meta.status || 'belum ada data', warnaRasio) +
-    `</div>` +
-    `<div class="flex gap-2 items-start">` +
-      `<div class="bg-white rounded-xl border border-slate-200 p-3 w-52 shrink-0">` +
-        `<div class="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Golongan final</div>` +
-        Object.keys(SEGMENTS).map((k) => barisGolongan(k, counts[k])).join('') +
-        donut(counts, total) +
-        `<div class="text-[10px] text-slate-400 mt-2 pt-2 border-t border-slate-100">` +
-        `KPI Jarak: ${esc(String(meta.kpiJarakKm ?? '—'))} km</div>` +
-      `</div>` +
-      `<div class="bg-white rounded-xl border border-slate-200 p-3 flex-1 min-w-0">` +
-        `<div class="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Peringkat kota</div>` +
-        daftarPeringkat(peringkat.cities, 'cityName') +
-      `</div>` +
-      `<div class="bg-white rounded-xl border border-slate-200 p-3 flex-1 min-w-0">` +
-        `<div class="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Peringkat dealer</div>` +
-        daftarPeringkat(peringkat.dealers, 'dealerName', { denganKota: true }) +
-      `</div>` +
-      `<div class="bg-white rounded-xl border border-slate-200 p-3 flex-1 min-w-0">` +
-        `<div class="flex items-baseline gap-2 mb-1">` +
-          `<span class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">` +
-          `Cakupan sumber</span>` +
-          `<span class="text-[10px] text-slate-400">per ${
-            esc(cakupan && cakupan.groupBy === 'dealer' ? 'dealer' : 'kota')}</span>` +
-        `</div>` +
-        kendaliCakupan() +
-        `<div id="cakupan-isi">${cakupanSumber(cakupan)}</div>` +
-      `</div>` +
-    `</div>` +
-    `<div class="flex gap-2 mt-2">` +
-      panelBelum('Tampilan peta',
-        'Sebaran titik KTP, Servis, dan Pengiriman memakai peta yang sama dengan ' +
-        'halaman Insight & Peta. Belum dibuat.') +
-      `<div class="bg-white rounded-xl border border-slate-200 p-3 flex-1 min-w-0">` +
-        `<div class="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">` +
-        `Irisan sumber data (Venn)</div>` +
-        venn(irisan) +
-      `</div>` +
-    `</div>` +
-    `<div class="bg-white rounded-xl border border-slate-200 p-3 mt-2">` +
-      `<div class="flex items-baseline gap-2 mb-1">` +
-        `<span class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">` +
-        `Matriks Kota &times; Golongan</span>` +
-        `<span class="text-[10px] text-slate-400">${
-          esc(String((matrix && matrix.rows ? matrix.rows.length : 0)))} kota</span>` +
-      `</div>` +
-      matriks(matrix) +
-    `</div>`;
+    kartuKpi('Pelanggan terfilter', formatNumber(total),
+      `periode ${hasil.period || '—'}`, 'text-blue-500') +
+    kartuKpi('CW Sales', formatNumber(Math.round(Number(meta.cwSales) || 0)),
+      'terkoreksi keyakinan', 'text-purple-500') +
+    kartuKpi('Confidence Ratio', rasio == null ? '—' : `${(rasio * 100).toFixed(1)}%`,
+      meta.status || 'belum ada data', warnaRasio));
+
+  gambarGolongan();
+
+  isiSlot('fx-kota', daftarPeringkat(peringkat.cities, 'cityName'));
+  isiSlot('fx-dealer', daftarPeringkat(peringkat.dealers, 'dealerName', { denganKota: true }));
+  isiSlot('fx-matriks', matriks(matrix));
+  isiSlot('fx-matriks-jumlah',
+    `${esc(String((matrix && matrix.rows ? matrix.rows.length : 0)))} kota`);
+
+  isiSlot('fx-cakupan-per',
+    `per ${esc(cakupan && cakupan.groupBy === 'dealer' ? 'dealer' : 'kota')}`);
+  isiSlot('fx-cakupan-kendali', kendaliCakupan());
+  isiSlot('cakupan-isi', cakupanSumber(cakupan));
 }
 
 /** Daftar Lokasi Service — sub-halaman menu Data. */

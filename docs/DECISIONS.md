@@ -3435,3 +3435,61 @@ dan saringan kota berhenti menyaring. Yang kelima, menghapus `r.` dari `period`,
 **LOLOS — dan itu jujur**: hanya tabel rollup yang punya kolom `period`, jadi
 tanpa awalan pun tidak ambigu. Mutasinya mandul, bukan tesnya yang buta. Awalan
 `r.` di sana bersifat pencegahan kalau kelak ada join yang membawa `period`.
+
+## [2026-09-17] Halaman Fusion jadi grid tanpa gulir, dan peta sungguhan menumpang di dalamnya
+
+Dua permintaan pengguna yang ternyata **saling menyelesaikan**.
+
+**Kendala yang menentukan segalanya.** `renderFusion()` menimpa seluruh isi
+`#fusion-isi` dengan satu `innerHTML` besar setiap kali digambar ulang. Selama
+itu masih begitu, menaruh peta sungguhan di dalamnya MUSTAHIL: perubahan filter
+berikutnya akan mencabut elemen `#map` dari DOM dan mematikan instance
+MapLibre-nya. Jadi permintaan "tata letak grid tanpa gulir" bukan pekerjaan
+tambahan di atas permintaan peta — ia justru prasyaratnya.
+
+Sekarang kerangka gridnya STATIS di `index.html` dengan slot bernama, dan
+`renderFusion()` mengisi tiap slot satu per satu. Kerangkanya tidak pernah
+disentuh. Efek samping yang kebetulan berharga: ini kelas bug yang sama dengan
+kotak cari yang kehilangan fokus tiap ketikan — sekarang mustahil terjadi lagi
+di halaman ini.
+
+**Satu peta, dipindah-pindah — bukan dua.** `S.map` global dan hampir seluruh
+modul peta bergantung padanya; instance kedua berarti dua sumber kebenaran untuk
+lapisan, sorotan, dan lingkup yang sama. `pinjamPetaKeFusion()` memindahkan
+elemen `#map` ke slot di halaman Fusion, `kembalikanPeta()` mengembalikannya
+sebagai anak pertama `#map-shell`. Tiga hal yang harus benar, dan ketiganya
+gagal diam-diam kalau keliru:
+
+1. **Panel Opsi Peta tidak ikut** — dan itu gratis, bukan hasil menyembunyikan
+   sesuatu: `#opsi-peta-panel` adalah SAUDARA `#map` di dalam `#map-shell`, bukan
+   anaknya. Persis yang diminta: "hanya peta".
+2. **Tingginya harus dipaksa.** `.map-container` memaku `height: calc(100vh -
+   290px)` pada elemen `#map` SENDIRI, bukan mewarisinya dari induk. Dibawa apa
+   adanya ke sel grid, peta itu melar melewati selnya dan merusak tuntutan
+   "sekali lihat". Selektor `#map.di-fusion` (id + kelas) menang atas
+   `.map-container`.
+3. **Keluar dari layar penuh dulu.** Aturan `#map-shell.penuh #map` menargetkan
+   `#map` sebagai KETURUNAN `#map-shell`; begitu ia pindah, aturan itu tidak
+   berlaku dan petanya tampak rusak. Dan petanya WAJIB dikembalikan saat keluar
+   dari tab Fusion — kalau tidak, tab Insight & Peta menampilkan kotak kosong
+   tanpa satu pun pesan galat.
+
+**Tata letaknya** mengikuti permintaan: baris 1 — Summary (3 KPI) · Tampilan
+peta (2 kolom) · Golongan; baris 2 — Matriks Kota × Golongan (2 kolom) ·
+Peringkat kota · Peringkat dealer. Golongan dan Venn digabung jadi SATU sel
+dua mode (bawaan: Golongan final), dan Cakupan Sumber tidak lagi memakan sel
+permanen — ia dimunculkan lewat tombol, karena ia alat pemeriksa sesekali,
+bukan angka yang perlu terlihat terus-menerus.
+
+**Catatan tentang cara saya memeriksa.** Pemeriksa statis buatan sendiri
+menandai TIGA masalah di slice ini, dan ketiganya false positive: `wadah.innerHTML`
+yang ternyata milik halaman Servis/Kirim, hitungan `col-span-2` yang ikut
+menghitung `xl:col-span-2` di halaman lain, dan `panelBelum` yang disangka mati
+padahal dipakai dua halaman. Ini pola yang berulang sepanjang sesi: penghitung
+substring cepat ditulis tapi sering salah, dan yang menyelesaikannya selalu
+membaca barisnya. Alat itu berguna untuk MENUNJUK tempat, tidak untuk memutuskan.
+
+**Caveat:** belum dilihat di browser. Yang paling perlu diperiksa justru dua hal
+yang tidak bisa saya uji dari sini — apakah gridnya benar-benar muat tanpa gulir
+di 1366×768, dan apakah memindahkan elemen peta bolak-balik meninggalkan sisa
+tampilan.

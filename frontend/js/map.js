@@ -370,6 +370,42 @@ export function toggleFusionPoints() {
   redrawMap();
 }
 
+/* --- meminjamkan peta ke halaman Confidence Fusion ---------------------------
+   SATU instance peta, dipindah-pindah — bukan dua. `S.map` global dan hampir
+   seluruh modul peta bergantung padanya; instance kedua berarti dua sumber
+   kebenaran untuk lapisan, sorotan, dan lingkup yang sama.
+
+   Panel Opsi Peta tidak ikut pindah karena ia SAUDARA #map di dalam #map-shell,
+   bukan anaknya — jadi "hanya peta" di halaman Fusion didapat tanpa menyembunyikan
+   apa pun secara khusus. */
+
+/** Pindahkan elemen peta ke slot di halaman Fusion. Aman dipanggil berulang. */
+export function pinjamPetaKeFusion() {
+  const peta = $('map');
+  const slot = $('fx-peta-host');
+  if (!peta || !slot || peta.parentElement === slot) return;
+
+  // Layar penuh memakai aturan `#map-shell.penuh #map`; begitu #map keluar dari
+  // #map-shell, aturan itu tidak berlaku lagi dan petanya akan tampak rusak.
+  // Jadi keluar dari layar penuh dulu, bukan membiarkannya setengah jalan.
+  if (S.fullscreen) toggleFullscreen(false);
+
+  slot.appendChild(peta);
+  peta.classList.add('di-fusion');
+  if (S.map) { setTimeout(() => S.map.resize(), 60); setTimeout(() => S.map.resize(), 400); }
+}
+
+/** Kembalikan elemen peta ke #map-shell sebagai anak pertama. Aman dipanggil berulang. */
+export function kembalikanPeta() {
+  const peta = $('map');
+  const shell = $('map-shell');
+  if (!peta || !shell || peta.parentElement === shell) return;
+
+  shell.prepend(peta);
+  peta.classList.remove('di-fusion');
+  if (S.map) { setTimeout(() => S.map.resize(), 60); setTimeout(() => S.map.resize(), 400); }
+}
+
 /* ==========================================================================
    BATAS KECAMATAN — referensi visual ("Batas dan Nama Kecamatan") + kec-isi
    ==========================================================================

@@ -52,7 +52,7 @@ import {
 } from './tables.js';
 import {
   bukaTelusurMesin, cariCakupan, renderDeliveryTable, renderFusion, renderServiceTable,
-  toggleSumberCakupan, tutupTelusurMesin,
+  setModeGolongan, toggleCakupanPanel, toggleSumberCakupan, tutupTelusurMesin,
 } from './fusion.js';
 import {
   askDeletePeriod, closeDeletePeriod, confirmDeletePeriod, deletePeriodTyped,
@@ -88,6 +88,7 @@ const HANDLERS = {
   // penyatuan tiga sumber (docs/FUSION.md Tahap F)
   renderFusion, renderServiceTable, renderDeliveryTable,
   toggleSumberCakupan, cariCakupan, bukaTelusurMesin, tutupTelusurMesin,
+  setModeGolongan, toggleCakupanPanel,
   editDealerRingFromTable, editPosCoverageFromTable,
   openNewOutlet, closeNewOutlet, newOutletDealerChanged, saveNewOutlet,
   askResetOutlets, closeResetOutlets, resetOutletsTyped, confirmResetOutlets,

@@ -329,6 +329,17 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
   penyusun WHERE memberi awalan `r.`. Dijaga `test/fusion-filter-sql.test.js`,
   tes pertama di jalur ini yang benar-benar menyentuh Postgres.
 
+- **Halaman Fusion jadi grid tanpa gulir + peta sungguhan di dalamnya.**
+  Kerangka grid STATIS di index.html dengan slot bernama; `renderFusion()`
+  mengisi tiap slot, tidak lagi menimpa satu wadah besar. Itu bukan sekadar
+  tata letak: selama halaman digambar dengan satu `innerHTML`, menaruh peta di
+  dalamnya mustahil — perubahan filter berikutnya akan mencabut elemen `#map`
+  dan mematikan MapLibre. Petanya SATU instance yang dipinjam-pindahkan
+  (`pinjamPetaKeFusion`/`kembalikanPeta`), bukan instance kedua. Baris 1:
+  Summary · Peta (2 kolom) · Golongan (dua mode: Final/Venn). Baris 2: Matriks
+  (2 kolom) · Peringkat kota · Peringkat dealer. Cakupan Sumber jadi tombol.
+  Lihat `docs/DECISIONS.md`.
+
 **Belum dikerjakan (sisa Tahap F, lihat tabel tahapan di `docs/FUSION.md`):**
 - Lingkaran KPI Jarak + garis penghubung di PETA SUNGGUHAN saat menelusuri
   satu Nomor Mesin. Panel telusurnya sudah menggambar keduanya, tapi sebagai
