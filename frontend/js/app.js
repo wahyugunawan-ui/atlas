@@ -51,7 +51,8 @@ import {
   openDealerEditor, closeDealerEditor, saveDealerEditor, deleteDealerConfirm,
 } from './tables.js';
 import {
-  bukaTelusurMesin, cariCakupan, kirimPage, renderDeliveryTable, renderFusion,
+  bukaTelusurMesin, cariCakupan, filterDariFusi, kirimPage, renderDeliveryTable,
+  renderFusion,
   renderServiceTable, servisPage, setKpiServis, setModeGolongan, setModeMatriks,
   toggleCakupanPanel,
   toggleLiveFusion,
@@ -93,7 +94,7 @@ const HANDLERS = {
   renderFusion, renderServiceTable, renderDeliveryTable, servisPage, kirimPage,
   setKpiServis,
   toggleSumberCakupan, cariCakupan, bukaTelusurMesin, tutupTelusurMesin,
-  setModeGolongan, setModeMatriks, toggleCakupanPanel, toggleLiveFusion,
+  setModeGolongan, setModeMatriks, filterDariFusi, toggleCakupanPanel, toggleLiveFusion,
   editDealerRingFromTable, editPosCoverageFromTable,
   openNewOutlet, closeNewOutlet, newOutletDealerChanged, saveNewOutlet,
   askResetOutlets, closeResetOutlets, resetOutletsTyped, confirmResetOutlets,

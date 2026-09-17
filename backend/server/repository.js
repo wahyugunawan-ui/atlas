@@ -1764,6 +1764,19 @@ async function fusionByDealer(period, filter) {
       ORDER BY dealer_code, SUM(customer_count) DESC, city_code
     )
     SELECT r.dealer_code AS "dealerCode", d.dealer_name AS "dealerName",
+           -- DUA kosakata kode berdampingan, dan itu disengaja.
+           --
+           -- "dealerCode" tetap kode numerik Excel yang tersimpan di rollup. JANGAN
+           -- ditukar artinya: /v1/metrik/dealer/:dealer mencocokkan field ini dengan
+           -- parameter URL-nya (yang memang numerik, karena rute itu TIDAK melewatkan
+           -- parameternya ke legacyDealerCode), dan menukarnya akan mengosongkan nama
+           -- dealer di sana tanpa satu pun galat.
+           --
+           -- "dealerFilterCode" kode turunan nama, satu-satunya yang dikenal bilah
+           -- filter di halaman. Dipakai klik-untuk-menyaring di Peringkat Dealer;
+           -- mengirim kode numerik ke setScope() menghasilkan saringan yang tidak
+           -- pernah cocok - halaman kosong tanpa penjelasan.
+           d.dealer_code AS "dealerFilterCode",
            u.city_code AS "cityCode",
            (SELECT MIN(city_name) FROM villages vc WHERE vc.city_code = u.city_code)
              AS "cityName",
@@ -1776,7 +1789,7 @@ async function fusionByDealer(period, filter) {
     LEFT JOIN dealers d ON d.legacy_code = r.dealer_code
     LEFT JOIN utama u ON u.dealer_code = r.dealer_code
     WHERE ${where.join(' AND ')}
-    GROUP BY r.dealer_code, d.dealer_name, u.city_code, u.n
+    GROUP BY r.dealer_code, d.dealer_name, d.dealer_code, u.city_code, u.n
     ORDER BY SUM(r.customer_count) DESC`, params);
 }
 

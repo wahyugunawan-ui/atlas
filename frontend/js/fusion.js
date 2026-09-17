@@ -149,7 +149,14 @@ function matriks(data) {
 
     const warna = WARNA_STATUS[r.status] || 'text-slate-400';
     const cr = r.confidenceRatio == null ? '—' : `${(r.confidenceRatio * 100).toFixed(0)}%`;
-    return `<tr class="border-b border-slate-50">` +
+    // Barisnya jadi kendali silang: klik = saring seluruh halaman ke kota itu.
+    // Baris tanpa kode kota tidak bisa diklik sama sekali — tombol yang menerima klik
+    // lalu tidak melakukan apa-apa cuma melatih orang berhenti mempercayainya.
+    const klik = r.cityCode
+      ? ` onclick="filterDariFusi('kota','${esc(r.cityCode)}')" title="Saring seluruh ` +
+        `halaman ke kota ini" class="border-b border-slate-50 cursor-pointer hover:bg-blue-50"`
+      : ' class="border-b border-slate-50"';
+    return `<tr${klik}>` +
       `<td class="px-1 py-0.5 text-[10px] text-slate-700 truncate" style="max-width:130px" ` +
       `title="${esc(r.cityName || r.cityCode || '')}">${esc(r.cityName || r.cityCode || '—')}</td>` +
       sel +
@@ -588,7 +595,22 @@ function daftarPeringkat(rows, kunciNama, opsi) {
       }</span>`
       : '';
 
-    return `<div class="flex items-center gap-2 py-1 border-b border-slate-50 last:border-0">` +
+    // Barisnya jadi kendali silang: klik = saring seluruh halaman ke kota/dealer itu.
+    //
+    // Untuk dealer dipakai dealerFilterCode (kode turunan nama), BUKAN dealerCode yang
+    // numerik — bilah filter cuma mengenal yang pertama. Baris tanpa kode yang bisa
+    // dipakai tidak menerima klik sama sekali: lebih baik tidak bisa diklik daripada
+    // bisa diklik lalu mengosongkan halaman tanpa sebab yang terlihat.
+    const jenisKlik = opsi && opsi.jenis;
+    const kodeKlik = jenisKlik === 'dealer' ? (r.dealerFilterCode || '') : (r.cityCode || '');
+    const KELAS_BARIS = 'flex items-center gap-2 py-1 border-b border-slate-50 last:border-0';
+    const klik = (jenisKlik && kodeKlik)
+      ? ` onclick="filterDariFusi('${esc(jenisKlik)}','${esc(kodeKlik)}')" ` +
+        `title="Saring seluruh halaman ke ${jenisKlik === 'dealer' ? 'dealer' : 'kota'} ini" ` +
+        `class="${KELAS_BARIS} cursor-pointer hover:bg-blue-50"`
+      : ` class="${KELAS_BARIS}"`;
+
+    return `<div${klik}>` +
       `<span class="text-[11px] text-slate-700 truncate flex-1">${
         esc(r[kunciNama] || r.cityCode || r.dealerCode || '—')}${kota}</span>` +
       `<span class="text-[11px] mono text-slate-500">${esc(formatNumber(total))}</span>` +
@@ -757,7 +779,7 @@ function gambarMatriks() {
 
   if (modeMatriks === 'kota') {
     const kota = (peringkatTerakhir && peringkatTerakhir.cities) || [];
-    isiSlot('fx-matriks', daftarPeringkat(kota, 'cityName'));
+    isiSlot('fx-matriks', daftarPeringkat(kota, 'cityName', { jenis: 'kota' }));
     isiSlot('fx-matriks-jumlah', `Peringkat kota · ${esc(String(kota.length))} kota`);
     return;
   }
@@ -771,6 +793,31 @@ function gambarMatriks() {
 export function setModeMatriks(mode) {
   modeMatriks = mode === 'kota' ? 'kota' : 'matriks';
   gambarMatriks();
+}
+
+/**
+ * Saring seluruh halaman dari elemen yang diklik — baris matriks, peringkat kota,
+ * atau peringkat dealer.
+ *
+ * TANPA SIDEBAR, atas permintaan tim: yang jadi kendali silang adalah elemen yang
+ * memang sudah ada di layar, bukan panel baru di samping. Filter bilah dipakai
+ * bersama seluruh halaman sejak 2026-09-17, jadi menyaring di sini ikut terbawa waktu
+ * pindah ke Sales Analytics — itu memang yang diharapkan.
+ *
+ * `force: true`, sama seperti langkahLive(). Tanpa itu setScope() bersifat toggle dan
+ * mengklik baris yang SAMA dua kali justru mematikan saringannya — untuk mode LIVE itu
+ * membuat putarannya tersendat, dan di sini membuat klik kedua terasa seperti aplikasi
+ * yang tidak merespons. Yang mengosongkan saringan tombol reset di bilah filter, satu
+ * tempat, bukan dua perilaku berbeda untuk gerakan yang sama.
+ *
+ * @param {'kota'|'dealer'} jenis
+ * @param {string} kode  kode kota BPS, atau kode dealer TURUNAN NAMA (bukan numerik)
+ */
+export async function filterDariFusi(jenis, kode) {
+  if (!kode) return;
+  setScope(jenis === 'dealer' ? 'dealer' : 'kota', kode, true);
+  window.syncFilterBar();
+  await renderFusion();
 }
 
 /** Munculkan/sembunyikan panel Cakupan Sumber. */
@@ -862,7 +909,8 @@ export async function renderFusion() {
   matriksTerakhir = matrix;
   gambarMatriks();
 
-  isiSlot('fx-dealer', daftarPeringkat(peringkat.dealers, 'dealerName', { denganKota: true }));
+  isiSlot('fx-dealer',
+    daftarPeringkat(peringkat.dealers, 'dealerName', { denganKota: true, jenis: 'dealer' }));
 
   isiSlot('fx-cakupan-per',
     `per ${esc(cakupan && cakupan.groupBy === 'dealer' ? 'dealer' : 'kota')}`);

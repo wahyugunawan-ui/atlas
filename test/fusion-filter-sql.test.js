@@ -186,6 +186,22 @@ async function main() {
     assert.ok(baris404, 'dealer tak dikenal tetap memakai kode aslinya');
     assert.strictEqual(Number(baris404.ktp), 3);
 
+    // 4c. Peringkat dealer membawa DUA kosakata kode sekaligus, dan itu disengaja.
+    //
+    // dealerCode = kode numerik rollup, dipakai /v1/metrik/dealer/:dealer untuk
+    // mencocokkan parameter URL-nya. dealerFilterCode = kode turunan nama, satu-satunya
+    // yang dikenal bilah filter, dipakai klik-untuk-menyaring di panel Peringkat Dealer.
+    //
+    // Keduanya diperiksa BERSAMA: menukar salah satunya diam-diam akan memuaskan
+    // separuh aplikasi dan mematikan separuh lainnya, tanpa galat di kedua sisi.
+    const dealer = await repo.fusionByDealer(PERIOD, { cityCode: '34.04' });
+    assert.strictEqual(dealer.length, 1, 'Sleman cuma punya satu dealer di rollup');
+    assert.strictEqual(dealer[0].dealerCode, '9',
+      'dealerCode harus tetap kode numerik rollup');
+    assert.strictEqual(dealer[0].dealerFilterCode, 'DEALERSATU',
+      'dealerFilterCode harus kode turunan nama yang dikenal bilah filter');
+    assert.strictEqual(dealer[0].dealerName, 'DEALER SATU');
+
     // 5. Golongan ikut menyaring, dan tidak bertabrakan dengan saringan lain.
     const kosong = await repo.fusionTotals(
       { period: PERIOD, cityCode: '34.04', segment: 'registered_only' });
