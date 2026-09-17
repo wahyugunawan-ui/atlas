@@ -46,7 +46,7 @@ import {
   editDealerRingFromTable, editPosCoverageFromTable,
   renderCustomerTable,
   renderOutletTable, renderVillageTable, saveOutletEditor, searchCustomers, showOnMap,
-  switchTab, toggleMasterMenu, toggleDataMenu, bukaBagianImport,
+  switchTab, toggleMasterMenu, toggleDataMenu, toggleImportMenu, bukaBagianImport,
   renderDealerTable, openNewDealer, closeNewDealer, saveNewDealer,
   openDealerEditor, closeDealerEditor, saveDealerEditor, deleteDealerConfirm,
 } from './tables.js';
@@ -86,7 +86,7 @@ const HANDLERS = {
   // peta dan outlet
   selectOutlet, closeSelectionInfo, openVillageDetail, closeVillageDetail,
   // tabel
-  switchTab, toggleMasterMenu, toggleDataMenu, bukaBagianImport, renderOutletTable, renderVillageTable, showOnMap, jumpToVillage, promptPin,
+  switchTab, toggleMasterMenu, toggleDataMenu, toggleImportMenu, bukaBagianImport, renderOutletTable, renderVillageTable, showOnMap, jumpToVillage, promptPin,
   openDealerDetail, openCitySummary, toggleDealerCity, jumpFromDealer,
   renderCustomerTable, searchCustomers, customerPage,
   // penyatuan tiga sumber (docs/FUSION.md Tahap F)

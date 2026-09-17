@@ -380,10 +380,14 @@
     <button onclick="switchTab('peta')" id="nav-peta" class="nav-btn active whitespace-nowrap flex items-center px-3.5 py-1.5 rounded-xl text-sm font-semibold"><i class="ph ph-squares-four text-lg mr-2"></i> Sales Analytics</button>
     <!-- Flyout ketiga, mengikuti pola Master dan Data. BEDA sifatnya dari keduanya:
          ketiga bagian Import ada di SATU halaman, jadi opsinya menggulir ke bagian
-         itu, bukan berpindah tab. Tombolnya sendiri tetap membuka halaman Import
-         kalau diklik langsung. -->
+         itu, bukan berpindah tab.
+
+         Sejak 2026-09-17 tombolnya MEMBUKA FLYOUT, tidak lagi langsung berpindah ke
+         halaman Import. Sebelumnya flyout ini cuma terbuka lewat hover — dan di layar
+         sentuh tidak ada hover, jadi ketiga bagiannya tidak pernah bisa dijangkau.
+         Lihat toggleImportMenu() di tables.js. -->
     <div class="pilih" id="nav-import-wrap">
-      <button onclick="switchTab('import')" id="nav-import" class="nav-btn whitespace-nowrap flex items-center px-3.5 py-1.5 rounded-xl text-sm font-semibold"><i class="ph ph-upload-simple text-lg mr-2"></i> Import Data<i class="ph ph-caret-down pilih-caret ml-1.5"></i></button>
+      <button onclick="toggleImportMenu()" id="nav-import" class="nav-btn whitespace-nowrap flex items-center px-3.5 py-1.5 rounded-xl text-sm font-semibold"><i class="ph ph-upload-simple text-lg mr-2"></i> Import Data<i class="ph ph-caret-down pilih-caret ml-1.5"></i></button>
       <div id="import-panel" class="pilih-panel" hidden style="width:240px; z-index:300">
         <button onclick="bukaBagianImport('periode')" class="pilih-opsi"><i class="ph ph-calendar-check mr-2"></i>Periode Tersimpan</button>
         <button onclick="bukaBagianImport('proses')" class="pilih-opsi"><i class="ph ph-upload-simple mr-2"></i>Proses Impor</button>

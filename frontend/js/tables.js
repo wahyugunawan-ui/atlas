@@ -1671,6 +1671,26 @@ export function closeImportMenu() {
 }
 
 /**
+ * Buka/tutup flyout Import — jalur KLIK, bukan cuma hover.
+ *
+ * MEMBALIK perilaku sebelumnya, dan itu disengaja. Dulu #nav-import langsung
+ * switchTab('import') dan flyoutnya HANYA terbuka lewat mouseenter. Di layar sentuh
+ * tidak ada mouseenter sama sekali — jadi ketiga bagian Import (Periode Tersimpan,
+ * Proses Impor, Riwayat Impor) tidak pernah bisa dijangkau dari menu, dan satu-satunya
+ * jalan ke sana adalah menggulir halamannya sendiri sampai ketemu.
+ *
+ * Sekarang polanya sama persis dengan Master dan Data: klik membuka flyout, dan ketiga
+ * opsinyalah yang membawa masuk ke halamannya. Harganya satu ketukan tambahan untuk
+ * sampai ke halaman Import. Itu ditukar dengan menu yang bisa dipakai sama sekali di
+ * perangkat yang tidak punya kursor.
+ */
+export function toggleImportMenu() {
+  const panel = $('import-panel');
+  if (!panel) return;
+  if (panel.hidden) openImportMenu(); else closeImportMenu();
+}
+
+/**
  * Buka halaman Import dan gulir ke salah satu dari tiga bagiannya.
  *
  * `switchTab` dipanggil lebih dulu karena bagiannya tidak punya tinggi selama

@@ -325,6 +325,39 @@ function test() {
       `tombol mode "${mode}" tidak memanggil setModeMatriks('${mode}')`);
   }
 
+  /* --------------------------------------------------------------------
+     KETIGA FLYOUT NAVBAR HARUS BISA DIBUKA DENGAN KLIK
+     --------------------------------------------------------------------
+     Bukan cuma Import. Yang dijaga di sini SIFATNYA: menu yang hanya terbuka lewat
+     mouseenter tidak ada sama sekali di perangkat sentuh — tidak ada galat, tidak ada
+     yang terlihat rusak, menunya cuma tidak pernah muncul.
+
+     Sudah kejadian pada Import sampai 2026-09-17: tombolnya langsung switchTab, dan
+     ketiga bagiannya (Periode Tersimpan, Proses Impor, Riwayat Impor) hanya bisa
+     dicapai dengan menggulir halamannya sendiri. Master dan Data kebetulan sudah benar;
+     dimasukkan ke daftar yang sama supaya tidak ada yang diam-diam turun jadi
+     hover-only lagi.
+     -------------------------------------------------------------------- */
+  const flyoutNav = [
+    ['nav-master', 'toggleMasterMenu'],
+    ['nav-data', 'toggleDataMenu'],
+    ['nav-import', 'toggleImportMenu'],
+  ];
+  for (const [idTombol, fungsi] of flyoutNav) {
+    // Tombolnya dan onclick-nya harus ada di ELEMEN YANG SAMA, jadi yang diambil
+    // tag <button>-nya utuh lalu diperiksa isinya. Mencari id dan onclick secara
+    // terpisah di seluruh berkas akan tetap lolos walaupun onclick-nya menempel di
+    // tombol lain — penjaga yang terasa aman padahal tidak memeriksa apa-apa.
+    const cocok = new RegExp(`<button[^>]*\\bid="${idTombol}"[^>]*>`).exec(htmlTanpaKomentar);
+    assert.ok(cocok, `tombol #${idTombol} hilang dari navbar`);
+    assert.ok(cocok[0].includes(`onclick="${fungsi}()"`),
+      `#${idTombol} tidak membuka menunya lewat KLIK (${fungsi}()). Menu yang cuma ` +
+      'terbuka lewat hover tidak bisa dipakai sama sekali di layar sentuh');
+  }
+
+  assert.ok(source['tables.js'].includes('export function toggleImportMenu'),
+    'toggleImportMenu tidak lagi diekspor tables.js');
+
   // Tiap ujung rentang punya DUA dropdown: bulan dan tahun (KF-FILTER-4). Versi
   // sebelumnya memakai <input type="month">, dan di situ tahunnya cuma bisa diketik —
   // tidak ada daftarnya. Tim memintanya bisa dipilih juga.

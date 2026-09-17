@@ -4040,3 +4040,23 @@ dicatat sebagai utang: `start-all.bat` masih mengasumsikan PostgreSQL dijalankan
 `pg_ctl` dari `%DATA_DIR%\pgdata`, padahal yang hidup adalah layanan Windows
 `postgresql-x64-17` dengan folder datanya sendiri — blok `pg_ctl` di berkas itu
 akan gagal di mesin ini.
+
+## [2026-09-17] Flyout Import dibuka dengan KLIK — membalik "tombolnya langsung membuka halaman"
+
+**Konteks:** `#nav-import` memanggil `switchTab('import')` waktu diklik, dan flyout
+berisi tiga bagiannya (Periode Tersimpan, Proses Impor, Riwayat Impor) HANYA terbuka
+lewat `mouseenter`. Di layar sentuh tidak ada `mouseenter` sama sekali. Menunya tidak
+melempar galat, tidak terlihat rusak — ia cuma tidak pernah muncul, dan satu-satunya
+jalan ke ketiga bagian itu adalah menggulir halaman Import sampai ketemu.
+**Keputusan:** Tombolnya memanggil `toggleImportMenu()`, persis pola `toggleMasterMenu`
+dan `toggleDataMenu`. Ketiga opsi di dalam flyout yang membawa masuk ke halamannya.
+**Alasan:** Ini satu-satunya dari tiga flyout navbar yang tidak bisa dipakai tanpa
+kursor. Menyamakan polanya menghapus kekecualian itu sekaligus.
+**Alternatif yang ditolak:** (a) Menambah area sentuh terpisah pada ikon caret sambil
+mempertahankan `switchTab` di badan tombol — ditolak, dua target sentuh berdempetan di
+satu tombol sempit lebih mudah salah tekan daripada menolong. (b) Membuka flyout saat
+fokus keyboard — ditolak, tidak menyelesaikan masalah layar sentuh sama sekali.
+**Konsekuensi:** Sampai ke halaman Import sekarang dua ketukan, bukan satu. Itu harga
+yang ditukar dengan menu yang bisa dipakai sama sekali. Dijaga `test/page.test.js`,
+yang memeriksa KETIGA flyout sekaligus supaya tidak ada yang diam-diam turun jadi
+hover-only lagi; dua mutasi (Import dan Data) membuktikan penjaganya bisa merah.
