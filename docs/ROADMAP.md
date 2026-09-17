@@ -412,6 +412,18 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
   SELURUH halaman mati. Dibuktikan: `page.test.js` tetap hijau terhadap cacat
   yang sama. Lihat `docs/DECISIONS.md`.
 
+**Seluruh baris "F. UI" di tabel tahapan `docs/FUSION.md` sekarang sudah
+terpenuhi** — menu Data, layer peta baru, halaman Confidence Fusion,
+drill-down, dan mode Live. Khusus "layer peta baru", §3.1 meminta tepat tiga
+lapisan dan ketiganya ada: `ktp-titik` (isian warna dealer), `servis-titik`
+(symbol ikon kotak lewat `map.addImage()`), dan `kirim-titik` (isian kosong,
+outline kuning). Di luar spesifikasi ikut ada lapisan radius KPI Jarak dan
+empat lapisan telusur satu Nomor Mesin.
+
+Butir ini sempat tertulis sebagai "F UI sisa: layer peta baru" — sudah tidak
+benar sejak ketiga lapisan itu jadi. Klaim basi kedua yang ditemukan dengan cara
+yang sama: membaca ulang ROADMAP sebelum melaporkan sisa pekerjaan.
+
 **Belum dikerjakan (sisa Tahap F, lihat tabel tahapan di `docs/FUSION.md`):**
 - Cross-filtering penuh di sidebar (mode Live-nya sudah jadi, lihat di atas)
 - Jalan ke dropdown "Import Data" untuk layar sentuh — panelnya sekarang hanya
@@ -419,10 +431,6 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
 - Kolom periode untuk `delivery_ping` — tanpa itu Data Pengiriman tidak bisa
   masuk checklist "Periode Tersimpan", karena ping tidak bisa diatribusikan ke
   bulan mana pun tanpa mengarang.
-- F UI sisa: layer peta baru. (Menu **Data** dengan tiga subhalaman —
-  "berdasarkan KTP", "Lokasi Service", "berdasarkan Lokasi Delivery" — dan
-  halaman Confidence Fusion SUDAH ada; ketiganya sempat tampak belum ada
-  karena bug halaman kosong di atas.)
 
 ### Rebranding ke ATLAS + polesan UI/UX korporat Astra Motor (2026-09-14 malam)
 
