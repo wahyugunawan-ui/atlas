@@ -56,9 +56,12 @@ Istilah wilayah memakai terjemahan resmi BPS supaya konsisten:
 `docs/FUSION.md`. Tahap A (fondasi), B (resolver nama desa → koordinat),
 C (impor Data KTP & Data Servis, plus rute ping pengiriman), D (mesin
 penggolongan + ringkasan ke `segment_rollup`), dan E (dua belas rute
-`/api/v1/*`) sudah selesai. Yang tersisa tinggal Tahap F: layarnya —
-menu Data dengan tiga sub-halaman, tiga jenis titik baru di peta, dan
-halaman Confidence Fusion.
+`/api/v1/*`) sudah selesai. Tahap F (layarnya) kini juga ada di kode per
+2026-09-17: menu Data dengan tiga sub-halaman, tiga jenis titik di peta,
+dan halaman Confidence Fusion dengan grid 12×12 — lihat entri 2026-09-17
+di **Selesai**. Yang membuatnya belum bisa disebut tuntas: **belum satu pun
+dilihat di browser sungguhan** (daftarnya di paragraf "Belum dilihat di
+browser" di bawah).
 
 **Sudah diuji dengan data sungguhan (2026-09-16).** Data Agustus 2026
 diimpor lewat CLI: 19.598 baris KTP dan 186.471 baris Servis. Rantai
@@ -71,9 +74,20 @@ dashboard: pada bulan pertama golongan "Warga asli" mendominasi (93%)
 dan itu BUKAN tanda data buruk — servis adalah data seluruh populasi
 motor, sedangkan KTP kohort satu bulan.
 
-Halaman Import belum diubah (masih belum ada tombol unggah Data KTP/
+~~Halaman Import belum diubah (masih belum ada tombol unggah Data KTP/
 Servis), jadi impor berikutnya masih lewat alat lain sampai Tahap F
-potongan berikutnya selesai.
+potongan berikutnya selesai.~~ Sudah basi per 2026-09-17: tombol unggah
+Data KTP/Servis ada, dan Periode Tersimpan kini bisa hapus DAN impor ulang
+per jenis data.
+
+**Belum dilihat di browser (2026-09-17).** Semua pekerjaan hari itu dibuktikan
+lewat tes teruji mutasi dan pemeriksaan HTTP, BUKAN klik di layar: warna titik
+KTP per dealer, peta Fusion ikut filter dan mode LIVE, grid 12×12 muat tanpa
+gulir, tombol LIVE/Cakupan Sumber muncul di bilah filter hanya di halaman
+Fusion, flyout Import di perangkat sentuh, klik baris matriks/peringkat untuk
+menyaring, tombol impor ulang per jenis membuka dialog berkas di bulan yang
+benar, dan panel gagal-vs-kosong di Lokasi Servis/Delivery. Itu yang paling
+perlu dicoba berikutnya.
 
 Satu bagian rancangan yang SENGAJA ditunda: micro-batch 60 detik untuk
 ping realtime (2.2 jalur B). Belum ada produsen ping-nya, jadi yang
@@ -179,10 +193,75 @@ cuma perluasan ke Sulawesi ke timur.
   tidak pernah ada yang login, PostgreSQL dan aplikasi harus jadi Windows service —
   butuh admin sekali, langkahnya di `PINDAH.md`.
 - **Belum ada CI, dan Node 20 belum diuji langsung** meski `engines` mengizinkannya.
+- **Utang dari sesi 2026-09-17, dicatat bukan diperbaiki:**
+  - `trust proxy` di belakang Cloudflare Tunnel **belum terbukti** mencatat IP
+    pengunjung asli di `access_log` — pembacaan tabel PII ditolak pengaman sesi itu.
+    Cara membuktikannya: login lewat link publik, buka halaman ber-PII, lalu periksa
+    kolom `ip` baris terbaru `access_log` (harus bukan `127.0.0.1`).
+  - `COOKIE_SECURE=0` padahal `PINDAH.md` mewajibkan `1` kalau dibuka ke internet —
+    sengaja, karena `1` mematikan login lewat HTTP lokal dan LAN kantor.
+  - PostgreSQL mendengar di `0.0.0.0:5432`, melanggar `PINDAH.md`. Tidak terjangkau
+    dari internet (terowongan cuma port 3000), tapi terjangkau dari seluruh LAN.
+  - `ops/start-all.bat` masih mengasumsikan `pg_ctl` dari `%DATA_DIR%\pgdata`;
+    PostgreSQL di laptop itu layanan Windows `postgresql-x64-17`. Portnya saja yang
+    sudah dibetulkan.
+  - Cloudflare quick tunnel itu **sementara** (link berganti tiap restart); keputusan
+    resminya tetap Tailscale Funnel. Lihat DECISIONS 2026-09-17.
+  - PRD `KF-FILTER-3` masih berbunyi "nilai penyaring terpisah per halaman" padahal
+    filter sudah dipakai bersama sejak 2026-09-17. Namanya saja yang diganti.
+  - Pengiriman belum masuk checklist Periode Tersimpan — sengaja, sampai ada ping
+    pertama (tanpa itu setiap bulan terbaca "3 dari 4").
 
 ---
 
 ## Selesai
+
+### Tujuh perbaikan + akses internet: warna KTP, peta ikut LIVE, grid 12×12, klik-untuk-menyaring, periode ping (2026-09-17 sesi malam)
+
+Sepuluh commit, `b15fbbc` sampai `9076149`, 32 → **43/43 berkas tes**. Tiap logika baru
+meninggalkan tes yang diuji mutasi, dan pesan asersi yang mati DIBACA — bukan cuma
+kode keluarnya (lihat "Pelajaran" di bawah).
+
+- **Server bisa dibuka orang luar** lewat Cloudflare quick tunnel (sementara;
+  Tailscale tidak terpasang). Skrip `ops/akses-luar-cloudflare-{nyala,mati}.bat`.
+  Dua angka salah di skrip lama dibetulkan: port 3100→3000, PGPORT 5433→5432.
+- **Titik KTP berwarna per dealer** (`b15fbbc`): `fusionVillagePoints()` satu-satunya
+  query menghadap-dealer tanpa join `legacy_code`, jadi semua titik jatuh ke abu-abu.
+- **Peta ikut filter di halaman Fusion, termasuk tiap ketukan LIVE** (`9e66266`):
+  `refreshMapVisual()` dipisah dari `renderAll()`; penjaga halamannya TIDAK dibuang.
+- **"Insight & Peta" → "Sales Analytics"; tombol LIVE & Cakupan Sumber pindah ke
+  bilah filter** (`bfb58e8`), disembunyikan di luar halaman Fusion.
+- **Grid Fusion 12×12** (`6d94743`), letak eksplisit per blok; Matriks + Peringkat
+  Kota jadi satu blok dua mode. Dua belas utilitas Tailwind barunya diperiksa ada di
+  hasil build.
+- **Flyout Import bisa dibuka dengan klik** (`618c3ce`) — sebelumnya mustahil di
+  layar sentuh. Membalik perilaku lama; tercatat di DECISIONS.
+- **Klik baris matriks/peringkat untuk menyaring** (`34fb662`). Peringkat dealer
+  membawa DUA kode: `dealerCode` numerik (dipakai `/v1/metrik/dealer/:dealer`) dan
+  `dealerFilterCode` turunan nama (dikenal bilah filter).
+- **Impor ulang per jenis data** (`65a04ee`).
+- **Lokasi Servis/Delivery membedakan gagal dari kosong** (`d83cf6d`).
+- **`delivery_ping` punya kolom periode PEMBELIAN** (`9076149`); hapus per jenis dan
+  hapus periode kini ikut membuang ping. Sebelumnya tidak ada satu tes pun yang
+  menyentuh jalur PII pengiriman/hapus.
+
+**Keluhan "halaman Lokasi Servis kosong" — sebabnya ternyata bukan kode.** Proses
+server yang sedang jalan dinyalakan 13:14:42, sedangkan commit perbaikannya `715eaef`
+masuk 13:16:09. Backend yang melayani adalah kode sebelum perbaikan, sementara
+frontend dibaca dari disk tiap permintaan — frontend baru memanggil backend lama.
+Dijalankan ulang, lalu panel gagalnya dibetulkan supaya kasus serupa terbaca.
+
+**Pelajaran, karena empat kali "bukti" saya ternyata bukan bukti:**
+1. Mutasi yang merah di **penjaga lama** tidak membuktikan asersi baru. Terjadi dua kali;
+   sejak itu mutasi dipilih yang mengisolasi asersi yang diuji.
+2. `node:test` menulis kegagalan ke **stdout**. Menyaring stderr memberi kode keluar
+   bukan-nol tanpa bukti asersi mana yang mati.
+3. Jangkar mutasi yang muncul **lebih dari sekali** mengubah fungsi yang salah — mutasi
+   saringan `delivery_ping` sempat "lolos hijau" karena mengenai `customersInVillage`.
+   Sekarang jumlah kecocokan diwajibkan tepat satu.
+4. Premis "`page.test.js` buta terhadap onclick buatan JS" **salah dan sempat
+   ter-commit**; pemindai handlernya membaca seluruh sumber modul. Dikoreksi di
+   `65a04ee`.
 
 ### Spesifikasi FUSION (penyatuan 3 sumber) + fondasi Tahap A (2026-09-16)
 

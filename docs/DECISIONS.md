@@ -4060,3 +4060,31 @@ fokus keyboard — ditolak, tidak menyelesaikan masalah layar sentuh sama sekali
 yang ditukar dengan menu yang bisa dipakai sama sekali. Dijaga `test/page.test.js`,
 yang memeriksa KETIGA flyout sekaligus supaya tidak ada yang diam-diam turun jadi
 hover-only lagi; dua mutasi (Import dan Data) membuktikan penjaganya bisa merah.
+
+## [2026-09-17] `delivery_ping.period` = periode PEMBELIAN — membalik "Pengiriman tidak bisa dihapus per bulan"
+
+**Konteks:** `deleteSourcePeriod()` menolak `kirim` dengan alasan yang benar:
+`delivery_ping` tidak punya kolom periode, dan menebaknya dari `sent_at` akan membuang
+ping yang kebetulan tiba di bulan itu untuk motor yang dibeli bulan lain. Akibatnya
+"hapus periode" juga tidak pernah menyentuh ping, dan bulan yang sudah dihapus masih
+meninggalkan titik GPS rumah pelanggannya.
+**Keputusan:** Kolom `period VARCHAR(7)` boleh NULL, berisi periode PEMBELIAN motor
+(periode Data KTP-nya). Diisi dari `period` yang dikirim sistem lapangan kalau ada;
+kalau tidak, `MIN(period)` dari `customer_ktp` lewat nomor mesin; kalau mesinnya belum
+dikenal, NULL dan pingnya tetap disimpan. Tidak pernah diturunkan dari `sent_at`. Hapus
+per jenis dan hapus periode kini ikut membuang ping periode itu; ping ber-period NULL
+tidak tersentuh keduanya dan tidak dimuat saringan periode yang aktif.
+**Alasan:** Arti bulan yang dipakai seluruh dashboard adalah bulan pembelian. Bulan
+kedatangan ping tidak punya hubungan dengan pelanggan mana pun di bulan itu.
+**Alternatif yang ditolak:** (a) Turunkan dari `sent_at` — ditolak, persis cacat yang
+membuat penolakan lama benar. (b) Tolak ping bernomor mesin tak dikenal — ditolak,
+itu satu-satunya bukti koordinat rumah yang pernah lewat dan tidak datang dua kali.
+(c) Isi NULL dengan periode terdekat — ditolak, mengarang.
+**Konsekuensi:** Tanpa penjalan migrasi, kolomnya ditambahkan lewat `ALTER TABLE ...
+ADD COLUMN IF NOT EXISTS` di `customers-schema.sql`; `runSchema` menjalankannya tiap
+server menyala, jadi database yang sudah ada ikut mendapatkannya. `SCHEMA_VERSION`
+sengaja tidak dinaikkan — perubahannya idempoten dan aditif. Pengiriman BELUM masuk
+checklist Periode Tersimpan: tanpa produsen ping setiap bulan akan terbaca "3 dari 4
+jenis data tersimpan", dan tombol hapusnya toh cuma muncul kalau datanya ada.
+Ditambahkan begitu ping pertama masuk. Dijaga `test/delivery-ping-period.test.js`,
+termasuk migrasi pada tabel bentuk lama.
