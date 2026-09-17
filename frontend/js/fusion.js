@@ -601,12 +601,14 @@ function daftarPeringkat(rows, kunciNama, opsi) {
  */
 function catatanAbaikan(f) {
   if (!f.abaikan.length) return '';
-  const nama = { pos: 'Pos', karesidenan: 'Karesidenan' };
-  const daftar = f.abaikan.map((k) => nama[k] || k).join(' dan ');
-  return `<div class="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 ` +
-    `text-[11px] text-amber-800">Saringan <b>${esc(daftar)}</b> belum dipakai di ` +
-    `halaman ini — penggolongan disimpan per kelurahan, kota, dan dealer. Angka di ` +
-    `bawah mengikuti saringan Kota, Dealer, Pos, dan periode.</div>`;
+  const pesan = {
+    rentang: 'Rentang periode diciutkan ke bulan terakhir — penggolongan dihitung ' +
+      'per satu bulan, dan menjumlahkan dua bulan akan menghitung satu pelanggan ' +
+      'dua kali.',
+  };
+  return f.abaikan.map((k) =>
+    `<div class="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 ` +
+    `text-[11px] text-amber-800">${esc(pesan[k] || k)}</div>`).join('');
 }
 
 /** Tulis ke satu slot grid. Kerangkanya sendiri tidak pernah disentuh. */

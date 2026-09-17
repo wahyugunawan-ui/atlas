@@ -62,14 +62,43 @@ test('pos IKUT terkirim, bukan diabaikan', async () => {
   assert.deepStrictEqual(hasil.abaikan, []);
 });
 
-test('karesidenan tetap dilaporkan diabaikan, bukan didiamkan', async () => {
+test('karesidenan jadi DAFTAR kode kota, bukan diabaikan', async () => {
   const { fusionFilter } = await import(MODUL);
-  // Petanya cuma ada di frontend (config.js), server tidak mengenalnya. Halaman WAJIB
-  // bisa mengatakannya, kalau tidak angka se-provinsi terbaca sebagai angka yang
-  // sudah disaring.
+  // Sampai 2026-09-17 karesidenan masuk daftar `abaikan`. Sekarang ia diterjemahkan
+  // di sini jadi daftar kode kota, dan server memvalidasi tiap kodenya.
   const hasil = fusionFilter(filter({ kares: 'kedu' }));
-  assert.deepStrictEqual(hasil.abaikan, ['karesidenan']);
-  assert.strictEqual(hasil.pos, null);
+  assert.deepStrictEqual(hasil.kotaBanyak, ['33.08', '33.23', '33.06', '33.05', '33.07']);
+  assert.deepStrictEqual(hasil.abaikan, []);
+  assert.strictEqual(hasil.kota, null);
+});
+
+test('Kota yang dipilih eksplisit MENANG atas karesidenan', async () => {
+  const { fusionFilter } = await import(MODUL);
+  // Keduanya boleh menyala bersamaan (kares mandiri dari kota/dealer/pos). Kota
+  // lebih sempit; mengirim keduanya akan melebarkan hasil, bukan mempersempitnya.
+  const hasil = fusionFilter(filter({ kares: 'kedu', cityCode: '33.08' }));
+  assert.strictEqual(hasil.kota, '33.08');
+  assert.strictEqual(hasil.kotaBanyak, null);
+});
+
+test('karesidenan yang tidak dikenal tidak melahirkan daftar karangan', async () => {
+  const { fusionFilter } = await import(MODUL);
+  assert.strictEqual(fusionFilter(filter({ kares: 'tidak-ada' })).kotaBanyak, null);
+});
+
+test('rentang periode yang diciutkan DIKATAKAN, bukan didiamkan', async () => {
+  const { fusionFilter } = await import(MODUL);
+  // Orang memilih Juni–Agustus dan mendapat Agustus saja. Dulu itu cuma tertulis di
+  // komentar kode; sekarang muncul di layar.
+  const rentang = fusionFilter(filter({ from: '2026-06', to: '2026-08' }));
+  assert.deepStrictEqual(rentang.abaikan, ['rentang']);
+  assert.strictEqual(rentang.periode, '2026-08');
+
+  // Satu bulan yang sama di kedua ujung bukan penciutan, jadi tidak ada yang perlu
+  // dikatakan — pita kuning yang muncul tanpa sebab justru melatih orang mengabaikannya.
+  assert.deepStrictEqual(
+    fusionFilter(filter({ from: '2026-08', to: '2026-08' })).abaikan, []);
+  assert.deepStrictEqual(fusionFilter(filter({ to: '2026-08' })).abaikan, []);
 });
 
 test('persenSumber membedakan "nol" dari "belum bisa diukur"', async () => {

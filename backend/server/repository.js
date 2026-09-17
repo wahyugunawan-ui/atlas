@@ -1112,6 +1112,10 @@ function fusionWhere(filter) {
   const where = ['r.period = ?'];
   const params = [filter.period];
   if (filter.cityCode) { where.push('r.city_code = ?'); params.push(filter.cityCode); }
+  if (filter.cityCodes && filter.cityCodes.length) {
+    where.push(`r.city_code IN (${filter.cityCodes.map(() => '?').join(', ')})`);
+    params.push(...filter.cityCodes);
+  }
   if (filter.dealerCode) { where.push('r.dealer_code = ?'); params.push(filter.dealerCode); }
   if (filter.outletCode) { where.push(POS_FILTER); params.push(filter.outletCode); }
   if (filter.segment) { where.push('r.segment = ?'); params.push(filter.segment); }
@@ -1193,6 +1197,12 @@ async function fusionMatrix(period, filter) {
   const where = ['r.period = ?'];
   const params = [period];
   if (filter && filter.cityCode) { where.push('r.city_code = ?'); params.push(filter.cityCode); }
+  // Daftar kota (karesidenan). Jumlah placeholder mengikuti panjang daftarnya —
+  // dibatasi 50 di routes.js, jadi tidak ada query yang melar tanpa batas.
+  if (filter && filter.cityCodes && filter.cityCodes.length) {
+    where.push(`r.city_code IN (${filter.cityCodes.map(() => '?').join(', ')})`);
+    params.push(...filter.cityCodes);
+  }
   if (filter && filter.dealerCode) {
     where.push('r.dealer_code = ?');
     params.push(filter.dealerCode);
@@ -1219,6 +1229,12 @@ async function fusionOverlap(period, filter) {
   const where = ['r.period = ?'];
   const params = [period];
   if (filter && filter.cityCode) { where.push('r.city_code = ?'); params.push(filter.cityCode); }
+  // Daftar kota (karesidenan). Jumlah placeholder mengikuti panjang daftarnya —
+  // dibatasi 50 di routes.js, jadi tidak ada query yang melar tanpa batas.
+  if (filter && filter.cityCodes && filter.cityCodes.length) {
+    where.push(`r.city_code IN (${filter.cityCodes.map(() => '?').join(', ')})`);
+    params.push(...filter.cityCodes);
+  }
   if (filter && filter.dealerCode) {
     where.push('r.dealer_code = ?');
     params.push(filter.dealerCode);
@@ -1276,6 +1292,12 @@ async function fusionSourceCoverage(period, filter, groupBy) {
   const where = ['r.period = ?'];
   const params = [period];
   if (filter && filter.cityCode) { where.push('r.city_code = ?'); params.push(filter.cityCode); }
+  // Daftar kota (karesidenan). Jumlah placeholder mengikuti panjang daftarnya —
+  // dibatasi 50 di routes.js, jadi tidak ada query yang melar tanpa batas.
+  if (filter && filter.cityCodes && filter.cityCodes.length) {
+    where.push(`r.city_code IN (${filter.cityCodes.map(() => '?').join(', ')})`);
+    params.push(...filter.cityCodes);
+  }
   if (filter && filter.dealerCode) {
     where.push('r.dealer_code = ?');
     params.push(filter.dealerCode);
@@ -1327,6 +1349,12 @@ async function fusionVillagePoints(period, filter) {
   const where = ['r.period = ?'];
   const params = [period];
   if (filter && filter.cityCode) { where.push('r.city_code = ?'); params.push(filter.cityCode); }
+  // Daftar kota (karesidenan). Jumlah placeholder mengikuti panjang daftarnya —
+  // dibatasi 50 di routes.js, jadi tidak ada query yang melar tanpa batas.
+  if (filter && filter.cityCodes && filter.cityCodes.length) {
+    where.push(`r.city_code IN (${filter.cityCodes.map(() => '?').join(', ')})`);
+    params.push(...filter.cityCodes);
+  }
   if (filter && filter.dealerCode) {
     where.push('r.dealer_code = ?');
     params.push(filter.dealerCode);
@@ -1352,6 +1380,12 @@ async function fusionByCity(period, filter) {
   const where = ['r.period = ?'];
   const params = [period];
   if (filter && filter.cityCode) { where.push('r.city_code = ?'); params.push(filter.cityCode); }
+  // Daftar kota (karesidenan). Jumlah placeholder mengikuti panjang daftarnya —
+  // dibatasi 50 di routes.js, jadi tidak ada query yang melar tanpa batas.
+  if (filter && filter.cityCodes && filter.cityCodes.length) {
+    where.push(`r.city_code IN (${filter.cityCodes.map(() => '?').join(', ')})`);
+    params.push(...filter.cityCodes);
+  }
   if (filter && filter.dealerCode) {
     where.push('r.dealer_code = ?');
     params.push(filter.dealerCode);
@@ -1378,6 +1412,12 @@ async function fusionByDealer(period, filter) {
   const where = ['r.period = ?'];
   const params = [period, period];   // yang pertama untuk CTE `utama` di bawah
   if (filter && filter.cityCode) { where.push('r.city_code = ?'); params.push(filter.cityCode); }
+  // Daftar kota (karesidenan). Jumlah placeholder mengikuti panjang daftarnya —
+  // dibatasi 50 di routes.js, jadi tidak ada query yang melar tanpa batas.
+  if (filter && filter.cityCodes && filter.cityCodes.length) {
+    where.push(`r.city_code IN (${filter.cityCodes.map(() => '?').join(', ')})`);
+    params.push(...filter.cityCodes);
+  }
   if (filter && filter.dealerCode) {
     where.push('r.dealer_code = ?');
     params.push(filter.dealerCode);

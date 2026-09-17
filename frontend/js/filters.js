@@ -126,13 +126,38 @@ export function setPeriod(which, value) {
 export function fusionFilter(f) {
   const filters = f || pageFilters('fusion');
   const pakai = (nilai) => (nilai && nilai !== 'ALL' ? nilai : null);
+  const periode = (nilai) => (/^\d{4}-\d{2}$/.test(String(nilai || '')) ? nilai : null);
 
+  const kota = pakai(filters.cityCode);
+  const kares = pakai(filters.kares);
+
+  // Karesidenan diterjemahkan jadi DAFTAR KODE KOTA di sini, bukan di server.
+  //
+  // Petanya punya satu pemilik tunggal (`KARESIDENAN` di config.js). Menyalinnya ke
+  // server berarti dua salinan pemetaan yang sama, dan salinan ganda itu persis kelas
+  // cacat yang sudah berkali-kali muncul di proyek ini — dua kosakata kode dealer.
+  // Server tetap memvalidasi tiap kode dengan regex CITY, jadi daftar dari layar
+  // tidak bisa menyelipkan apa pun.
+  //
+  // Kota yang dipilih EKSPLISIT lebih sempit daripada karesidenan, jadi ia menang.
+  // Keduanya boleh menyala bersamaan: kares mandiri dari kota/dealer/pos.
+  const kotaBanyak = (!kota && kares && KARESIDENAN[kares])
+    ? KARESIDENAN[kares].cities.slice()
+    : null;
+
+  // Yang masih benar-benar dibuang: BATAS BAWAH periode. Rollup disimpan per satu
+  // bulan, jadi rentang diciutkan ke bulan terakhir. Dulu hal ini cuma ditulis di
+  // komentar — orang memilih Juni–Agustus, mendapat Agustus saja, dan tidak ada satu
+  // kalimat pun yang mengatakannya.
+  const dari = periode(filters.from);
+  const sampai = periode(filters.to);
   const abaikan = [];
-  if (pakai(filters.kares)) abaikan.push('karesidenan');
+  if (dari && sampai && dari !== sampai) abaikan.push('rentang');
 
   return {
-    periode: /^\d{4}-\d{2}$/.test(String(filters.to || '')) ? filters.to : null,
-    kota: pakai(filters.cityCode),
+    periode: sampai,
+    kota,
+    kotaBanyak,
     dealer: pakai(filters.dealerCode),
     pos: pakai(filters.outletCode),
     abaikan,

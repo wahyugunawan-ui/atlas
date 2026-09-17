@@ -358,10 +358,23 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
   Id lapisan sengaja tetap `servis-titik` supaya toggle dan `redrawMap` tidak
   putus. Lihat `docs/DECISIONS.md`.
 
+- **Saringan Karesidenan dipatuhi halaman Fusion.** Diterjemahkan jadi DAFTAR
+  kode kota di sisi layar, bukan dengan memindahkan petanya ke server —
+  `KARESIDENAN` punya satu pemilik tunggal di `config.js`, dan menyalinnya
+  berarti dua salinan pemetaan yang sama (kelas cacat yang sudah berkali-kali
+  muncul di proyek ini). Server memvalidasi tiap kode dengan regex `CITY`,
+  mengikuti pola `outlets` yang sudah ada. Kota eksplisit menang atas
+  karesidenan. Daftar kota dipasang di KETUJUH penyusun WHERE, dan tes
+  database memeriksa ketujuhnya — memasangnya di sebagian saja menghasilkan
+  halaman setengah tersaring tanpa satu pun galat.
+- **Penciutan rentang periode akhirnya dikatakan.** `fusionFilter` selalu
+  membuang batas bawah (rollup per satu bulan), tapi dulu itu cuma tertulis di
+  komentar: orang memilih Juni–Agustus, mendapat Agustus, tanpa penjelasan.
+  Pita kuning yang tadinya menganggur karena karesidenan sudah didukung kini
+  dipakai untuk mengatakannya.
+
 **Belum dikerjakan (sisa Tahap F, lihat tabel tahapan di `docs/FUSION.md`):**
 - Mode Live/wallboard dan cross-filtering penuh di sidebar
-- Saringan Karesidenan di halaman Fusion (petanya cuma ada di frontend;
-  sampai dipindah ke server, pita kuning mengatakannya belum dipakai)
 - Halaman Import jadi grid 3 panel: kiri "Periode Tersimpan" (checklist 3
   jenis data per periode, klik → jumlah/tanggal/hapus), tengah progres 4
   tahap, kanan "Riwayat Impor" — plus akses lewat dropdown hover menu

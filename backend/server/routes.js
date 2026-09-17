@@ -841,11 +841,22 @@ function build(config) {
    * tempat pun yang bisa dilihat untuk menjawab "saringan apa saja yang dipahami
    * halaman ini". Sekarang ada.
    */
-  const saringFusi = async (q) => ({
-    cityCode: CITY.test(String(q.kota || '')) ? String(q.kota) : null,
-    dealerCode: await dealerFusi(q.dealer),
-    outletCode: OUTLET.test(String(q.pos || '')) ? String(q.pos) : null,
-  });
+  const saringFusi = async (q) => {
+    // `kota` menerima SATU kode atau daftar dipisah koma (karesidenan). Tiap kode
+    // divalidasi sendiri-sendiri dengan regex yang sama — daftarnya tidak pernah
+    // dipercaya bulat-bulat. Pola ini mengikuti `outlets` di /api/customers/browse.
+    const kota = String(q.kota || '');
+    const daftar = kota.includes(',')
+      ? kota.split(',').map((x) => x.trim()).filter((x) => CITY.test(x)).slice(0, 50)
+      : [];
+
+    return {
+      cityCode: CITY.test(kota) ? kota : null,
+      cityCodes: daftar.length ? daftar : null,
+      dealerCode: await dealerFusi(q.dealer),
+      outletCode: OUTLET.test(String(q.pos || '')) ? String(q.pos) : null,
+    };
+  };
 
   api.get('/v1/segmentasi', async (req, res) => {
     const period = await periodeFusi(req.query);

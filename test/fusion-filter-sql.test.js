@@ -89,6 +89,11 @@ const KASUS = [
   ['dealer', { dealerCode: '9' }, 10],
   ['pos', { outletCode: 'O1' }, 10],
   ['kota + dealer + pos sekaligus', { cityCode: '34.04', dealerCode: '9', outletCode: 'O1' }, 10],
+  // Karesidenan = daftar kode kota. Jumlah placeholder `IN (?, ?)` dibangkitkan dari
+  // panjang daftarnya, dan itu bagian yang paling mudah salah tanpa ketahuan.
+  ['karesidenan dua kota', { cityCodes: ['34.04', '33.01'] }, 15],
+  ['karesidenan satu kota', { cityCodes: ['33.01'] }, 5],
+  ['karesidenan berisi kota yang tidak ada', { cityCodes: ['34.04', '39.99'] }, 10],
 ];
 
 async function main() {
@@ -156,8 +161,39 @@ async function main() {
     assert.strictEqual(kosong.total, 0,
       'Sleman tidak punya registered_only; hasilnya harus nol, bukan diabaikan');
 
-    console.log('OK fusion-filter-sql — 8 fungsi x 5 saringan jalan di Postgres, ' +
-      'saringan benar-benar menyaring, join dealer lewat legacy_code, pos lewat coverage');
+    // 6. Daftar kota berlaku di SEMUA fungsi, bukan cuma fusionTotals.
+    //
+    // Penyusun WHERE-nya ada di tujuh tempat terpisah; menambahkannya di sebagian
+    // saja menghasilkan halaman yang setengah tersaring — angka ringkasan mengikuti
+    // karesidenan sementara peringkat dan matriksnya tidak, dan tidak ada yang error.
+    const duaKota = { cityCodes: ['34.04', '33.01'] };
+    const satuKota = { cityCodes: ['33.01'] };
+
+    const barisDua = await repo.fusionRows({ period: PERIOD, ...duaKota });
+    assert.strictEqual(barisDua.rows.length, 2, 'dua kota harus memberi dua baris');
+    const barisSatu = await repo.fusionRows({ period: PERIOD, ...satuKota });
+    assert.strictEqual(barisSatu.rows.length, 1);
+    assert.strictEqual(barisSatu.rows[0].cityCode, '33.01');
+
+    assert.strictEqual((await repo.fusionByCity(PERIOD, satuKota)).length, 1);
+    assert.strictEqual((await repo.fusionMatrix(PERIOD, satuKota)).length, 1);
+    assert.strictEqual((await repo.fusionOverlap(PERIOD, satuKota)).length, 1);
+    assert.strictEqual(
+      (await repo.fusionSourceCoverage(PERIOD, satuKota, 'kota')).length, 1);
+    assert.strictEqual((await repo.fusionVillagePoints(PERIOD, satuKota)).length, 1);
+    assert.strictEqual((await repo.fusionByDealer(PERIOD, satuKota)).length, 1,
+      'fusionByDealer ikut menyaring; ia penyusun WHERE ketujuh yang mudah terlewat');
+
+    // Daftar kosong BUKAN berarti "saring habis". Ia harus diperlakukan sebagai
+    // tanpa saringan, kalau tidak halaman jadi kosong total tanpa sebab yang terlihat.
+    const kosongDaftar = await repo.fusionTotals(
+      { period: PERIOD, cityCodes: [] });
+    assert.strictEqual(kosongDaftar.total, 15,
+      'daftar kota kosong harus diabaikan, bukan menyaring semuanya habis');
+
+    console.log(`OK fusion-filter-sql — 8 fungsi x ${KASUS.length} saringan jalan di ` +
+      'Postgres, saringan benar-benar menyaring, join dealer lewat legacy_code, pos ' +
+      'lewat coverage, karesidenan lewat daftar kota di ketujuh penyusun WHERE');
   } finally {
     await closeTestDb(testConfig);
   }

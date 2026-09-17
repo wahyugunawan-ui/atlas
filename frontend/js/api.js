@@ -80,6 +80,12 @@ export function fetchSegmentation(filter) {
   const q = new URLSearchParams();
   if (filter && filter.periode) q.set('periode', filter.periode);
   if (filter && filter.kota && filter.kota !== 'ALL') q.set('kota', filter.kota);
+  // Karesidenan: satu parameter `kota` berisi DAFTAR kode, dipisah koma. Mengikuti
+  // pola `outlets` yang sudah ada di /api/customers/browse — server memvalidasi tiap
+  // kode satu per satu, bukan menerima daftarnya bulat-bulat.
+  else if (filter && filter.kotaBanyak && filter.kotaBanyak.length) {
+    q.set('kota', filter.kotaBanyak.join(','));
+  }
   if (filter && filter.dealer && filter.dealer !== 'ALL') q.set('dealer', filter.dealer);
   if (filter && filter.pos && filter.pos !== 'ALL') q.set('pos', filter.pos);
   if (filter && filter.segmentasi) q.set('segmentasi', filter.segmentasi);
@@ -91,6 +97,12 @@ export function fetchPeringkat(filter) {
   const q = new URLSearchParams();
   if (filter && filter.periode) q.set('periode', filter.periode);
   if (filter && filter.kota && filter.kota !== 'ALL') q.set('kota', filter.kota);
+  // Karesidenan: satu parameter `kota` berisi DAFTAR kode, dipisah koma. Mengikuti
+  // pola `outlets` yang sudah ada di /api/customers/browse — server memvalidasi tiap
+  // kode satu per satu, bukan menerima daftarnya bulat-bulat.
+  else if (filter && filter.kotaBanyak && filter.kotaBanyak.length) {
+    q.set('kota', filter.kotaBanyak.join(','));
+  }
   if (filter && filter.dealer && filter.dealer !== 'ALL') q.set('dealer', filter.dealer);
   if (filter && filter.pos && filter.pos !== 'ALL') q.set('pos', filter.pos);
   return request(`${API}v1/peringkat?${q}`);
@@ -101,6 +113,12 @@ export function fetchIrisan(filter) {
   const q = new URLSearchParams();
   if (filter && filter.periode) q.set('periode', filter.periode);
   if (filter && filter.kota && filter.kota !== 'ALL') q.set('kota', filter.kota);
+  // Karesidenan: satu parameter `kota` berisi DAFTAR kode, dipisah koma. Mengikuti
+  // pola `outlets` yang sudah ada di /api/customers/browse — server memvalidasi tiap
+  // kode satu per satu, bukan menerima daftarnya bulat-bulat.
+  else if (filter && filter.kotaBanyak && filter.kotaBanyak.length) {
+    q.set('kota', filter.kotaBanyak.join(','));
+  }
   if (filter && filter.dealer && filter.dealer !== 'ALL') q.set('dealer', filter.dealer);
   if (filter && filter.pos && filter.pos !== 'ALL') q.set('pos', filter.pos);
   return request(`${API}v1/irisan?${q}`);
@@ -111,6 +129,12 @@ export function fetchMatriks(filter) {
   const q = new URLSearchParams();
   if (filter && filter.periode) q.set('periode', filter.periode);
   if (filter && filter.kota && filter.kota !== 'ALL') q.set('kota', filter.kota);
+  // Karesidenan: satu parameter `kota` berisi DAFTAR kode, dipisah koma. Mengikuti
+  // pola `outlets` yang sudah ada di /api/customers/browse — server memvalidasi tiap
+  // kode satu per satu, bukan menerima daftarnya bulat-bulat.
+  else if (filter && filter.kotaBanyak && filter.kotaBanyak.length) {
+    q.set('kota', filter.kotaBanyak.join(','));
+  }
   if (filter && filter.dealer && filter.dealer !== 'ALL') q.set('dealer', filter.dealer);
   if (filter && filter.pos && filter.pos !== 'ALL') q.set('pos', filter.pos);
   return request(`${API}v1/matriks?${q}`);
@@ -127,6 +151,12 @@ export function fetchCakupanSumber(filter) {
   const q = new URLSearchParams();
   if (filter && filter.periode) q.set('periode', filter.periode);
   if (filter && filter.kota && filter.kota !== 'ALL') q.set('kota', filter.kota);
+  // Karesidenan: satu parameter `kota` berisi DAFTAR kode, dipisah koma. Mengikuti
+  // pola `outlets` yang sudah ada di /api/customers/browse — server memvalidasi tiap
+  // kode satu per satu, bukan menerima daftarnya bulat-bulat.
+  else if (filter && filter.kotaBanyak && filter.kotaBanyak.length) {
+    q.set('kota', filter.kotaBanyak.join(','));
+  }
   if (filter && filter.dealer && filter.dealer !== 'ALL') q.set('dealer', filter.dealer);
   if (filter && filter.pos && filter.pos !== 'ALL') q.set('pos', filter.pos);
   return request(`${API}v1/cakupan-sumber?${q}`);
@@ -145,6 +175,12 @@ export function fetchTitikPeta(filter) {
   const q = new URLSearchParams();
   if (filter && filter.periode) q.set('periode', filter.periode);
   if (filter && filter.kota && filter.kota !== 'ALL') q.set('kota', filter.kota);
+  // Karesidenan: satu parameter `kota` berisi DAFTAR kode, dipisah koma. Mengikuti
+  // pola `outlets` yang sudah ada di /api/customers/browse — server memvalidasi tiap
+  // kode satu per satu, bukan menerima daftarnya bulat-bulat.
+  else if (filter && filter.kotaBanyak && filter.kotaBanyak.length) {
+    q.set('kota', filter.kotaBanyak.join(','));
+  }
   if (filter && filter.dealer && filter.dealer !== 'ALL') q.set('dealer', filter.dealer);
   if (filter && filter.pos && filter.pos !== 'ALL') q.set('pos', filter.pos);
   return request(`${API}v1/peta/titik?${q}`);

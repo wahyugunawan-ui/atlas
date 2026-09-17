@@ -3585,3 +3585,48 @@ merah. 37/37 berkas tes lolos.
 
 **Caveat:** belum dilihat di browser. Khususnya `icon-size` (0,25 → 0,75 menurut
 zoom) yang saya tetapkan dengan perkiraan, bukan dengan melihat hasilnya.
+
+## [2026-09-17] Saringan Karesidenan: diterjemahkan di layar, bukan dipindah ke server
+
+Backend sama sekali tidak mengenal karesidenan — grep-nya kosong. Jadi ada dua
+jalan: memindahkan peta `KARESIDENAN` ke server, atau membiarkan layar
+menerjemahkannya jadi daftar kode kota.
+
+**Dipilih yang kedua, dan alasannya bukan kemalasan.** Peta itu sekarang punya
+SATU pemilik: `frontend/js/config.js`, tempat ia juga melahirkan
+`ALLOWED_CITY_CODES`. Menyalinnya ke server berarti dua salinan pemetaan yang
+sama, dan salinan ganda yang boleh menyimpang adalah kelas cacat yang sudah
+berkali-kali muncul di proyek ini — dua kosakata kode dealer yang menghabiskan
+empat perbaikan terpisah. Server tetap memvalidasi TIAP kode dengan regex `CITY`
+dan membatasi panjang daftarnya, jadi daftar dari layar tidak pernah dipercaya
+bulat-bulat. Polanya juga bukan pola baru: `/api/customers/browse` sudah lama
+menerima `outlets` sebagai daftar dipisah koma dengan validasi per item.
+
+**Kota eksplisit menang atas karesidenan.** Keduanya boleh menyala bersamaan —
+kares memang mandiri dari kota/dealer/pos. Kota lebih sempit; mengirim keduanya
+justru MELEBARKAN hasil, bukan mempersempitnya.
+
+**Daftar kota harus dipasang di KETUJUH penyusun WHERE.** Saya sempat mengira
+ada enam dan tercengang melihat tujuh — ternyata aritmetika saya yang lupa
+`fusionByDealer`, bukan sisipan yang nyasar. Memasangnya di sebagian saja
+menghasilkan halaman SETENGAH tersaring: angka ringkasan mengikuti karesidenan
+sementara peringkat dan matriksnya tidak, tanpa satu pun galat. Tes database
+sekarang memeriksa ketujuhnya satu per satu, plus satu sifat yang mudah
+terlewat: daftar kota KOSONG harus berarti "tanpa saringan", bukan "saring
+habis" — kalau tidak, halaman jadi kosong total tanpa sebab yang terlihat.
+
+**Efek samping yang menutup lubang kejujuran lama.** Begitu karesidenan
+didukung, pita kuning kehilangan satu-satunya produsennya dan `catatanAbaikan()`
+jadi kode mati. Tapi memeriksanya memunculkan hal lain: `fusionFilter` SELALU
+membuang batas bawah periode (rollup disimpan per satu bulan), dan sampai
+sekarang itu cuma tertulis di komentar kode. Orang memilih Juni–Agustus,
+mendapat Agustus saja, dan tidak ada satu kalimat pun yang mengatakannya.
+Mekanismenya tidak dibuang — dialihkan untuk melaporkan hal yang memang masih
+disembunyikan. Pita hanya muncul kalau rentangnya benar-benar diciutkan; pita
+yang muncul tanpa sebab justru melatih orang mengabaikannya.
+
+Lima mutasi merah di atas baseline hijau, termasuk dua yang menjaga aturan di
+atas: "Kota menang atas karesidenan" dan "pita tidak muncul kalau dari = sampai".
+Tes database hijau dengan delapan kombinasi saringan.
+
+**Caveat:** belum dilihat di browser.
