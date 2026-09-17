@@ -964,6 +964,66 @@ function saringSumber(offset) {
   };
 }
 
+/**
+ * Panel gagal yang MEMBEDAKAN dua sebab yang tampak sama di layar.
+ *
+ * Sampai 2026-09-17 kedua subhalaman ini menampilkan apa pun yang gagal sebagai SATU
+ * baris merah kecil: `<p class="text-xs text-red-600">pesan</p>`. Database PII yang
+ * tidak terhubung, galat server, dan jaringan putus terlihat persis sama — dan yang
+ * pertama itu bukan kerusakan sama sekali, melainkan keadaan yang memang dirancang
+ * boleh terjadi (aturan proyek: DROP DATABASE astra_customers harus meninggalkan
+ * sisanya jalan penuh). Orang yang melihat baris merah itu tidak punya cara tahu
+ * apakah ada yang perlu diperbaiki.
+ */
+export function panelGagal(error) {
+  const pesan = String((error && error.message) || 'Galat tidak dikenal.');
+
+  // Dicocokkan ke pesan yang dikirim repository.js waktu store.customers() null.
+  if (/database konsumen tidak tersedia/i.test(pesan)) {
+    return `<div class="rounded-xl border border-amber-200 bg-amber-50 p-3">` +
+      `<div class="text-xs font-bold text-amber-900">Database konsumen tidak terhubung</div>` +
+      `<p class="text-[11px] text-amber-800 mt-1 leading-relaxed">Halaman ini membaca data ` +
+      `yang memuat alamat konsumen, dan database itu (<span class="mono">astra_customers</span>) ` +
+      `sedang tidak terhubung. <b>Sisa aplikasi tetap jalan penuh</b> — itu memang ` +
+      `dirancang begitu, bukan kerusakan. Nyalakan databasenya lalu jalankan ulang ` +
+      `servernya; halaman ini akan terisi sendiri.</p></div>`;
+  }
+
+  return `<div class="rounded-xl border border-red-200 bg-red-50 p-3">` +
+    `<div class="text-xs font-bold text-red-900">Gagal memuat</div>` +
+    `<p class="text-[11px] text-red-800 mt-1 leading-relaxed">${esc(pesan)}</p>` +
+    `<p class="text-[10px] text-red-700 mt-1 leading-snug">Ini permintaan yang GAGAL, ` +
+    `bukan "tidak ada data". Tabel yang kosong karena saringan terlihat berbeda: ` +
+    `kerangka tabelnya tetap tergambar.</p></div>`;
+}
+
+/**
+ * Keterangan "kosong karena saringan" — muncul HANYA kalau saringannya memang aktif.
+ *
+ * Sejak filter disatukan antar halaman (2026-09-17), memilih Kota di Sales Analytics
+ * ikut mempersempit kedua tabel ini. Tabel yang mendadak kosong lalu terbaca sebagai
+ * "datanya hilang", padahal saringannya yang dipasang di halaman lain.
+ *
+ * Yang disebut HANYA Kota dan Periode, karena cuma keduanya yang benar-benar dikirim
+ * saringSumber() ke rutenya. Dealer dan Pos TIDAK berlaku di sini — menyebutnya akan
+ * membuat orang mengosongkan saringan yang sejak awal tidak berpengaruh.
+ */
+export function catatanKosongSaringan() {
+  const f = pageFilters();
+  const aktif = [];
+  if (f.cityCode !== 'ALL') aktif.push('Kota');
+  if (f.from !== 'ALL' || f.to !== 'ALL') aktif.push('Periode');
+  if (!aktif.length) return '';
+
+  return `<div class="rounded-xl border border-slate-200 bg-slate-50 p-3 mb-2">` +
+    `<div class="text-xs font-bold text-slate-700">Kosong karena saringan, bukan karena gagal</div>` +
+    `<p class="text-[11px] text-slate-600 mt-1 leading-relaxed">Saringan yang sedang ` +
+    `berlaku di halaman ini: <b>${esc(aktif.join(' dan '))}</b>. Bilah filter dipakai ` +
+    `bersama seluruh halaman, jadi saringan ini bisa saja dipasang di halaman lain. ` +
+    `Kosongkan lewat tombol reset di bilah filter. Saringan Dealer dan Pos tidak ` +
+    `berpengaruh di halaman ini.</p></div>`;
+}
+
 /** Baris navigasi halaman, dipakai kedua tabel. */
 function navHalaman(hasil, fungsi) {
   const dari = hasil.total ? hasil.offset + 1 : 0;
@@ -1080,7 +1140,7 @@ export async function renderServiceTable() {
         `baris di halaman ini punya jarak terukur</span>` +
       `</div>`;
 
-    wadah.innerHTML = kendali + tabelSumber([
+    wadah.innerHTML = kendali + (hasil.total ? '' : catatanKosongSaringan()) + tabelSumber([
       { judul: 'Periode', nilai: (r) => esc(r.period || '—'), kelas: 'mono text-slate-500' },
       { judul: 'Nomor Mesin', nilai: (r) => esc(r.engineNo || '—'), kelas: 'mono text-slate-700' },
       { judul: 'Jenis Service', nilai: (r) => esc(r.serviceType || '—') },
@@ -1091,7 +1151,7 @@ export async function renderServiceTable() {
       { judul: 'Alamat cocok', nilai: (r) => lencanaStatus(r.resolveStatus) },
     ], hasil.rows) + navHalaman(hasil, 'servisPage');
   } catch (error) {
-    wadah.innerHTML = `<p class="text-xs text-red-600 p-4">${esc(error.message)}</p>`;
+    wadah.innerHTML = panelGagal(error);
   }
 }
 
@@ -1133,7 +1193,7 @@ export async function renderDeliveryTable() {
       `Kerangka tabel di bawah menunjukkan kolom yang akan terisi sendiri begitu ping ` +
       `pertama masuk.</p></div>`;
 
-    wadah.innerHTML = catatanKosong + tabelSumber([
+    wadah.innerHTML = catatanKosong + (hasil.total ? '' : catatanKosongSaringan()) + tabelSumber([
       { judul: 'Waktu', nilai: (r) => esc(String(r.sentAt || '').slice(0, 16)), kelas: 'mono text-slate-500' },
       { judul: 'Nomor Mesin', nilai: (r) => esc(r.engineNo || '—'), kelas: 'mono text-slate-700' },
       { judul: 'Lokasi', nilai: (r) => esc(r.locationText || '—') },
@@ -1142,6 +1202,6 @@ export async function renderDeliveryTable() {
       { judul: 'Kurir', nilai: (r) => esc(r.courierName || '—') },
     ], hasil.rows) + navHalaman(hasil, 'kirimPage');
   } catch (error) {
-    wadah.innerHTML = `<p class="text-xs text-red-600 p-4">${esc(error.message)}</p>`;
+    wadah.innerHTML = panelGagal(error);
   }
 }
