@@ -17,8 +17,12 @@
  * dari mana datangnya, tanpa berpura-pura punya data.
  */
 import {
-  fetchCakupanSumber, fetchIrisan, fetchMatriks, fetchPeringkat, fetchSegmentation,
+  fetchCakupanSumber, fetchEngineDetail, fetchIrisan, fetchMatriks, fetchPeringkat,
+  fetchSegmentation,
 } from './api.js';
+import {
+  formatJarak, jangkauanDiagram, kalimatAlasan, titikRelatif,
+} from './fusion-alasan.js';
 import { $, esc, formatNumber } from './dom.js';
 import { fusionFilter, persenSumber } from './filters.js';
 import { SEGMENTS, SUMBER } from './fusion-segments.js';
@@ -249,6 +253,155 @@ export function toggleSumberCakupan(kunci) {
 export function cariCakupan() {
   cariCakupanTeks = ($('cs-cari') ? $('cs-cari').value : '').trim().toLowerCase();
   gambarCakupan();
+}
+
+/* ==========================================================================
+   TELUSUR SATU NOMOR MESIN — PANEL PII (docs/FUSION.md 3.4)
+   ==========================================================================
+   Menampilkan nama dan alamat konsumen. Servernya yang menegakkan pagarnya
+   (piiLimiter + logCustomerAccess); layar ini tidak menyimpan apa pun ke mana
+   pun, dan isinya dibuang begitu panelnya ditutup.
+   ========================================================================== */
+
+/**
+ * Diagram skematik posisi tiga titik terhadap lingkaran KPI Jarak.
+ *
+ * MENYIMPANG DARI SPESIFIKASI, disengaja: 3.4 meminta "peta mini". Peta sungguhan
+ * berarti instance MapLibre kedua di dalam panel — komponen berat yang tidak bisa
+ * saya verifikasi di browser. Yang digambar di sini menjawab pertanyaan yang sama
+ * ("jaraknya di dalam atau di luar ambang?") tanpa satu pun ubin peta: KTP di pusat,
+ * lingkaran putus-putus = ambang, garis penghubung ke tiap titik.
+ *
+ * Tanpa ubin peta, ARAH tidak bisa dibaca sebagai lokasi sebenarnya — dan itu ditulis
+ * di bawah gambarnya, bukan dibiarkan ditebak.
+ */
+function diagramTelusur(f) {
+  const titik = titikRelatif(f);
+  const ambang = Number(f.kpiRadiusM) || 0;
+  if (!ambang) return '';
+
+  const jangkauan = jangkauanDiagram(f, titik);
+  const skala = 66 / jangkauan;                 // 66 px = setengah lebar gambar
+  const rAmbang = ambang * skala;
+
+  const garis = titik.map((t) => {
+    const x = t.x * skala;
+    const y = -t.y * skala;                     // SVG: y tumbuh ke bawah, utara ke atas
+    return `<line x1="0" y1="0" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" ` +
+        `stroke="${SUMBER[t.jenis].color}" stroke-width="1" stroke-opacity="0.6"></line>` +
+      `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.5" fill="${
+        SUMBER[t.jenis].color}"></circle>`;
+  }).join('');
+
+  return `<svg viewBox="-80 -80 160 160" class="w-full" style="max-height:170px">` +
+    `<circle cx="0" cy="0" r="${rAmbang.toFixed(1)}" fill="#0b2f6b" fill-opacity="0.05" ` +
+      `stroke="#0b2f6b" stroke-width="1" stroke-dasharray="3 2" stroke-opacity="0.7"></circle>` +
+    garis +
+    `<circle cx="0" cy="0" r="4" fill="${SUMBER.ktp.color}"></circle>` +
+    `</svg>` +
+    `<p class="text-[9px] text-slate-400 leading-snug">Skematik, bukan peta: lingkaran ` +
+    `putus-putus = ambang KPI Jarak (${esc(formatJarak(ambang))}). Jarak dan arah ` +
+    `relatif terhadap titik KTP; tanpa latar peta, arah tidak menunjukkan lokasi ` +
+    `sebenarnya.</p>`;
+}
+
+/** Satu baris riwayat, dipakai daftar servis dan daftar ping. */
+function barisRiwayat(kiri, kanan) {
+  return `<div class="flex items-baseline gap-2 py-0.5 border-b border-slate-50 last:border-0">` +
+    `<span class="text-[10px] text-slate-600 flex-1 truncate">${kiri}</span>` +
+    `<span class="text-[9px] mono text-slate-400 shrink-0">${kanan}</span></div>`;
+}
+
+/** Isi panel telusur. Semua nilai dari Excel/PII — WAJIB lewat esc(). */
+function isiTelusur(detail) {
+  const f = detail.fusion || {};
+  const ktp = detail.ktp || null;
+  const services = detail.services || [];
+  const pings = detail.pings || [];
+  const { bagian, kesimpulan, golongan } = kalimatAlasan(f);
+
+  const judul = `<div class="text-[10px] font-bold uppercase tracking-wide text-slate-400">` +
+    `Telusur Nomor Mesin</div>` +
+    `<div class="text-sm font-extrabold text-slate-900 mono pr-6">${esc(f.engineNo || '—')}</div>`;
+
+  const identitas = ktp
+    ? `<div class="mt-2 p-2 rounded-lg bg-slate-50">` +
+        `<div class="text-[11px] font-bold text-slate-700">${esc(ktp.name || '—')}</div>` +
+        `<div class="text-[10px] text-slate-500 leading-snug">${esc(ktp.address || '—')}</div>` +
+        `<div class="text-[9px] text-slate-400 mt-1">${esc(ktp.villageText || '—')} · ` +
+        `${esc(ktp.districtText || '—')} · status cocok: ${esc(ktp.resolveStatus || '—')}</div>` +
+      `</div>`
+    : `<p class="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg ` +
+      `p-2 mt-2">Baris KTP-nya tidak ada, jadi nama dan alamat tidak bisa ditampilkan.</p>`;
+
+  const alasan = `<div class="mt-3">` +
+    `<div class="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Alasan golongan</div>` +
+    bagian.map((b) => `<p class="text-[11px] text-slate-600 leading-snug">${esc(b)}</p>`).join('') +
+    `<div class="mt-1 text-[12px] font-extrabold" style="color:${
+      golongan ? golongan.color : '#64748b'}">→ ${esc(kesimpulan)}</div></div>`;
+
+  const daftarServis = services.length
+    ? services.map((s) => barisRiwayat(
+      `${esc(s.villageText || '—')}, ${esc(s.districtText || '—')}` +
+      (s.serviceType ? ` · ${esc(s.serviceType)}` : ''),
+      `${esc(s.period || '—')} · ${esc(s.resolveStatus || '—')}`)).join('')
+    : '<p class="text-[10px] text-slate-400">Tidak ada kunjungan servis.</p>';
+
+  const daftarPing = pings.length
+    ? pings.map((p) => barisRiwayat(
+      esc(p.locationText || p.courierName || 'Ping pengiriman'),
+      // Potong DULU, escape belakangan. Urutan terbalik (escape lalu potong) bisa
+      // memenggal entity di tengah — "&amp;" jadi "&am" — dan itu merusak markup,
+      // bukan sekadar memotong teks.
+      `${esc(String(p.sentAt || '—').slice(0, 16))}${
+        p.accuracyM == null ? '' : ` · ±${esc(String(Math.round(Number(p.accuracyM))))} m`}`)).join('')
+    : '<p class="text-[10px] text-slate-400">Belum ada ping pengiriman.</p>';
+
+  return judul + identitas + alasan +
+    `<div class="mt-3">${diagramTelusur(f)}</div>` +
+    `<div class="mt-3"><div class="text-[10px] font-bold uppercase tracking-wide ` +
+      `text-slate-400 mb-1">Riwayat servis (${esc(String(services.length))})</div>` +
+      daftarServis + `</div>` +
+    `<div class="mt-3"><div class="text-[10px] font-bold uppercase tracking-wide ` +
+      `text-slate-400 mb-1">Riwayat pengiriman (${esc(String(pings.length))})</div>` +
+      daftarPing + `</div>` +
+    `<p class="text-[9px] text-slate-400 mt-3 pt-2 border-t border-slate-100">Data ` +
+      `pribadi. Tiap pembukaan halaman ini tercatat di log akses server.</p>`;
+}
+
+/** Buka panel telusur untuk nomor mesin yang diketik. */
+export async function bukaTelusurMesin() {
+  const kotak = $('telusur-mesin');
+  const panel = $('telusur-panel');
+  const isi = $('telusur-isi');
+  if (!kotak || !panel || !isi) return;
+
+  const nomor = kotak.value.trim();
+  if (!nomor) return;
+
+  panel.classList.remove('hidden');
+  requestAnimationFrame(() => panel.classList.remove('translate-x-full'));
+  isi.innerHTML = '<p class="text-xs text-slate-400 p-4 text-center">Mencari…</p>';
+
+  try {
+    isi.innerHTML = isiTelusur(await fetchEngineDetail(nomor));
+  } catch (error) {
+    // 404 dan 429 punya arti yang sangat berbeda, dan pesan servernya sudah
+    // membedakannya — jadi yang ditampilkan pesan itu, bukan "terjadi kesalahan".
+    isi.innerHTML = `<p class="text-xs text-red-600 p-4 text-center">${
+      esc(error.message)}</p>`;
+  }
+}
+
+/** Tutup panel, dan KOSONGKAN isinya — PII tidak ditinggal menggantung di DOM. */
+export function tutupTelusurMesin() {
+  const panel = $('telusur-panel');
+  if (!panel) return;
+  panel.classList.add('translate-x-full');
+  setTimeout(() => {
+    panel.classList.add('hidden');
+    if ($('telusur-isi')) $('telusur-isi').innerHTML = '';
+  }, 300);
 }
 
 /** Baris kendali panel: tiga checkbox + kotak cari. Di LUAR `#cakupan-isi`. */

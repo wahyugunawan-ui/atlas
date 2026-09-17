@@ -3324,3 +3324,70 @@ centang lepas" dimatikan, pencarian tidak menyaring, pencarian memakai nama
 mentah, dan pemotongan 25 dilonggarkan.
 
 **Caveat:** belum dilihat di browser.
+
+## [2026-09-17] Telusur satu Nomor Mesin — panel PII
+
+### Pintu masuknya kotak cari, dan itu akibat keputusan PII sebelumnya
+
+`docs/FUSION.md` 3.4 menulis "drill-down dari peta atau tabel". Keduanya belum
+mungkin hari ini, dan sebabnya keputusan saya sendiri: lapisan titik di peta
+SENGAJA tidak membawa nomor mesin (lihat entri titik peta hari ini), justru
+supaya tidak ada pengenal PII di data yang dikirim ke setiap browser. Jadi klik
+titik tidak bisa menunjuk satu mesin, dan tidak ada tabel yang menampilkan nomor
+mesin. Pintu masuk yang jujur karena itu kotak cari — di markup statis, bukan di
+HTML yang digambar ulang, dengan alasan yang sama seperti kotak cari Cakupan
+Sumber: kotak yang ikut dibangun ulang kehilangan fokus tiap ketikan.
+
+### Panel sendiri, bukan panel yang sudah ada
+
+Spesifikasi menyebut "panel geser yang sudah ada **sebagai polanya**". Itu
+memang pola, bukan elemen: `#kelurahanDetailPanel` tinggal DI DALAM kotak peta
+(`absolute` di `#map-shell`), sedangkan telusur ini hidup di halaman Confidence
+Fusion. Jadi elemennya baru, polanya persis sama — `hidden` + `translate-x-full`
++ transisi transform, dibuka lewat `requestAnimationFrame`.
+
+Saat ditutup, isinya DIKOSONGKAN, bukan cuma disembunyikan. Nama dan alamat
+tidak ditinggal menggantung di DOM setelah orang selesai melihatnya.
+
+### Penyimpangan: skematik, bukan peta mini
+
+3.4 meminta peta mini. Peta sungguhan berarti instance MapLibre kedua di dalam
+panel — komponen berat yang tidak bisa saya verifikasi di browser. Yang digambar
+SVG skematik: KTP di pusat, lingkaran putus-putus = ambang KPI Jarak, garis ke
+titik Servis dan Kirim, berskala sehingga titik di luar ambang tetap masuk
+gambar. Ia menjawab pertanyaan yang sama ("di dalam atau di luar ambang?") tanpa
+satu pun ubin peta. Karena tanpa latar peta arah tidak bisa dibaca sebagai
+lokasi, kalimat itu ditulis di bawah gambarnya.
+
+### Bug sungguhan yang ditemukan tesnya sendiri
+
+`Number(null)` bernilai **0**, dan 0 itu finite. Penjaga yang saya tulis —
+`Number.isFinite(Number(fusion.ktpLat))` — karena itu LOLOS untuk KTP yang tidak
+punya koordinat, lalu posisi relatifnya dihitung terhadap garis khatulistiwa:
+muncul jarak 879 km yang tampak masuk akal dan tidak akan tertangkap mata.
+Diperbaiki dengan satu helper `angka()` yang mengembalikan NaN untuk
+`null`/`undefined`/`''`. Mutasi yang mengembalikan bug ini tertangkap.
+
+Ini juga alasan kalimat alasannya selalu menyebut ambang yang TERSIMPAN di baris
+itu (`kpi_radius_m`), bukan setelan hari ini — kalau tidak, penjelasan bisa
+bertentangan dengan golongan yang sedang dijelaskan.
+
+### Satu cacat kecil yang ketahuan waktu memeriksa escaping
+
+`esc(String(p.sentAt)).slice(0, 16)` — escape dulu, potong kemudian. Urutan itu
+bisa memenggal entity di tengah (`&amp;` jadi `&am`) dan merusak markup. Dibalik:
+potong dulu, escape belakangan.
+
+**Tentang pemeriksa escaping saya sendiri:** ia sempat menandai dua field
+"belum ter-escape" yang ternyata AMAN — satu kemunculan adalah syarat ternary
+(tidak pernah jadi keluaran), satu lagi berada di dalam `esc(a || b || c)`
+sehingga tidak cocok dengan pola `esc(<field>`. Penghitung substring memang
+kasar. Yang menyelesaikannya membaca barisnya, bukan mempercayai alatnya —
+dan justru pembacaan itu yang menemukan cacat urutan di atas.
+
+36/36 berkas tes lolos; berkas alasannya sendiri 9/9. Baseline diperiksa hijau
+LEBIH DULU, baru enam mutasi: penjaga angka dimatikan, ambang jadi eksklusif,
+batas meter/km digeser, skala diagram abaikan titik terjauh, "gagal diukur"
+disamakan dengan terukur, dan arah utara-selatan dibalik — semuanya merah.
+
+**Caveat:** belum dilihat di browser. Khususnya panel geser dan diagram SVG-nya.

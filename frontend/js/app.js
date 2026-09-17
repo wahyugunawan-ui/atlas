@@ -51,7 +51,8 @@ import {
   openDealerEditor, closeDealerEditor, saveDealerEditor, deleteDealerConfirm,
 } from './tables.js';
 import {
-  cariCakupan, renderDeliveryTable, renderFusion, renderServiceTable, toggleSumberCakupan,
+  bukaTelusurMesin, cariCakupan, renderDeliveryTable, renderFusion, renderServiceTable,
+  toggleSumberCakupan, tutupTelusurMesin,
 } from './fusion.js';
 import {
   askDeletePeriod, closeDeletePeriod, confirmDeletePeriod, deletePeriodTyped,
@@ -86,7 +87,7 @@ const HANDLERS = {
   renderCustomerTable, searchCustomers, customerPage,
   // penyatuan tiga sumber (docs/FUSION.md Tahap F)
   renderFusion, renderServiceTable, renderDeliveryTable,
-  toggleSumberCakupan, cariCakupan,
+  toggleSumberCakupan, cariCakupan, bukaTelusurMesin, tutupTelusurMesin,
   editDealerRingFromTable, editPosCoverageFromTable,
   openNewOutlet, closeNewOutlet, newOutletDealerChanged, saveNewOutlet,
   askResetOutlets, closeResetOutlets, resetOutletsTyped, confirmResetOutlets,

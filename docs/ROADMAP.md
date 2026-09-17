@@ -310,6 +310,16 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
   tertulis). Diuji lewat handler yang sungguhan dengan `document` tiruan;
   5 mutasi, semuanya merah.
 
+- **Telusur satu Nomor Mesin** — panel geser PII di halaman Confidence Fusion:
+  identitas, alasan golongan dalam kalimat (jarak nyata vs ambang yang
+  TERSIMPAN di baris itu), riwayat servis dan pengiriman, plus diagram
+  skematik posisi terhadap lingkaran KPI Jarak. Pintu masuknya kotak cari,
+  karena klik-dari-peta mustahil tanpa menaruh nomor mesin di lapisan titik —
+  konsekuensi keputusan PII sebelumnya, dan itu benar. Panel mengosongkan
+  isinya saat ditutup. Tesnya menemukan bug sungguhan: `Number(null)` = 0
+  membuat KTP tanpa koordinat dihitung terhadap khatulistiwa. Lihat
+  `docs/DECISIONS.md`.
+
 **Belum dikerjakan (sisa Tahap F, lihat tabel tahapan di `docs/FUSION.md`):**
 - Telusur per Nomor Mesin: lingkaran KPI Jarak di sekitar titik KTP-nya +
   garis penghubung ke titik Servis/Kirim (sekarang lingkarannya dipusatkan
@@ -317,7 +327,6 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
 - Titik Servis berbentuk KOTAK lewat `map.addImage()` sesuai spesifikasi
   (sekarang lingkaran merah muda — `addImage()` belum pernah dipakai di
   proyek ini dan hasilnya belum bisa diverifikasi di browser)
-- Drill-down per Nomor Mesin (rute PII-nya sudah ada, layarnya belum)
 - Mode Live/wallboard dan cross-filtering penuh di sidebar
 - Saringan Karesidenan di halaman Fusion (petanya cuma ada di frontend;
   sampai dipindah ke server, pita kuning mengatakannya belum dipakai)

@@ -97,6 +97,11 @@
   .marker-outlet.terpilih { width: 30px; height: 30px; font-size: 16px; box-shadow: 0 0 0 4px rgba(11,47,107,.25), 0 3px 10px rgba(0,0,0,.35); }
 
   #kelurahanDetailPanel { transition: transform 0.3s cubic-bezier(0.16,1,0.3,1); }
+  /* Panel telusur Nomor Mesin: pola yang SAMA dengan panel geser kelurahan di atas
+     (docs/FUSION.md 3.4 menyebut "panel geser yang sudah ada" sebagai polanya), tapi
+     elemen sendiri — yang di atas tinggal di dalam kotak peta, sedangkan yang ini di
+     halaman Confidence Fusion. Menggeser dari KANAN. */
+  #telusur-panel { transition: transform 0.3s cubic-bezier(0.16,1,0.3,1); }
   .step-dot { width: 26px; height: 26px; border-radius: 999px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; }
   .step-dot.done { background: #10b981; color: #fff; }
   .step-dot.now { background: var(--astra-navy); color: #fff; }
@@ -990,13 +995,30 @@
   <div id="kirim-isi" class="flex-1 min-h-0"></div>
 </section>
 
-<section id="tab-fusion" class="hidden p-3 md:p-4 h-full flex flex-col gap-2">
+<section id="tab-fusion" class="hidden p-3 md:p-4 h-full flex flex-col gap-2 relative overflow-hidden">
   <div class="flex items-baseline gap-2">
     <span class="text-[9px] font-bold uppercase tracking-[0.2em] text-blue-500">ATLAS</span>
     <span class="text-sm font-extrabold text-slate-800">Confidence Fusion Dashboard</span>
     <span class="text-[10px] text-slate-400">Controlling Quality of Data</span>
+    <!-- Pintu masuk telusur. Di markup STATIS, bukan di HTML yang digambar ulang:
+         kotak yang ikut dibangun ulang kehilangan fokus dan posisi kursor tiap
+         ketikan. Klik-dari-peta belum mungkin — lapisan titik sengaja tidak membawa
+         nomor mesin (lihat fusion-points.js), justru supaya tidak ada PII di sana. -->
+    <div class="ml-auto flex items-center gap-1">
+      <input id="telusur-mesin" type="text" placeholder="Telusur Nomor Mesin…"
+        onkeydown="if(event.key==='Enter') bukaTelusurMesin()"
+        class="px-2 py-1 rounded-lg border border-slate-200 text-[11px] mono w-44">
+      <button onclick="bukaTelusurMesin()" class="px-2 py-1 rounded-lg text-[11px] font-bold text-white" style="background:var(--astra-navy)">Telusur</button>
+    </div>
   </div>
   <div id="fusion-isi" class="flex-1 min-h-0 overflow-y-auto"></div>
+
+  <!-- Panel geser telusur. Memuat NAMA dan ALAMAT konsumen: rute PII, dibatasi laju
+       dan tercatat di access_log oleh server. -->
+  <div id="telusur-panel" class="hidden translate-x-full absolute top-0 right-0 bottom-0 w-[420px] max-w-full map-panel p-4 z-30 overflow-y-auto">
+    <button onclick="tutupTelusurMesin()" class="absolute top-3 right-3 text-slate-400 hover:text-slate-700"><i class="ph ph-x text-lg"></i></button>
+    <div id="telusur-isi"></div>
+  </div>
 </section>
 </main>
 
