@@ -792,6 +792,12 @@ function build(config) {
     try {
       const id = await savePing({
         engineNo: String(body.engineNo || '').trim().slice(0, 32),
+        // Periode PEMBELIAN, kalau sistem lapangan memang tahu. Divalidasi dengan regex
+        // yang sama dengan periode di tempat lain; yang tidak sah diperlakukan sebagai
+        // tidak disebutkan, bukan ditolak — pingnya jauh lebih berharga daripada satu
+        // field yang salah format. savePing() akan mencarinya sendiri dari Data KTP.
+        period: PERIOD.test(String(body.periode || body.period || ''))
+          ? String(body.periode || body.period) : null,
         sentAt: sentAt.toISOString(),
         lat,
         lng,

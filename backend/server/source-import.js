@@ -245,13 +245,27 @@ async function savePing(ping, config) {
   if (!config) throw new Error('Menyimpan ping butuh konfigurasi database konsumen.');
   const pii = await store.ensureCustomers(config);
 
+  // Periode pembelian, kalau pengirimnya tidak menyebutkannya: dicari dari Data KTP
+  // lewat nomor mesin. MIN(period) — periode KTP paling AWAL untuk mesin itu, yaitu
+  // saat motornya pertama tercatat. Kalau nomor mesinnya belum dikenal, periodenya
+  // NULL dan pingnya TETAP disimpan; ia menunggu Data KTP-nya masuk.
+  //
+  // TIDAK PERNAH diturunkan dari `sent_at`. Lihat alasannya di customers-schema.sql.
+  let period = ping.period || null;
+  if (!period && ping.engineNo) {
+    const cocok = await store.one(pii,
+      'SELECT MIN(period) AS period FROM customer_ktp WHERE engine_no = ?',
+      [ping.engineNo]);
+    period = (cocok && cocok.period) ? cocok.period : null;
+  }
+
   const baris = await store.one(pii, `
     INSERT INTO delivery_ping
-      (engine_no, sent_at, lat, lng, accuracy_m, location_text, photo_url,
+      (engine_no, period, sent_at, lat, lng, accuracy_m, location_text, photo_url,
        courier_name, note)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id`,
-  [ping.engineNo || null, ping.sentAt, ping.lat, ping.lng,
+  [ping.engineNo || null, period, ping.sentAt, ping.lat, ping.lng,
     ping.accuracyM == null ? null : ping.accuracyM,
     ping.locationText || null, ping.photoUrl || null, ping.courierName || null,
     ping.note || null]);

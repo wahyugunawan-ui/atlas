@@ -183,8 +183,12 @@ function periodSummary() {
  * yang benar adalah kita tidak tahu. Mengikuti pola `if (!db) return null` yang sudah
  * dipakai customersInVillage().
  *
- * Data Pengiriman SENGAJA tidak ikut: `delivery_ping` tidak punya kolom periode sama
- * sekali, jadi ping tidak bisa diatribusikan ke bulan mana pun tanpa mengarang.
+ * Data Pengiriman BELUM ikut, dan alasannya sudah berubah. Dulu: `delivery_ping` tidak
+ * punya kolom periode. Sejak 2026-09-17 kolomnya ada (periode pembelian), tapi belum
+ * ada satu pun produsen ping — setiap bulan akan berisi 0 ping, dan ringkasChecklist()
+ * akan menulis "3 dari 4 jenis data tersimpan" untuk SEMUA bulan, terbaca seperti data
+ * yang hilang padahal memang belum pernah ada sumbernya. Ditambahkan begitu ping
+ * pertama benar-benar masuk. Hapus per bulannya sudah bisa lewat API.
  */
 async function periodDataSummary() {
   const penjualan = await periodSummary();
@@ -795,6 +799,7 @@ async function deletePeriod(period, ip) {
   let customers = 0;
   let ktp = 0;
   let servis = 0;
+  let kirim = 0;
   let fusi = 0;
 
   if (customerDb) {
@@ -804,10 +809,15 @@ async function deletePeriod(period, ip) {
     customers = await buang('customers');
     ktp = await buang('customer_ktp');
     servis = await buang('service_visit');
+    // Sejak delivery_ping punya kolom periode PEMBELIAN, ping milik pelanggan bulan
+    // ini ikut dibuang. Tanpa baris ini, bulan yang "sudah dihapus" masih meninggalkan
+    // titik GPS rumah pelanggannya — PII yang justru paling tajam dari ketiga sumber.
+    // Ping ber-period NULL tidak tersentuh (WHERE period = ? tidak mencocokkan NULL).
+    kirim = await buang('delivery_ping');
     fusi = await buang('customer_fusion');
   }
 
-  const adaApaPun = Number(sebelum.rows) || customers || ktp || servis || fusi;
+  const adaApaPun = Number(sebelum.rows) || customers || ktp || servis || kirim || fusi;
   if (!adaApaPun) {
     throw new Error(`Periode ${period} tidak punya data apa pun.`);
   }
@@ -839,6 +849,7 @@ async function deletePeriod(period, ip) {
     (customers ? `, ${customers} data konsumen` : '') +
     (ktp ? `, ${ktp} baris KTP` : '') +
     (servis ? `, ${servis} baris servis` : '') +
+    (kirim ? `, ${kirim} ping pengiriman` : '') +
     (fusi ? `, ${fusi} hasil penggolongan` : '') +
     '. Berkas Excel di arsip tidak ikut dihapus.']);
 
@@ -849,6 +860,7 @@ async function deletePeriod(period, ip) {
     customers,
     ktp,
     servis,
+    kirim,
     fusi,
   };
 }
@@ -977,8 +989,17 @@ async function deliveryPings(filter) {
   const params = [];
   // `sent_at` timestamp, bukan periode 'YYYY-MM'. Dibandingkan sebagai teks awal
   // bulan supaya saringan periode yang sama tetap berlaku di sini.
-  if (f.periodFrom) { where.push("to_char(sent_at, 'YYYY-MM') >= ?"); params.push(f.periodFrom); }
-  if (f.periodTo) { where.push("to_char(sent_at, 'YYYY-MM') <= ?"); params.push(f.periodTo); }
+  // Kolom `period` yang sungguhan, bukan lagi to_char(sent_at) — sejak 2026-09-17
+  // delivery_ping menyimpan periode PEMBELIAN motornya. Bedanya bukan gaya: ping yang
+  // tiba September untuk motor yang dibeli Agustus dulu ikut tersaring ke September,
+  // yaitu bulan yang tidak ada hubungannya dengan pelanggan itu.
+  //
+  // Baris ber-period NULL (nomor mesinnya belum dikenal) TIDAK ikut waktu saringan
+  // periode aktif, dan itu jawaban yang jujur: periodenya memang belum diketahui, jadi
+  // mengklaimnya milik bulan mana pun akan mengarang. Tanpa saringan periode ia tetap
+  // tampil, jadi tidak ada baris yang hilang dari pandangan.
+  if (f.periodFrom) { where.push('period >= ?'); params.push(f.periodFrom); }
+  if (f.periodTo) { where.push('period <= ?'); params.push(f.periodTo); }
   if (f.query) {
     where.push("(engine_no ILIKE ? ESCAPE '\\' OR location_text ILIKE ? ESCAPE '\\')");
     const like = '%' + escapeLike(f.query) + '%';
@@ -1001,8 +1022,17 @@ async function deliveryPings(filter) {
   return { rows, total, limit: SUMBER_LIMIT, offset };
 }
 
-/** Tabel sumber per jenis data. `kirim` sengaja TIDAK ada — lihat deleteSourcePeriod. */
-const TABEL_SUMBER = { ktp: 'customer_ktp', servis: 'service_visit' };
+/** Tabel sumber per jenis data. */
+const TABEL_SUMBER = {
+  ktp: 'customer_ktp',
+  servis: 'service_visit',
+  // `kirim` MASUK sejak 2026-09-17. Sebelumnya ia sengaja tidak ada karena
+  // delivery_ping tidak punya kolom periode sama sekali, dan menebaknya dari `sent_at`
+  // akan membuang ping yang kebetulan tiba di bulan itu untuk motor yang dibeli bulan
+  // lain. Sekarang kolomnya ada dan berisi periode PEMBELIAN, jadi pertanyaan "hapus
+  // Pengiriman bulan X" akhirnya punya jawaban yang benar.
+  kirim: 'delivery_ping',
+};
 
 /**
  * Hapus SATU jenis data untuk SATU periode.
@@ -1011,11 +1041,13 @@ const TABEL_SUMBER = { ktp: 'customer_ktp', servis: 'service_visit' };
  * atau Data Servis saja, karena checklist "Periode Tersimpan" menampilkan ketiganya
  * terpisah dan orang berhak membatalkan satu unggahan tanpa menyentuh dua lainnya.
  *
- * `kirim` DITOLAK, bukan didiamkan: `delivery_ping` tidak punya kolom periode sama
- * sekali (lihat customers-schema.sql), jadi "hapus Pengiriman bulan X" adalah
- * permintaan yang tidak bisa dijawab dengan benar. Menebaknya dari `sent_at` akan
- * membuang ping yang kebetulan terkirim di bulan itu untuk motor yang dibeli bulan
- * lain — salah, dan tidak bisa dibatalkan.
+ * `kirim` DITERIMA sejak 2026-09-17. Sebelumnya ditolak, karena `delivery_ping` tidak
+ * punya kolom periode dan menebaknya dari `sent_at` akan membuang ping yang kebetulan
+ * tiba di bulan itu untuk motor yang dibeli bulan lain. Sekarang kolom `period` berisi
+ * periode PEMBELIAN (lihat customers-schema.sql dan savePing), jadi yang terhapus
+ * hanya ping milik pelanggan bulan itu. Ping ber-period NULL — nomor mesinnya belum
+ * dikenal Data KTP — TIDAK tersentuh: periodenya memang belum diketahui, dan
+ * menghapusnya atas nama bulan mana pun sama dengan mengarang.
  *
  * Data TURUNAN (customer_fusion, segment_rollup, source_overlap) tidak disentuh di
  * sini. Yang benar adalah menghitung ulang sesudahnya — dan itu tugas pemanggilnya,
@@ -1024,9 +1056,7 @@ const TABEL_SUMBER = { ktp: 'customer_ktp', servis: 'service_visit' };
 async function deleteSourcePeriod(source, period, ip) {
   const tabel = TABEL_SUMBER[source];
   if (!tabel) {
-    throw new Error(source === 'kirim'
-      ? 'Data Pengiriman tidak bisa dihapus per bulan: pingnya tidak menyimpan periode.'
-      : `Jenis data "${source}" tidak dikenal.`);
+    throw new Error(`Jenis data "${source}" tidak dikenal.`);
   }
 
   const db = store.customers();

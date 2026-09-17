@@ -103,9 +103,19 @@ CREATE INDEX IF NOT EXISTS idx_service_engine ON service_visit (engine_no);
 --
 -- Satu-satunya sumber yang koordinatnya asli dari GPS, jadi satu-satunya yang presisi
 -- rumah. Dua sumber lain cuma setepat centroid desanya.
+-- `period` = periode PEMBELIAN motornya (periode Data KTP-nya), BUKAN bulan pingnya
+-- tiba. Bedanya menentukan, dan sempat jadi alasan tabel ini tidak bisa dihapus per
+-- bulan sama sekali: satu motor yang dibeli Agustus bisa menerima ping di September,
+-- dan menurunkan periodenya dari `sent_at` akan membuang ping bulan itu untuk motor
+-- yang dibeli bulan lain. Salah, dan tidak bisa dibatalkan.
+--
+-- Boleh NULL, dan itu disengaja: ping yang nomor mesinnya belum dikenal TETAP disimpan
+-- (lihat komentar di atas). Periodenya menyusul waktu Data KTP-nya masuk; menolak
+-- pingnya berarti kehilangan satu-satunya bukti koordinat rumah yang pernah lewat.
 CREATE TABLE IF NOT EXISTS delivery_ping (
   id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   engine_no     VARCHAR(32),
+  period        VARCHAR(7),
   sent_at       TIMESTAMPTZ NOT NULL,
   lat           DOUBLE PRECISION,
   lng           DOUBLE PRECISION,
@@ -117,7 +127,15 @@ CREATE TABLE IF NOT EXISTS delivery_ping (
   received_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- CREATE TABLE IF NOT EXISTS di atas TIDAK menambah kolom ke tabel yang sudah ada, dan
+-- proyek ini belum punya penjalan migrasi bernomor (lihat catatan di db.js). Jadi
+-- kolomnya ditambahkan eksplisit di sini. Idempoten, dan runSchema() menjalankan berkas
+-- ini di SETIAP kali server menyala (openCustomers di db.js) — jadi database yang sudah
+-- terlanjur ada ikut mendapatkannya tanpa ada yang perlu menjalankan apa pun manual.
+ALTER TABLE delivery_ping ADD COLUMN IF NOT EXISTS period VARCHAR(7);
+
 CREATE INDEX IF NOT EXISTS idx_ping_engine ON delivery_ping (engine_no, sent_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ping_period ON delivery_ping (period);
 
 -- Satu baris per nomor mesin — inilah "satu pelanggan" dalam pengertian sistem ini.
 --
