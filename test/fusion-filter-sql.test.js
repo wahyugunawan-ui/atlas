@@ -155,6 +155,37 @@ async function main() {
     assert.strictEqual(lewatPos.rows[0].villageCode, V1,
       'pos O1 hanya mencakup V1, jadi V2 tidak boleh ikut');
 
+    // 4b. Titik peta memakai kode dealer TURUNAN NAMA, bukan kode numerik rollup.
+    //
+    // fusionVillagePoints() satu-satunya query menghadap-dealer yang dulu tidak
+    // meng-join `dealers`, jadi ia mengembalikan '9' apa adanya. Frontend mewarnai
+    // titik lewat dealerColor(S.registry, r.dealerCode) dengan registry berkunci
+    // 'DEALERSATU' — tidak cocok, tidak ada galat, titiknya cuma abu-abu semua.
+    // Cacat diam seperti ini yang tidak bisa dilihat dari hijau/merahnya tes lain.
+    const titik = await repo.fusionVillagePoints(PERIOD, { cityCode: '34.04' });
+    assert.strictEqual(titik.length, 1, 'Sleman punya satu pasangan (kelurahan, dealer)');
+    assert.strictEqual(titik[0].dealerCode, 'DEALERSATU',
+      'titik peta harus memakai dealers.dealer_code, bukan legacy_code numerik');
+    assert.strictEqual(titik[0].villageCode, V1);
+    assert.strictEqual(Number(titik[0].ktp), 10);
+    assert.strictEqual(Number(titik[0].servis), 10, 'baris V1 ditandai has_service');
+    assert.strictEqual(Number(titik[0].kirim), 0, 'belum ada pengiriman sama sekali');
+
+    // Dealer yang TIDAK dikenal tabel dealers tetap membawa kodenya sendiri, bukan
+    // berubah jadi kosong — itu yang membedakan LEFT JOIN + COALESCE dari INNER JOIN,
+    // dan tanpa pemeriksaan ini barisnya bisa hilang diam-diam dari peta.
+    await store.run(store.db(),
+      `INSERT INTO source_overlap
+         (period, village_code, city_code, dealer_code, has_service, has_delivery,
+          segment, customer_count)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [PERIOD, V1, '34.04', '404', false, false, 'registered_only', 3]);
+    const asing = await repo.fusionVillagePoints(PERIOD, { cityCode: '34.04' });
+    assert.strictEqual(asing.length, 2, 'dealer tak dikenal tidak boleh hilang');
+    const baris404 = asing.find((r) => r.dealerCode === '404');
+    assert.ok(baris404, 'dealer tak dikenal tetap memakai kode aslinya');
+    assert.strictEqual(Number(baris404.ktp), 3);
+
     // 5. Golongan ikut menyaring, dan tidak bertabrakan dengan saringan lain.
     const kosong = await repo.fusionTotals(
       { period: PERIOD, cityCode: '34.04', segment: 'registered_only' });
@@ -193,7 +224,8 @@ async function main() {
 
     console.log(`OK fusion-filter-sql — 8 fungsi x ${KASUS.length} saringan jalan di ` +
       'Postgres, saringan benar-benar menyaring, join dealer lewat legacy_code, pos ' +
-      'lewat coverage, karesidenan lewat daftar kota di ketujuh penyusun WHERE');
+      'lewat coverage, karesidenan lewat daftar kota di ketujuh penyusun WHERE, dan ' +
+      'titik peta memakai kode dealer turunan nama (dealer asing tetap terbawa)');
   } finally {
     await closeTestDb(testConfig);
   }

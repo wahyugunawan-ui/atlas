@@ -12,7 +12,9 @@ REM Laptop harus tetap menyala dan servernya jalan. Kalau laptopnya tidur, link 
 
 setlocal
 
-if not defined PORT set "PORT=3100"
+REM 3000, bukan 3100. Angka lama tidak pernah cocok dengan PORT di .env, jadi
+REM pemeriksaan di bawah selalu menembak port yang salah.
+if not defined PORT set "PORT=3000"
 set "TS=%ProgramFiles%\Tailscale\tailscale.exe"
 
 if not exist "%TS%" (

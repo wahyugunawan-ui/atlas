@@ -1663,13 +1663,22 @@ async function fusionVillagePoints(period, filter) {
   where.push("r.village_code <> ''");
 
   return store.all(store.db(), `
-    SELECT village_code AS "villageCode", dealer_code AS "dealerCode",
-           SUM(customer_count) AS ktp,
-           COALESCE(SUM(customer_count) FILTER (WHERE has_service), 0) AS servis,
-           COALESCE(SUM(customer_count) FILTER (WHERE has_delivery), 0) AS kirim
+    SELECT r.village_code AS "villageCode",
+           -- Kode dealer TURUNAN NAMA, bukan kode numerik Excel yang tersimpan di
+           -- source_overlap. Peta mewarnai titik lewat dealerColor(S.registry, ...),
+           -- dan registry itu berkunci kode turunan nama; tanpa terjemahan di sini
+           -- tidak ada yang cocok dan SELURUH titik KTP jatuh ke abu-abu, tanpa galat.
+           -- Join yang sama sudah dipakai fusionRows() dan fusionByDealer().
+           -- COALESCE supaya dealer yang tidak dikenal tetap membawa kodenya sendiri,
+           -- persis seperti perilaku sebelumnya, bukan berubah jadi kosong.
+           COALESCE(d.dealer_code, r.dealer_code) AS "dealerCode",
+           SUM(r.customer_count) AS ktp,
+           COALESCE(SUM(r.customer_count) FILTER (WHERE r.has_service), 0) AS servis,
+           COALESCE(SUM(r.customer_count) FILTER (WHERE r.has_delivery), 0) AS kirim
     FROM source_overlap r
+    LEFT JOIN dealers d ON d.legacy_code = r.dealer_code
     WHERE ${where.join(' AND ')}
-    GROUP BY village_code, dealer_code`, params);
+    GROUP BY r.village_code, r.dealer_code, d.dealer_code`, params);
 }
 
 /** Ringkasan per kota: siapa yang paling banyak, dan seberapa yakin kita. */

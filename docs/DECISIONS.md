@@ -4005,3 +4005,38 @@ membuat SELURUH `repository.js` gagal di-parse.
 dibuat" hilang, dan ikut dibuang.
 
 **Caveat:** belum dilihat di browser.
+
+## [2026-09-17] Cloudflare quick tunnel sebagai pengganti SEMENTARA Tailscale Funnel
+
+**Konteks:** Dashboard perlu dibuka ke internet untuk demo, mendesak. Keputusan
+resmi proyek adalah Tailscale Funnel (lihat ROADMAP entri "Siap diakses dari luar
+untuk pitch", 2026-08-17), dan `ops/akses-luar-nyala.bat` sudah ditulis untuk itu.
+Kenyataannya di laptop ini Tailscale **tidak terpasang sama sekali**, dan
+memasangnya menuntut dua langkah yang hanya bisa dilakukan pemilik akun lewat
+browser: mendaftar/login, lalu mengaktifkan Funnel di halaman admin tailnet.
+**Keputusan:** Untuk sementara dipakai Cloudflare quick tunnel
+(`cloudflared tunnel --url http://localhost:3000`), dengan skrip
+`ops/akses-luar-cloudflare-nyala.bat` dan `ops/akses-luar-cloudflare-mati.bat`.
+Keputusan Tailscale Funnel TIDAK dibatalkan — skrip lamanya tetap ada.
+**Alasan:** Quick tunnel tidak butuh akun sama sekali, jadi jaraknya dari "belum
+ada apa-apa" ke "ada link https yang bisa dibuka orang" cuma satu perintah.
+**Alternatif yang ditolak:** (a) Menunggu pemasangan Tailscale — ditolak karena
+mendesak dan dua langkahnya butuh pengguna, bukan saya. (b) Port forwarding di
+router — ditolak, tidak memberi HTTPS dan membuka laptop ke pemindai internet.
+**Konsekuensi:** Link `trycloudflare.com` **acak dan berganti setiap kali
+dinyalakan ulang**, jadi tidak bisa ditulis di undangan rapat dan harus dikirim
+ulang tiap sesi. Tanpa jaminan uptime dari Cloudflare. Selama menyala, siapa pun
+di internet sampai ke halaman login dan yang melindungi hanya sandi tim yang
+dipakai bersama — karena itu kedua skrip memuat peringatan "nyalakan sebelum,
+matikan sesudah". Kalau akses luar nanti jadi permanen, kembali ke Tailscale
+Funnel (link tetap) atau tunnel bernama Cloudflare, dan `COOKIE_SECURE` dinaikkan
+ke `1`.
+
+**Dua angka salah yang ikut diperbaiki di jalan ini:**
+`ops/akses-luar-nyala.bat` memeriksa port **3100** padahal `.env` memakai **3000**,
+dan `ops/start-all.bat` memakai **PGPORT 5433** padahal PostgreSQL di laptop ini
+mendengar di **5432**. Keduanya tidak akan pernah cocok. Yang belum dirapikan dan
+dicatat sebagai utang: `start-all.bat` masih mengasumsikan PostgreSQL dijalankan
+`pg_ctl` dari `%DATA_DIR%\pgdata`, padahal yang hidup adalah layanan Windows
+`postgresql-x64-17` dengan folder datanya sendiri — blok `pg_ctl` di berkas itu
+akan gagal di mesin ini.

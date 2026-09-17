@@ -13,7 +13,13 @@ if not defined DATA_DIR set "DATA_DIR=C:\astra-data"
 if not defined ACC_ENV_FILE set "ACC_ENV_FILE=%DATA_DIR%\.env"
 if not defined PGDATA set "PGDATA=%DATA_DIR%\pgdata"
 if not defined PG_BIN set "PG_BIN=%USERPROFILE%\pg\pgsql\bin"
-if not defined PGPORT set "PGPORT=5433"
+REM 5432 mengikuti DB_PORT di .env.
+REM
+REM PERHATIAN: di laptop ini PostgreSQL 17 dipasang sebagai layanan Windows
+REM (postgresql-x64-17, Automatic) dengan folder datanya sendiri — BUKAN di
+REM %DATA_DIR%\pgdata, dan bukan dijalankan pg_ctl dari %USERPROFILE%\pg.
+REM Jadi blok pg_ctl di bawah akan gagal di mesin seperti itu. Belum dirapikan.
+if not defined PGPORT set "PGPORT=5432"
 
 set "BOOTLOG=%DATA_DIR%\logs\start-all.log"
 if not exist "%DATA_DIR%\logs" mkdir "%DATA_DIR%\logs"
