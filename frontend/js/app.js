@@ -51,15 +51,15 @@ import {
   openDealerEditor, closeDealerEditor, saveDealerEditor, deleteDealerConfirm,
 } from './tables.js';
 import {
-  bukaTelusurMesin, cariCakupan, renderDeliveryTable, renderFusion, renderServiceTable,
-  setModeGolongan, toggleCakupanPanel, toggleLiveFusion, toggleSumberCakupan,
-  tutupTelusurMesin,
+  bukaTelusurMesin, cariCakupan, kirimPage, renderDeliveryTable, renderFusion,
+  renderServiceTable, servisPage, setModeGolongan, toggleCakupanPanel, toggleLiveFusion,
+  toggleSumberCakupan, tutupTelusurMesin,
 } from './fusion.js';
 import {
   askDeletePeriod, closeDeletePeriod, confirmDeletePeriod, deletePeriodTyped,
   dragLeave, dragOver, dropFile, fileChosen, finishImport, importPeriodChanged,
   importStep, pickFile, refreshImportTab, reimportPeriod, reviewImport, runUpload,
-  togglePeriodeDetail, pilihSumber, unggahSumber,
+  togglePeriodeDetail, pilihSumber, unggahSumber, hapusSumber,
   setupImportTab,
 } from './import.js';
 import {
@@ -88,7 +88,7 @@ const HANDLERS = {
   openDealerDetail, openCitySummary, toggleDealerCity, jumpFromDealer,
   renderCustomerTable, searchCustomers, customerPage,
   // penyatuan tiga sumber (docs/FUSION.md Tahap F)
-  renderFusion, renderServiceTable, renderDeliveryTable,
+  renderFusion, renderServiceTable, renderDeliveryTable, servisPage, kirimPage,
   toggleSumberCakupan, cariCakupan, bukaTelusurMesin, tutupTelusurMesin,
   setModeGolongan, toggleCakupanPanel, toggleLiveFusion,
   editDealerRingFromTable, editPosCoverageFromTable,
@@ -101,7 +101,7 @@ const HANDLERS = {
   // impor
   importStep, importPeriodChanged, pickFile, fileChosen, dropFile, dragOver, dragLeave,
   runUpload, reviewImport, finishImport, reimportPeriod, refreshImportTab,
-  togglePeriodeDetail, pilihSumber, unggahSumber,
+  togglePeriodeDetail, pilihSumber, unggahSumber, hapusSumber,
   askDeletePeriod, closeDeletePeriod, deletePeriodTyped, confirmDeletePeriod,
   // dipanggil antar modul lewat window supaya tidak ada lingkaran import
   // syncFilterBar ikut didaftarkan sejak mode Live halaman Fusion: fusion.js

@@ -8,7 +8,8 @@
  * berkas yang salah bulan sudah terlanjur terkirim sebelum ada yang menyadarinya.
  */
 import {
-  deletePeriod, fetchImports, fetchPeriods, fetchUnmatched, uploadImport, uploadSumber,
+  deletePeriod, deleteSumberPeriode, fetchImports, fetchPeriods, fetchUnmatched,
+  uploadImport, uploadSumber,
 } from './api.js';
 import { MONTHS } from './config.js';
 import { $, esc, formatNumber, monthLabel, toast } from './dom.js';
@@ -335,6 +336,40 @@ export async function unggahSumber(source, input) {
 /* Checklist jenis data per periode. Logikanya di modul murni supaya bisa diuji tanpa
    browser — khususnya pembedaan "kosong" vs "tidak bisa diperiksa". */
 
+/**
+ * Hapus satu jenis data satu bulan.
+ *
+ * Konfirmasinya MENGETIK ULANG periodenya, bukan sekadar "Ya/Batal" — disiplin yang
+ * sama dengan hapus periode penuh, karena yang hilang juga sebulan penuh data satu
+ * jenis dan tidak bisa dibatalkan. Servernya menuntut hal yang sama, jadi penjaga di
+ * layar ini bukan satu-satunya.
+ */
+export async function hapusSumber(source, period) {
+  const nama = { ktp: 'Data KTP', servis: 'Data Servis' }[source] || source;
+  const ketik = window.prompt(
+    `Hapus ${nama} untuk ${monthLabel(period)}?\n\n` +
+    'Seluruh baris bulan itu akan hilang dan penggolongan dihitung ulang. ' +
+    'Tindakan ini tidak bisa dibatalkan.\n\n' +
+    `Ketik ${period} untuk melanjutkan:`);
+  if (ketik === null) return;                       // dibatalkan, bukan salah ketik
+  if (ketik.trim() !== period) {
+    toast(`Konfirmasi tidak cocok. ${nama} tidak dihapus.`, 'error');
+    return;
+  }
+
+  try {
+    const hasil = await deleteSumberPeriode(source, period);
+    const gagalHitung = hasil.fusi && hasil.fusi.gagal;
+    toast(`${nama} ${monthLabel(period)} dihapus (${formatNumber(hasil.deleted)} baris).` +
+      (gagalHitung ? ' Penggolongan GAGAL dihitung ulang.' : ''),
+    gagalHitung ? 'error' : 'ok');
+    await refreshImportTab();
+    window.reloadSummary();
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
 /** Periode yang rinciannya sedang dibuka; cuma satu, supaya panel tetap ringkas. */
 let periodeTerbuka = null;
 
@@ -370,11 +405,22 @@ export async function refreshImportTab() {
 
       const rincian = terbuka
         ? `<div class="mt-2 pt-2 border-t border-slate-200/70">` +
-          daftar.map((j) =>
-            `<div class="flex items-baseline gap-2 text-[11px] py-0.5">` +
-            `<span class="text-slate-500 flex-1">${esc(j.label)}</span>` +
-            `<span class="mono ${j.status === 'ada' ? 'text-slate-700' : 'text-slate-400'}">${
-              j.jumlah === null ? 'tidak bisa diperiksa' : esc(formatNumber(j.jumlah))}</span></div>`).join('') +
+          daftar.map((j) => {
+            // Tombol hapus HANYA muncul untuk jenis yang memang ada datanya, dan
+            // hanya untuk jenis yang bisa dihapus per bulan. Tombol yang selalu
+            // tampil lalu menolak waktu ditekan cuma melatih orang mengabaikannya.
+            const bisaHapus = j.status === 'ada' && (j.kunci === 'ktp' || j.kunci === 'servis');
+            return `<div class="flex items-baseline gap-2 text-[11px] py-0.5">` +
+              `<span class="text-slate-500 flex-1">${esc(j.label)}</span>` +
+              `<span class="mono ${j.status === 'ada' ? 'text-slate-700' : 'text-slate-400'}">${
+                j.jumlah === null ? 'tidak bisa diperiksa' : esc(formatNumber(j.jumlah))}</span>` +
+              (bisaHapus
+                ? `<button onclick="hapusSumber('${esc(j.kunci)}','${esc(p.period)}')" ` +
+                  `title="Hapus ${esc(j.label)} bulan ini" ` +
+                  `class="text-slate-300 hover:text-red-600"><i class="ph ph-trash"></i></button>`
+                : '<span class="w-3"></span>') +
+              `</div>`;
+          }).join('') +
           `<div class="text-[10px] text-slate-400 mt-1">Impor terakhir: ${
             esc(p.importedAt ? String(p.importedAt).slice(0, 10) : '—')}</div>` +
           `<div class="text-[11px] text-slate-500 mt-1">${esc(formatNumber(p.units))} unit · ` +

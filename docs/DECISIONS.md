@@ -3853,3 +3853,82 @@ menggantung. Sekalian diuji hal yang sebenarnya jadi pertanyaan: `page.test.js`
 merah di atas baseline hijau.
 
 **Caveat:** belum dilihat di browser.
+
+## [2026-09-17] Filter SAMA di seluruh halaman — membalik keputusan 2026-08-29
+
+Permintaan langsung tim: memilih Kota di Insight & Peta lalu membuka Confidence
+Fusion harus memberi Kota yang sama.
+
+Ini **membalik** entri [2026-08-29] "Nilai filter di objek per halaman". Yang lama
+tidak dihapus — alasannya waktu itu juga permintaan tim ("tiap halaman punya
+filter sendiri"), jadi yang berubah PREFERENSI, bukan temuan teknis.
+
+**Yang TIDAK ikut berubah, dan itu inti keputusan lama:** nilainya tetap di `S`,
+bukan di `<select>`. Sifat "filters.js bebas DOM dan bisa diuji tanpa browser"
+datang dari *disimpan di objek*, bukan dari *terpisah per halaman*. Jadi
+membalikkan pemisahannya tidak mengorbankan apa pun yang dulu dimenangkan.
+
+Caranya sengaja **satu objek yang dirujuk tujuh slot**, bukan menulis ulang
+`pageFilters()`. Seluruh pemanggil — `setScope`, `activeRows`, `syncFilterBar`,
+`fusionFilter` — terus bekerja apa adanya, tanpa satu pun call site berubah.
+
+`test/filters.test.js` bagian 4 dulu bernama "TERPISAH PER HALAMAN" dan seluruh
+isinya menuduh kebocoran antar halaman. Bagian itu **dibalik**, bukan dihapus:
+sekarang ia menjaga aturan baru supaya filter tidak diam-diam kembali terpisah.
+Tes yang dibiarkan menjaga aturan yang sudah mati lebih berbahaya daripada tidak
+ada tes sama sekali.
+
+**Konsekuensi yang harus diingat:** halaman Data Konsumen dulu sengaja tanpa batas
+periode. Sekarang ia ikut periode yang aktif seperti halaman lain.
+
+## [2026-09-17] Dua subhalaman Data yang selama ini kosong, dan hapus per jenis
+
+**Kenapa kosong:** `renderServiceTable()` dan `renderDeliveryTable()` hanya menulis
+panel "belum dibuat". Bukan rusak — memang belum pernah dikerjakan, padahal
+datanya sudah masuk sejak lama (186.471 baris servis).
+
+Keduanya sekarang membaca rute berhalaman baru. **Dua-duanya rute PII** dan lewat
+pagar yang sama dengan `/customers*`: `piiLimiter` lalu `logCustomerAccess`.
+Servis memuat alamat; Pengiriman memuat titik GPS rumah, nama kurir, dan foto
+bukti — `photo_url` sengaja TIDAK ikut dikembalikan, karena daftar tidak perlu
+menampilkan foto rumah orang untuk menjawab "ping mana saja yang masuk".
+
+Diverifikasi atas data nyata: 186.471 baris servis, 100 per halaman, offset
+999.999 dijepit ke 186.400 (sisa 71 baris). Tabel Pengiriman KOSONG dan itu
+dikatakan di layar — rutenya ada, produsennya belum.
+
+Status pencocokan wilayah ditampilkan apa adanya. Baris contoh pertama saja sudah
+`resolveStatus: unmatched`, kota "KOTA PALEMBANG" — di luar cakupan proyek.
+Menyembunyikan kolom itu akan membuat daftar tampak lebih rapi daripada datanya.
+
+**Hapus per jenis.** Checklist menampilkan tiga jenis terpisah, jadi orang berhak
+membatalkan satu unggahan tanpa menyentuh dua lainnya. Konfirmasinya mengetik
+ulang periodenya — disiplin yang sama dengan hapus periode penuh, dan ditegakkan
+di server juga, bukan cuma di layar.
+
+**`kirim` DITOLAK, bukan didiamkan:** `delivery_ping` tidak punya kolom periode,
+jadi "hapus Pengiriman bulan X" tidak bisa dijawab dengan benar. Menebaknya dari
+`sent_at` akan membuang ping yang kebetulan terkirim bulan itu untuk motor yang
+dibeli bulan lain — salah, dan tidak bisa dibatalkan. Tombolnya karena itu tidak
+pernah dirender untuk Pengiriman; tombol yang selalu tampil lalu menolak waktu
+ditekan cuma melatih orang mengabaikannya.
+
+Sesudah baris sumbernya hilang, penggolongan dihitung ulang. Gagal menghitung
+ulang TIDAK membatalkan penghapusan (datanya memang sudah hilang) tapi dilaporkan
+apa adanya.
+
+**Batas verifikasi yang saya sebut terus terang:** jalur SUKSES penghapusan tidak
+saya uji, karena satu-satunya cara membuktikannya adalah benar-benar menghapus
+19.598 baris KTP sungguhan. Yang diuji ketiga penolakannya — `kirim`, jenis tak
+dikenal, dan periode tanpa data — lalu dipastikan data KTP tetap utuh 19.598.
+
+**Temuan sampingan yang sengaja TIDAK saya perbaiki diam-diam:** `deletePeriod()`
+(hapus periode penuh) hanya membuang `sales`, `unmatched`, dan `customers` — Data
+KTP dan Servis bulan itu tetap tinggal, jadi checklist tetap mencentangnya sesudah
+"hapus periode". Memperbesar daya rusak satu rute yang sudah ada adalah keputusan
+tersendiri; dicatat di ROADMAP, bukan diam-diam dilebarkan.
+
+39/39 berkas tes lolos. `panelBelum()` jadi kode mati begitu kedua panel "belum
+dibuat" hilang, dan ikut dibuang.
+
+**Caveat:** belum dilihat di browser.

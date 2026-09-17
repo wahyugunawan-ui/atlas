@@ -235,7 +235,16 @@ async function test() {
     'kedua kotak kosong harusnya berarti seluruh periode');
 
   /* ------------------------------------------------------------------
-     4. TERPISAH PER HALAMAN
+     4. SAMA DI SELURUH HALAMAN
+     ------------------------------------------------------------------
+     DIBALIK 2026-09-17 atas permintaan tim. Sampai hari itu bagian ini menjaga
+     hal yang SEBALIKNYA — bahwa filter tiap halaman terpisah. Yang lama tidak
+     dihapus diam-diam: pembalikannya dicatat di docs/DECISIONS.md, dan tes ini
+     sekarang menjaga aturan barunya supaya tidak diam-diam kembali terpisah.
+
+     Kenapa dijaga sama sekali: filter yang berbeda antar halaman membuat dua
+     layar menampilkan angka berbeda untuk pertanyaan yang sama, tanpa ada yang
+     tahu mana yang benar.
      ------------------------------------------------------------------ */
   reset();
   S.filterPage = 'peta';
@@ -243,28 +252,33 @@ async function test() {
   setKares('yogyakarta');
   setPeriod('from', '2026-08');
 
-  assert.strictEqual(scopeValue('dealer', pageFilters('konsumen')), 'ALL',
-    'memfilter di halaman Peta ikut mengubah filter halaman Data Konsumen — keempat ' +
-    'halaman berbagi satu objek filter yang sama');
-  assert.strictEqual(pageFilters('pos').kares, 'ALL',
-    'Kares bocor ke halaman lain');
-  assert.strictEqual(units(activeRows('konsumen')), 15,
-    'activeRows halaman lain ikut terpengaruh filter halaman Peta');
-  assert.strictEqual(units(activeRows()), 2, 'filter halaman Peta sendiri tidak berlaku');
+  assert.strictEqual(scopeValue('dealer', pageFilters('konsumen')), 'D1',
+    'memfilter di halaman Peta TIDAK ikut ke halaman lain — filternya seharusnya ' +
+    'satu objek yang sama untuk seluruh halaman');
+  assert.strictEqual(pageFilters('fusion').dealerCode, 'D1',
+    'Confidence Fusion tidak mewarisi Dealer yang dipilih di halaman Peta');
+  assert.strictEqual(pageFilters('pos').kares, 'yogyakarta',
+    'Kares tidak ikut ke halaman lain');
+  assert.strictEqual(pageFilters('kirim').from, '2026-08',
+    'periode tidak ikut ke halaman lain');
 
-  // Tanpa argumen, activeRows mengikuti halaman yang sedang aktif — inilah yang
-  // membuat switchTab cukup menyetel S.filterPage.
+  // Halaman mana pun yang aktif, angkanya sama — karena filternya memang satu.
+  assert.strictEqual(units(activeRows('konsumen')), 2,
+    'activeRows halaman lain tidak memakai filter yang sama');
+  assert.strictEqual(units(activeRows()), 2, 'filter halaman aktif tidak berlaku');
+
   S.filterPage = 'konsumen';
-  assert.strictEqual(units(activeRows()), 15,
-    'activeRows tidak mengikuti S.filterPage — halaman aktif tidak menentukan apa pun');
+  assert.strictEqual(units(activeRows()), 2,
+    'berpindah halaman mengubah angkanya — filternya seharusnya tidak berpindah');
 
+  // clearScope() berlaku untuk semuanya, karena memang tidak ada "milik halaman lain"
+  // lagi. Ini kebalikan persis dari yang dijaga versi sebelumnya.
   clearScope();
-  assert.strictEqual(pageFilters('peta').dealerCode, 'D1',
-    'clearScope mengosongkan lingkup halaman yang salah — S.filterPage sedang ' +
-    "'konsumen', jadi clearScope() di sini tidak boleh menyentuh halaman 'peta'");
+  assert.strictEqual(pageFilters('peta').dealerCode, 'ALL',
+    'clearScope() tidak membersihkan lingkup bersama');
 
   console.log('OK filters — kota/dealer/pos eksklusif, Kares mandiri, rentang ' +
-    'periode berbatas dua sisi, filter terpisah per halaman');
+    'periode berbatas dua sisi, filter SAMA di seluruh halaman');
 }
 
 test().catch((error) => {

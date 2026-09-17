@@ -818,6 +818,163 @@ async function deletePeriod(period, ip) {
   };
 }
 
+/** Batas satu halaman daftar Servis/Pengiriman. Sama semangatnya dengan BROWSE_LIMIT. */
+const SUMBER_LIMIT = 100;
+
+/**
+ * Jepit offset ke AWAL halaman terakhir.
+ *
+ * Alasannya sama dengan browseCustomers(): menyaring lebih sempit sesudah melompat
+ * jauh akan mendarat di luar ujung, dan tabel kosong terbaca seperti "tidak ada data".
+ * Dijepit ke awal halaman terakhir, bukan ke baris terakhir — mendarat di satu baris
+ * sendirian benar secara angka tapi terlihat seperti datanya habis.
+ */
+function jepitOffset(total, diminta, limit) {
+  const akhir = Math.max(0, Math.floor(Math.max(0, total - 1) / limit) * limit);
+  return Math.max(0, Math.min(Math.floor(Number(diminta) || 0), akhir));
+}
+
+/**
+ * Baris Data Servis, berhalaman.
+ *
+ * PII: tabelnya memuat alamat konsumen. Rutenya WAJIB lewat piiLimiter dan mencatat
+ * aksesnya — lihat routes.js. Mengembalikan `null` kalau database konsumen tidak ada,
+ * mengikuti pola customersInVillage(): aplikasinya harus tetap jalan penuh tanpa PII.
+ */
+async function serviceVisits(filter) {
+  const db = store.customers();
+  if (!db) return null;
+
+  const f = filter || {};
+  const where = [];
+  const params = [];
+  if (f.periodFrom) { where.push('period >= ?'); params.push(f.periodFrom); }
+  if (f.periodTo) { where.push('period <= ?'); params.push(f.periodTo); }
+  if (f.village) { where.push('village_code = ?'); params.push(f.village); }
+  if (f.city) {
+    where.push("village_code LIKE ? ESCAPE '\\'");
+    params.push(escapeLike(f.city) + '.%');
+  }
+  if (f.query) {
+    where.push("(engine_no ILIKE ? ESCAPE '\\' OR village_text ILIKE ? ESCAPE '\\')");
+    const like = '%' + escapeLike(f.query) + '%';
+    params.push(like, like);
+  }
+
+  const clause = where.length ? 'WHERE ' + where.join(' AND ') : '';
+  const total = Number((await store.one(db,
+    `SELECT COUNT(*) AS n FROM service_visit ${clause}`, params)).n);
+  const offset = jepitOffset(total, f.offset, SUMBER_LIMIT);
+
+  // `row_no` di ujung ORDER BY adalah pemecah seri — tanpa itu urutan dua baris
+  // sekelurahan tidak dijamin, dan baris yang sama bisa muncul di dua halaman.
+  const rows = await store.all(db, `
+    SELECT period, engine_no AS "engineNo", frame_no AS "frameNo",
+           village_text AS "villageText", district_text AS "districtText",
+           city_text AS "cityText", service_type AS "serviceType",
+           village_code AS "villageCode", resolve_status AS "resolveStatus"
+    FROM service_visit ${clause}
+    ORDER BY period DESC, village_text, row_no
+    LIMIT ? OFFSET ?`, params.concat([SUMBER_LIMIT, offset]));
+
+  return { rows, total, limit: SUMBER_LIMIT, offset };
+}
+
+/**
+ * Ping pengiriman, berhalaman.
+ *
+ * PII yang paling tajam di proyek ini: titik GPS rumah, foto bukti, dan nama kurir.
+ * Pagar yang sama berlaku, dan `photo_url` sengaja TIDAK ikut dikembalikan — daftar
+ * tidak perlu menampilkan foto rumah orang untuk menjawab "ping mana saja yang masuk".
+ */
+async function deliveryPings(filter) {
+  const db = store.customers();
+  if (!db) return null;
+
+  const f = filter || {};
+  const where = [];
+  const params = [];
+  // `sent_at` timestamp, bukan periode 'YYYY-MM'. Dibandingkan sebagai teks awal
+  // bulan supaya saringan periode yang sama tetap berlaku di sini.
+  if (f.periodFrom) { where.push("to_char(sent_at, 'YYYY-MM') >= ?"); params.push(f.periodFrom); }
+  if (f.periodTo) { where.push("to_char(sent_at, 'YYYY-MM') <= ?"); params.push(f.periodTo); }
+  if (f.query) {
+    where.push("(engine_no ILIKE ? ESCAPE '\\' OR location_text ILIKE ? ESCAPE '\\')");
+    const like = '%' + escapeLike(f.query) + '%';
+    params.push(like, like);
+  }
+
+  const clause = where.length ? 'WHERE ' + where.join(' AND ') : '';
+  const total = Number((await store.one(db,
+    `SELECT COUNT(*) AS n FROM delivery_ping ${clause}`, params)).n);
+  const offset = jepitOffset(total, f.offset, SUMBER_LIMIT);
+
+  const rows = await store.all(db, `
+    SELECT id, engine_no AS "engineNo", sent_at AS "sentAt", lat, lng,
+           accuracy_m AS "accuracyM", location_text AS "locationText",
+           courier_name AS "courierName"
+    FROM delivery_ping ${clause}
+    ORDER BY sent_at DESC, id
+    LIMIT ? OFFSET ?`, params.concat([SUMBER_LIMIT, offset]));
+
+  return { rows, total, limit: SUMBER_LIMIT, offset };
+}
+
+/** Tabel sumber per jenis data. `kirim` sengaja TIDAK ada — lihat deleteSourcePeriod. */
+const TABEL_SUMBER = { ktp: 'customer_ktp', servis: 'service_visit' };
+
+/**
+ * Hapus SATU jenis data untuk SATU periode.
+ *
+ * Beda dari deletePeriod() yang membuang penjualan sebulan. Yang ini membuang Data KTP
+ * atau Data Servis saja, karena checklist "Periode Tersimpan" menampilkan ketiganya
+ * terpisah dan orang berhak membatalkan satu unggahan tanpa menyentuh dua lainnya.
+ *
+ * `kirim` DITOLAK, bukan didiamkan: `delivery_ping` tidak punya kolom periode sama
+ * sekali (lihat customers-schema.sql), jadi "hapus Pengiriman bulan X" adalah
+ * permintaan yang tidak bisa dijawab dengan benar. Menebaknya dari `sent_at` akan
+ * membuang ping yang kebetulan terkirim di bulan itu untuk motor yang dibeli bulan
+ * lain — salah, dan tidak bisa dibatalkan.
+ *
+ * Data TURUNAN (customer_fusion, segment_rollup, source_overlap) tidak disentuh di
+ * sini. Yang benar adalah menghitung ulang sesudahnya — dan itu tugas pemanggilnya,
+ * sama seperti jalur impor.
+ */
+async function deleteSourcePeriod(source, period, ip) {
+  const tabel = TABEL_SUMBER[source];
+  if (!tabel) {
+    throw new Error(source === 'kirim'
+      ? 'Data Pengiriman tidak bisa dihapus per bulan: pingnya tidak menyimpan periode.'
+      : `Jenis data "${source}" tidak dikenal.`);
+  }
+
+  const db = store.customers();
+  if (!db) throw new Error('Database konsumen tidak tersedia.');
+
+  const sebelum = Number((await store.one(db,
+    `SELECT COUNT(*) AS n FROM ${tabel} WHERE period = ?`, [period])).n);
+  if (!sebelum) {
+    throw new Error(`Periode ${period} tidak punya data ${source}.`);
+  }
+
+  const dihapus = (await store.run(db,
+    `DELETE FROM ${tabel} WHERE period = ?`, [period])).rowCount || 0;
+
+  // Jejaknya masuk tabel `imports`, alasan sama persis dengan deletePeriod(): satu
+  // akun dipakai bersama, dan tempat orang mencari "apa yang pernah terjadi pada
+  // data" adalah riwayat impor. `source` ikut dicatat supaya terlihat jenis mana.
+  const now = new Date().toISOString();
+  await store.run(store.db(), `
+    INSERT INTO imports (started_at, finished_at, ip, file_name, period,
+                         rows_read, rows_used, new_outlets, result, message, source)
+    VALUES (?, ?, ?, NULL, ?, NULL, ?, NULL, 'hapus', ?, ?)`,
+  [now, now, ip || null, period, dihapus,
+    `Data ${source} periode ${period} dihapus: ${dihapus} baris. ` +
+    'Berkas Excel di arsip tidak ikut dihapus.', source]);
+
+  return { source, period, deleted: dihapus };
+}
+
 /** Apakah data konsumen tersedia sama sekali. */
 function hasCustomers() {
   return Boolean(store.customers());
@@ -1582,6 +1739,7 @@ module.exports = {
   fusionEngineDetail, setAppConfig, fusionMatrix, fusionOverlap, legacyDealerCode,
   fusionSourceCoverage, fusionVillagePoints,
   summary, unmatched, imports, periodSummary, periodDataSummary,
+  serviceVisits, deliveryPings, deleteSourcePeriod,
   customersInVillage, browseCustomers, hasCustomers, logCustomerAccess, updateOutlet,
   resetOutlets, allDealerRings, allPosCoverage, districts, saveDealerRings, savePosCoverage,
   resolveDealer, createOutlet, deletePeriod,

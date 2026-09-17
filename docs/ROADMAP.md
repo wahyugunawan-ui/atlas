@@ -424,7 +424,27 @@ Butir ini sempat tertulis sebagai "F UI sisa: layer peta baru" — sudah tidak
 benar sejak ketiga lapisan itu jadi. Klaim basi kedua yang ditemukan dengan cara
 yang sama: membaca ulang ROADMAP sebelum melaporkan sisa pekerjaan.
 
+- **Filter jadi SAMA di seluruh halaman** (permintaan tim). Membalik keputusan
+  2026-08-29 yang memisahkannya per halaman; yang lama tidak dihapus, dan
+  `test/filters.test.js` bagian 4 dibalik supaya menjaga aturan baru. Data
+  Konsumen kini ikut periode aktif — dulu sengaja tanpa batas periode.
+- **Dua subhalaman Data akhirnya berisi.** "Lokasi Service" dan "Lokasi
+  Delivery" selama ini cuma panel "belum dibuat" — bukan rusak, memang belum
+  pernah dikerjakan. Sekarang membaca `GET /api/v1/servis` dan
+  `/api/v1/pengiriman`, dua rute PII berpagar `piiLimiter` + pencatatan akses.
+  Diverifikasi: 186.471 baris servis, penjepitan offset benar, tabel
+  Pengiriman kosong dan dikatakan demikian.
+- **Hapus data per jenis** di panel Periode Tersimpan, konfirmasi ketik ulang
+  periode. Pengiriman sengaja tidak bisa dihapus per bulan (tidak punya kolom
+  periode) dan tombolnya tidak dirender. Lihat `docs/DECISIONS.md`.
+
 **Belum dikerjakan (sisa Tahap F, lihat tabel tahapan di `docs/FUSION.md`):**
+- `deletePeriod()` (hapus periode penuh) masih hanya membuang `sales`,
+  `unmatched`, dan `customers` — Data KTP dan Servis bulan itu TIDAK ikut
+  terhapus, jadi checklist tetap mencentangnya sesudah "hapus periode".
+  Ditemukan waktu membangun hapus-per-jenis; sengaja tidak diperluas diam-diam
+  karena memperbesar daya rusak satu rute yang sudah ada adalah keputusan
+  tersendiri.
 - Cross-filtering penuh di sidebar (mode Live-nya sudah jadi, lihat di atas)
 - Jalan ke dropdown "Import Data" untuk layar sentuh — panelnya sekarang hanya
   terbuka saat hover, karena tombolnya sendiri langsung membuka halamannya.

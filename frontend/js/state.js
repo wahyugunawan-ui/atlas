@@ -30,6 +30,28 @@ export function makeFilter() {
   };
 }
 
+/**
+ * SATU objek filter untuk SELURUH halaman.
+ *
+ * MEMBALIKKAN keputusan 2026-08-29 ("Nilai filter di objek per halaman") — permintaan
+ * langsung tim 2026-09-17: memilih Kota di halaman Insight & Peta lalu membuka
+ * Confidence Fusion harus memberi Kota yang sama. Filter yang diam-diam berbeda antar
+ * halaman membuat dua layar menampilkan angka berbeda untuk pertanyaan yang sama, dan
+ * tidak ada yang tahu mana yang benar.
+ *
+ * Yang TIDAK ikut berubah, dan itu inti keputusan lama: nilainya tetap di `S`, bukan di
+ * `<select>`. Itulah yang membuat filters.js bebas DOM dan bisa diuji tanpa browser —
+ * sifat itu datang dari "disimpan di objek", bukan dari "terpisah per halaman".
+ *
+ * Caranya sengaja satu objek yang DIRUJUK BERKALI-KALI, bukan `pageFilters()` yang
+ * ditulis ulang: seluruh pemanggil (`setScope`, `activeRows`, `syncFilterBar`,
+ * `fusionFilter`) terus bekerja apa adanya, tanpa satu pun call site berubah.
+ *
+ * Konsekuensi yang harus diingat: halaman Data Konsumen dulu sengaja tanpa batas
+ * periode. Sekarang ia ikut periode yang aktif seperti halaman lain.
+ */
+const FILTER_BERSAMA = makeFilter();
+
 export const S = {
   // --- filter, terpisah per halaman ---
   filterPage: 'peta',
@@ -37,15 +59,16 @@ export const S = {
     // Keempatnya berangkat sama; fillFilterBar() yang menyetel bulan terakhir untuk
     // peta, pos, dan kelurahan. Data Konsumen sengaja ditinggal tanpa batas periode —
     // alasannya ada di sana, di sebelah kode yang menyetelnya.
-    peta: makeFilter(),
-    pos: makeFilter(),
-    kelurahan: makeFilter(),
-    // Tiga halaman penyatuan tiga sumber (docs/FUSION.md). `fusion` yang dipakai
-    // dashboard Confidence Fusion; `servis`/`kirim` dua sub-halaman Data yang baru.
-    fusion: makeFilter(),
-    servis: makeFilter(),
-    kirim: makeFilter(),
-    konsumen: makeFilter(),
+    // Ketujuhnya menunjuk OBJEK YANG SAMA — lihat FILTER_BERSAMA di atas. Slotnya
+    // dipertahankan (bukan diganti satu field) supaya `pageFilters(halaman)` dan
+    // seluruh pemanggilnya tidak perlu berubah sama sekali.
+    peta: FILTER_BERSAMA,
+    pos: FILTER_BERSAMA,
+    kelurahan: FILTER_BERSAMA,
+    fusion: FILTER_BERSAMA,
+    servis: FILTER_BERSAMA,
+    kirim: FILTER_BERSAMA,
+    konsumen: FILTER_BERSAMA,
   },
 
   // --- dari server ---

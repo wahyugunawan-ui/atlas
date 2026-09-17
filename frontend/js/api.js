@@ -186,6 +186,48 @@ export function fetchTitikPeta(filter) {
   return request(`${API}v1/peta/titik?${q}`);
 }
 
+/**
+ * Hapus SATU jenis data untuk SATU periode.
+ *
+ * Konfirmasinya ikut dikirim, bukan cuma diperiksa di layar — persis alasan yang sama
+ * dengan deletePeriod(): penjaga yang hanya ada di halaman bisa dilewati satu
+ * permintaan langsung ke API.
+ */
+export function deleteSumberPeriode(source, period) {
+  const query = new URLSearchParams({ confirm: period });
+  return request(
+    `${API}v1/sumber/${encodeURIComponent(source)}/${encodeURIComponent(period)}?${query}`,
+    { method: 'DELETE' });
+}
+
+/**
+ * Daftar baris Data Servis. RUTE PII — dibatasi laju dan dicatat di server.
+ *
+ * Bentuk jawabannya {rows, total, limit, offset}, sama dengan browseCustomers.
+ */
+export function fetchServis(filter) {
+  const q = new URLSearchParams();
+  const f = filter || {};
+  if (f.periodFrom) q.set('periodFrom', f.periodFrom);
+  if (f.periodTo) q.set('periodTo', f.periodTo);
+  if (f.city && f.city !== 'ALL') q.set('city', f.city);
+  if (f.village && f.village !== 'ALL') q.set('village', f.village);
+  if (f.query) q.set('q', f.query);
+  if (f.offset) q.set('offset', f.offset);
+  return request(`${API}v1/servis?${q}`);
+}
+
+/** Daftar ping pengiriman. RUTE PII — titik GPS rumah, jadi pagarnya sama. */
+export function fetchPengiriman(filter) {
+  const q = new URLSearchParams();
+  const f = filter || {};
+  if (f.periodFrom) q.set('periodFrom', f.periodFrom);
+  if (f.periodTo) q.set('periodTo', f.periodTo);
+  if (f.query) q.set('q', f.query);
+  if (f.offset) q.set('offset', f.offset);
+  return request(`${API}v1/pengiriman?${q}`);
+}
+
 /** Rincian satu nomor mesin. RUTE PII — dibatasi laju dan dicatat di server. */
 export const fetchEngineDetail = (engineNo) =>
   request(`${API}v1/mesin/${encodeURIComponent(engineNo)}`);

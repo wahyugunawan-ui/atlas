@@ -18,7 +18,7 @@
  */
 import {
   fetchCakupanSumber, fetchEngineDetail, fetchIrisan, fetchMatriks, fetchPeringkat,
-  fetchSegmentation,
+  fetchPengiriman, fetchSegmentation, fetchServis,
 } from './api.js';
 import {
   formatJarak, jangkauanDiagram, kalimatAlasan, titikRelatif,
@@ -550,11 +550,6 @@ export function cakupanSumber(data) {
   return daftar + sisa + catatan + catatanKtp;
 }
 
-function panelBelum(judul, keterangan) {
-  return `<div class="bg-white rounded-xl border border-slate-200 p-3 flex-1 min-w-0">` +
-    `<div class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">${esc(judul)}</div>` +
-    `<p class="text-[11px] text-slate-400 mt-2 leading-snug">${esc(keterangan)}</p></div>`;
-}
 
 /**
  * Daftar peringkat kota/dealer: nama, total, dan Confidence Ratio berwarna.
@@ -819,21 +814,135 @@ export async function renderFusion() {
 }
 
 /** Daftar Lokasi Service — sub-halaman menu Data. */
-export function renderServiceTable() {
+/* ==========================================================================
+   DUA SUBHALAMAN DATA: LOKASI SERVICE & LOKASI DELIVERY
+   ==========================================================================
+   Sampai 2026-09-17 keduanya cuma panel "belum dibuat" — bukan rusak, memang
+   belum pernah dikerjakan. Sekarang keduanya membaca rute PII berhalaman.
+
+   Offsetnya disimpan per halaman dan DIKEMBALIKAN KE NOL tiap kali filter
+   berubah: menyisakan offset lama sesudah menyaring lebih sempit membuat orang
+   mendarat di halaman kosong dan mengira datanya tidak ada.
+   ========================================================================== */
+
+let servisOffset = 0;
+let kirimOffset = 0;
+
+/** Saringan dua subhalaman: periode + kota, mengikuti bilah filter bersama. */
+function saringSumber(offset) {
+  const f = pageFilters();
+  return {
+    periodFrom: f.from !== 'ALL' ? f.from : null,
+    periodTo: f.to !== 'ALL' ? f.to : null,
+    city: f.cityCode !== 'ALL' ? f.cityCode : null,
+    offset,
+  };
+}
+
+/** Baris navigasi halaman, dipakai kedua tabel. */
+function navHalaman(hasil, fungsi) {
+  const dari = hasil.total ? hasil.offset + 1 : 0;
+  const sampai = Math.min(hasil.offset + hasil.limit, hasil.total);
+  return `<div class="flex items-center gap-2 mt-2 text-[11px] text-slate-500">` +
+    `<span>${esc(formatNumber(dari))}–${esc(formatNumber(sampai))} dari ` +
+    `${esc(formatNumber(hasil.total))}</span>` +
+    `<button onclick="${fungsi}(-1)" class="ml-auto px-2 py-1 rounded-lg border border-slate-200 font-bold hover:bg-slate-50">&larr;</button>` +
+    `<button onclick="${fungsi}(1)" class="px-2 py-1 rounded-lg border border-slate-200 font-bold hover:bg-slate-50">&rarr;</button></div>`;
+}
+
+/** Tabel sederhana: judul kolom + baris. Semua nilai dari Excel, jadi WAJIB esc(). */
+function tabelSumber(kolom, rows) {
+  if (!rows.length) {
+    return '<p class="text-xs text-slate-400 py-6 text-center">Tidak ada baris untuk ' +
+      'saringan ini.</p>';
+  }
+  const kepala = kolom.map((k) =>
+    `<th class="px-2 py-1.5 text-left text-[10px] font-bold text-slate-500 uppercase">${
+      esc(k.judul)}</th>`).join('');
+  const isi = rows.map((r) =>
+    `<tr class="border-b border-slate-50 last:border-0">${
+      kolom.map((k) => `<td class="px-2 py-1 text-[11px] ${k.kelas || 'text-slate-600'}">${
+        k.nilai(r)}</td>`).join('')}</tr>`).join('');
+  return `<div class="overflow-auto"><table class="w-full"><thead class="sticky top-0" ` +
+    `style="background:#eef1f7"><tr>${kepala}</tr></thead><tbody>${isi}</tbody></table></div>`;
+}
+
+/** Status pencocokan wilayah ditampilkan apa adanya — banyak baris memang di luar cakupan. */
+function lencanaStatus(status) {
+  const gaya = status === 'ok' || status === 'alias'
+    ? 'bg-emerald-50 text-emerald-700'
+    : (status === 'fuzzy' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500');
+  return `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${gaya}">${
+    esc(status || '—')}</span>`;
+}
+
+export async function renderServiceTable() {
   const wadah = $('servis-isi');
   if (!wadah) return;
-  wadah.innerHTML = panelBelum('Lokasi Service',
-    'Halaman ini akan menampilkan baris Data Servis (Nomor Mesin, No Rangka, Jenis ' +
-    'Service, dan wilayahnya) dari database konsumen. Datanya sudah bisa diimpor ' +
-    'lewat /api/v1/import/servis; daftar per barisnya belum dibuat.');
+  wadah.innerHTML = '<p class="text-xs text-slate-400 p-4">Memuat Data Servis…</p>';
+
+  try {
+    const hasil = await fetchServis(saringSumber(servisOffset));
+    servisOffset = hasil.offset;
+    wadah.innerHTML = tabelSumber([
+      { judul: 'Periode', nilai: (r) => esc(r.period || '—'), kelas: 'mono text-slate-500' },
+      { judul: 'Nomor Mesin', nilai: (r) => esc(r.engineNo || '—'), kelas: 'mono text-slate-700' },
+      { judul: 'No Rangka', nilai: (r) => esc(r.frameNo || '—'), kelas: 'mono text-slate-400' },
+      { judul: 'Jenis Service', nilai: (r) => esc(r.serviceType || '—') },
+      { judul: 'Kelurahan', nilai: (r) => esc(r.villageText || '—') },
+      { judul: 'Kecamatan', nilai: (r) => esc(r.districtText || '—') },
+      { judul: 'Kota', nilai: (r) => esc(r.cityText || '—') },
+      { judul: 'Cocok', nilai: (r) => lencanaStatus(r.resolveStatus) },
+    ], hasil.rows) + navHalaman(hasil, 'servisPage');
+  } catch (error) {
+    wadah.innerHTML = `<p class="text-xs text-red-600 p-4">${esc(error.message)}</p>`;
+  }
+}
+
+/** Maju/mundur satu halaman daftar Servis. */
+export function servisPage(arah) {
+  servisOffset = Math.max(0, servisOffset + arah * 100);
+  renderServiceTable();
+}
+
+/** Maju/mundur satu halaman daftar Pengiriman. */
+export function kirimPage(arah) {
+  kirimOffset = Math.max(0, kirimOffset + arah * 100);
+  renderDeliveryTable();
 }
 
 /** Daftar Lokasi Delivery — sub-halaman menu Data. */
-export function renderDeliveryTable() {
+export async function renderDeliveryTable() {
   const wadah = $('kirim-isi');
   if (!wadah) return;
-  wadah.innerHTML = panelBelum('berdasarkan Lokasi Delivery',
-    'Halaman ini akan menampilkan ping pengiriman (waktu, Nomor Mesin, koordinat GPS, ' +
-    'akurasi, dan bukti foto). Rute penerimanya sudah ada di /api/v1/pengiriman/ping; ' +
-    'daftar per barisnya belum dibuat.');
+  wadah.innerHTML = '<p class="text-xs text-slate-400 p-4">Memuat Data Pengiriman…</p>';
+
+  try {
+    const hasil = await fetchPengiriman(saringSumber(kirimOffset));
+    kirimOffset = hasil.offset;
+
+    // Tabel kosong di sini BUKAN kegagalan: belum ada satu pun ping yang masuk,
+    // karena produsennya (integrasi sistem lapangan) memang belum ada. Dikatakan,
+    // supaya tidak terbaca sebagai halaman rusak.
+    if (!hasil.total) {
+      wadah.innerHTML = `<div class="bg-white rounded-xl border border-slate-200 p-6 text-center">` +
+        `<div class="text-sm font-bold text-slate-700">Belum ada data pengiriman</div>` +
+        `<p class="text-xs text-slate-500 mt-2 leading-relaxed max-w-lg mx-auto">Rute ` +
+        `penerimanya sudah ada (<span class="mono">/api/v1/pengiriman/ping</span>), tapi ` +
+        `belum ada satu pun ping yang dikirim — integrasi sistem lapangan belum ` +
+        `terpasang. Halaman ini akan terisi sendiri begitu ping pertama masuk.</p></div>`;
+      return;
+    }
+
+    wadah.innerHTML = tabelSumber([
+      { judul: 'Waktu', nilai: (r) => esc(String(r.sentAt || '').slice(0, 16)), kelas: 'mono text-slate-500' },
+      { judul: 'Nomor Mesin', nilai: (r) => esc(r.engineNo || '—'), kelas: 'mono text-slate-700' },
+      { judul: 'Lokasi', nilai: (r) => esc(r.locationText || '—') },
+      { judul: 'Koordinat', nilai: (r) => esc(r.lat == null ? '—' : `${Number(r.lat).toFixed(5)}, ${Number(r.lng).toFixed(5)}`), kelas: 'mono text-slate-400' },
+      { judul: 'Akurasi', nilai: (r) => esc(r.accuracyM == null ? '—' : `±${Math.round(Number(r.accuracyM))} m`), kelas: 'mono text-slate-500' },
+      { judul: 'Kurir', nilai: (r) => esc(r.courierName || '—') },
+    ], hasil.rows) + navHalaman(hasil, 'kirimPage');
+  } catch (error) {
+    wadah.innerHTML = `<p class="text-xs text-red-600 p-4">${esc(error.message)}</p>`;
+  }
 }

@@ -1120,6 +1120,114 @@ function build(config) {
     res.json({ period, rows });
   });
 
+  /**
+   * Hapus satu jenis data untuk satu periode.
+   *
+   * Konfirmasinya harus diketik PERSIS sama dengan periodenya, sama seperti
+   * /periods/:period. Penjaga yang cuma ada di layar bisa dilewati satu permintaan
+   * langsung ke API, jadi ia ditegakkan DI SINI juga.
+   *
+   * Sesudah baris sumbernya hilang, hasil penggolongan ikut basi — jadi dihitung
+   * ulang, persis seperti jalur impor. Gagal menghitung ulang TIDAK membatalkan
+   * penghapusan (datanya memang sudah hilang), tapi dilaporkan apa adanya.
+   */
+  api.delete('/v1/sumber/:source/:period', async (req, res) => {
+    const source = String(req.params.source || '');
+    const period = String(req.params.period || '');
+    if (!PERIOD.test(period)) {
+      return res.status(400).json({ error: 'Periode harus format YYYY-MM.' });
+    }
+    if (String(req.query.confirm || '') !== period) {
+      return res.status(400).json({
+        error: `Konfirmasi tidak cocok. Ketik ${period} persis untuk menghapus.`,
+      });
+    }
+    if (isRunning()) {
+      return res.status(409).json({
+        error: 'Sedang ada impor berjalan. Tunggu sampai selesai, baru hapus.',
+      });
+    }
+
+    let hasil;
+    try {
+      hasil = await repo.deleteSourcePeriod(source, period, req.ip);
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    try {
+      hasil.fusi = await recalculate({ period, config });
+    } catch (error) {
+      hasil.fusi = { gagal: error.message };
+    }
+    res.json(hasil);
+  });
+
+  /* ------------------------------------------------------------------------
+     DAFTAR BARIS SUMBER — DUA RUTE PII
+     ------------------------------------------------------------------------
+     Keduanya mengeluarkan data pribadi: Servis memuat alamat, Pengiriman memuat
+     titik GPS rumah dan nama kurir. Jadi keduanya WAJIB lewat piiLimiter dan
+     mencatat aksesnya, sama seperti /customers*. Rute PII baru tanpa keduanya
+     membuka jalan penyedotan yang tidak meninggalkan jejak.
+     ------------------------------------------------------------------------ */
+
+  /** Saringan periode bersama kedua rute di bawah. */
+  const rentangPeriode = (q) => {
+    const period = String(q.period || '');
+    const dari = String(q.periodFrom || period);
+    const sampai = String(q.periodTo || period);
+    return {
+      periodFrom: PERIOD.test(dari) ? dari : null,
+      periodTo: PERIOD.test(sampai) ? sampai : null,
+    };
+  };
+
+  api.get('/v1/servis', async (req, res) => {
+    if (!piiLimiter.allow(req.ip || 'tidak diketahui')) {
+      return res.status(429).json({
+        error: 'Terlalu banyak permintaan data konsumen. Tunggu sebentar lalu coba lagi.',
+      });
+    }
+    const q = req.query;
+    const village = String(q.village || '');
+    const city = String(q.city || '');
+
+    const hasil = await repo.serviceVisits({
+      ...rentangPeriode(q),
+      village: VILLAGE.test(village) ? village : null,
+      city: CITY.test(city) ? city : null,
+      query: String(q.q || '').trim().slice(0, 80) || null,
+      offset: Number(q.offset) || 0,
+    });
+    if (!hasil) {
+      return res.status(404).json({ error: 'Database konsumen tidak tersedia.' });
+    }
+
+    repo.logCustomerAccess(req.ip, village || city || 'servis', hasil.rows.length);
+    res.json(hasil);
+  });
+
+  api.get('/v1/pengiriman', async (req, res) => {
+    if (!piiLimiter.allow(req.ip || 'tidak diketahui')) {
+      return res.status(429).json({
+        error: 'Terlalu banyak permintaan data konsumen. Tunggu sebentar lalu coba lagi.',
+      });
+    }
+    const q = req.query;
+    const hasil = await repo.deliveryPings({
+      ...rentangPeriode(q),
+      query: String(q.q || '').trim().slice(0, 80) || null,
+      offset: Number(q.offset) || 0,
+    });
+    if (!hasil) {
+      return res.status(404).json({ error: 'Database konsumen tidak tersedia.' });
+    }
+
+    repo.logCustomerAccess(req.ip, 'pengiriman', hasil.rows.length);
+    res.json(hasil);
+  });
+
   api.get('/v1/konfigurasi/kpi-jarak', async (req, res) => {
     const s = await readSettings();
     res.json({
