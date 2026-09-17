@@ -349,10 +349,16 @@ di DECISIONS.md entri "[2026-09-16] Penyatuan tiga sumber data".
   Jejaknya dihapus saat panel ditutup dan saat pencarian gagal. Lihat
   `docs/DECISIONS.md`.
 
+- **Titik Servis jadi KOTAK** sesuai spesifikasi — penyimpangan yang saya catat
+  dua slice lalu, sekarang ditutup. Alasan penundaannya hilang setelah terbukti
+  `addLayers()` jalan di dalam `S.map.on('load')`, jadi `addImage()` aman di
+  situ. Ikonnya dibangkitkan dari piksel (`ikonKotak()`), bukan berkas gambar.
+  `icon-allow-overlap` + `icon-ignore-placement` wajib: tanpa keduanya lapisan
+  symbol membuang ikon yang bertumpuk dan ~1.300 titik servis tampak hilang.
+  Id lapisan sengaja tetap `servis-titik` supaya toggle dan `redrawMap` tidak
+  putus. Lihat `docs/DECISIONS.md`.
+
 **Belum dikerjakan (sisa Tahap F, lihat tabel tahapan di `docs/FUSION.md`):**
-- Titik Servis berbentuk KOTAK lewat `map.addImage()` sesuai spesifikasi
-  (sekarang lingkaran merah muda — `addImage()` belum pernah dipakai di
-  proyek ini dan hasilnya belum bisa diverifikasi di browser)
 - Mode Live/wallboard dan cross-filtering penuh di sidebar
 - Saringan Karesidenan di halaman Fusion (petanya cuma ada di frontend;
   sampai dipindah ke server, pita kuning mengatakannya belum dipakai)

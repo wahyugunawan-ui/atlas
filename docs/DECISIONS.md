@@ -3543,3 +3543,45 @@ regex saya oleh komentar. Itu false positive kelima sepanjang sesi ini. Alat itu
 berguna untuk menunjuk tempat, tidak pernah untuk memutuskan.
 
 **Caveat:** belum dilihat di browser.
+
+## [2026-09-17] Titik Servis jadi KOTAK — penyimpangan yang ditutup
+
+Dua slice lalu saya memilih lingkaran merah muda dan mencatatnya sebagai
+penyimpangan dari `docs/FUSION.md` 3.1, dengan alasan `map.addImage()` belum
+pernah dipakai di proyek ini dan hasilnya tidak bisa saya lihat di browser.
+
+**Yang berubah: alasan teknisnya hilang.** `addLayers()` ternyata dijalankan DI
+DALAM `S.map.on('load', …)` (app.js) — jadi gaya peta sudah siap dan
+`addImage()` aman dipanggil di sana. Kekhawatiran saya waktu itu tentang "kapan
+boleh memanggilnya" terjawab dengan membaca satu baris, bukan dengan mencoba.
+
+**Ikonnya dibangkitkan dari piksel, bukan berkas gambar.** Aturan proyek
+melarang aset dari internet, dan menambah berkas biner ke repo untuk 12×12
+piksel jelas berlebihan. `ikonKotak(sisi, isi, tepi)` di `fusion-points.js`
+mengembalikan `{width, height, data}` — bentuk yang diterima `addImage()` apa
+adanya. Tepi putih tipis disengaja, sama seperti titik penjualan: tanpa itu kotak
+merah muda hilang di atas basemap satelit yang ramai.
+
+**Satu jebakan yang cuma ada di lapisan ini.** Lapisan `symbol` secara bawaan
+MEMBUANG ikon yang bertumpuk demi kerapian label. Di sini itu berarti dari ~1.300
+titik servis hanya sebagian kecil yang tergambar — dan hasilnya terbaca sebagai
+DATA HILANG, bukan sebagai setelan tampilan. `icon-allow-overlap` dan
+`icon-ignore-placement` keduanya wajib. Lapisan `circle` tidak punya masalah ini,
+jadi enam lapisan titik lainnya tidak perlu memikirkannya.
+
+**Id lapisannya sengaja TIDAK berubah** (`servis-titik`), walaupun tipenya
+berubah dari circle ke symbol: `LAYER_TITIK`, `redrawMap()`, dan pengikatan
+sumbernya semua menyebut id itu. Mengganti id akan memutus ketiganya tanpa satu
+pun galat — togglenya cuma berhenti bekerja.
+
+**Yang bisa diuji, dan dua kegagalan diamnya.** Pembangkit pikselnya fungsi
+murni, jadi diuji langsung. Dua cara ia bisa gagal tanpa melempar galat:
+langkah indeks yang salah menghasilkan ikon acak-acakan, dan alfa nol
+menghasilkan ikon yang TERDAFTAR DENGAN SUKSES dan tidak terlihat sama sekali.
+Keduanya sekarang dijaga tes. Lima mutasi dijalankan di atas baseline yang
+diperiksa hijau lebih dulu — alfa nol, tepi/isi tertukar, buffer kurang satu
+kanal, langkah indeks salah, dan penjaga ukuran minimum dimatikan — semuanya
+merah. 37/37 berkas tes lolos.
+
+**Caveat:** belum dilihat di browser. Khususnya `icon-size` (0,25 → 0,75 menurut
+zoom) yang saya tetapkan dengan perkiraan, bukan dengan melihat hasilnya.

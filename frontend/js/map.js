@@ -10,7 +10,7 @@ import { fetchGeo, fetchKpiJarak, fetchTitikPeta } from './api.js';
 import { activeRows, fusionFilter, pageFilters, scopeValue } from './filters.js';
 import { circle, EMPTY_COLLECTION } from './geo.js';
 import {
-  cincinPerDesa, pembangkitAcak, sebarDiPoligon, titikPerDesa,
+  cincinPerDesa, ikonKotak, pembangkitAcak, sebarDiPoligon, titikPerDesa,
 } from './fusion-points.js';
 import { fiturTelusur } from './fusion-alasan.js';
 import { contributionsForRows, fixedContributionClass } from './sales-stats.js';
@@ -200,16 +200,30 @@ export function addLayers() {
     },
   });
 
+  // Servis = KOTAK, sesuai docs/FUSION.md 3.1. `circle` layer tidak bisa membuat
+  // sudut, jadi ini satu-satunya lapisan titik yang memakai symbol + ikon.
+  //
+  // Ikonnya dibangkitkan dari piksel (fusion-points.js), bukan berkas gambar:
+  // aturan proyek melarang aset dari internet. addLayers() sendiri dijalankan di
+  // dalam `S.map.on('load')` (app.js), jadi gaya peta sudah siap dan addImage()
+  // aman dipanggil di sini. Dijaga hasImage() kalau suatu hari gayanya dimuat ulang.
+  if (!S.map.hasImage('kotak-servis')) {
+    S.map.addImage('kotak-servis', ikonKotak(12, [236, 72, 153], [255, 255, 255]));
+  }
   S.map.addSource('servis', { type: 'geojson', data: EMPTY_COLLECTION });
   S.map.addLayer({
-    id: 'servis-titik', type: 'circle', source: 'servis',
-    layout: { visibility: 'none' },
-    paint: {
-      'circle-radius': ['interpolate', ['linear'], ['zoom'], 7, 1.2, 11, 2.2, 14, 3.6],
-      'circle-color': '#ec4899',
-      'circle-opacity': 0.9,
-      'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 11, 0, 13, 0.4],
-      'circle-stroke-color': '#ffffff',
+    id: 'servis-titik', type: 'symbol', source: 'servis',
+    layout: {
+      visibility: 'none',
+      'icon-image': 'kotak-servis',
+      'icon-size': ['interpolate', ['linear'], ['zoom'], 7, 0.25, 11, 0.45, 14, 0.75],
+      // KEDUANYA WAJIB. Lapisan symbol secara bawaan membuang ikon yang bertumpuk
+      // demi kerapian label — di sini itu berarti dari ~1.300 titik servis cuma
+      // sebagian kecil yang tergambar, dan hasilnya terbaca sebagai DATA HILANG,
+      // bukan sebagai setelan tampilan. Lapisan circle tidak punya masalah ini,
+      // jadi jebakan ini cuma ada di satu lapisan ini.
+      'icon-allow-overlap': true,
+      'icon-ignore-placement': true,
     },
   });
 

@@ -119,6 +119,47 @@ export function sebarDiPoligon(ring, jumlah, rand) {
 }
 
 /**
+ * Ikon kotak kecil, dibuat dari piksel mentah.
+ *
+ * `docs/FUSION.md` 3.1 meminta titik Servis berbentuk KOTAK, dan `circle` layer
+ * MapLibre tidak bisa membuat sudut. Jalan satu-satunya symbol layer dengan ikon yang
+ * didaftarkan lewat `map.addImage()` — dan ikonnya harus lahir dari kode, bukan
+ * berkas gambar: aturan proyek melarang aset dari internet, dan menambah berkas biner
+ * ke repo untuk 12×12 piksel jelas berlebihan.
+ *
+ * Tepi putih tipis disengaja, sama seperti titik penjualan dan titik Servis versi
+ * lingkaran sebelumnya: tanpa itu kotak merah muda hilang di atas basemap satelit
+ * yang ramai.
+ *
+ * @param {number} sisi  panjang sisi dalam piksel
+ * @param {number[]} isi  warna isian [r, g, b]
+ * @param {number[]} tepi warna tepi [r, g, b]
+ * @returns {{width: number, height: number, data: Uint8Array}} bentuk yang diterima
+ *   `map.addImage()` apa adanya
+ */
+export function ikonKotak(sisi, isi, tepi) {
+  // Di bawah 3 piksel tidak ada ruang untuk tepi DAN isi; dinaikkan diam-diam lebih
+  // baik daripada mengembalikan ikon yang seluruhnya tepi.
+  const n = Math.max(3, Math.floor(Number(sisi)) || 12);
+  const data = new Uint8Array(n * n * 4);
+
+  for (let y = 0; y < n; y += 1) {
+    for (let x = 0; x < n; x += 1) {
+      const diTepi = x === 0 || y === 0 || x === n - 1 || y === n - 1;
+      const warna = diTepi ? tepi : isi;
+      const i = (y * n + x) * 4;
+      data[i] = warna[0];
+      data[i + 1] = warna[1];
+      data[i + 2] = warna[2];
+      // Alfa 255 di SELURUH ikon. Alfa nol menghasilkan ikon yang terdaftar dengan
+      // sukses, tanpa galat, dan tidak terlihat sama sekali di peta.
+      data[i + 3] = 255;
+    }
+  }
+  return { width: n, height: n, data };
+}
+
+/**
  * Cincin TERPANJANG tiap kelurahan, dari GeoJSON batas kelurahan.
  *
  * Terpanjang, bukan yang pertama: kelurahan kepulauan disimpan sebagai MultiPolygon,

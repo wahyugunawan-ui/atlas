@@ -94,6 +94,44 @@ test('kelurahan tidak diketahui tidak digambar', async () => {
   assert.deepStrictEqual(titikPerDesa(rows, 'ktp'), {});
 });
 
+test('ikon kotak: ukuran buffer persis, tanpa sisa dan tanpa kurang', async () => {
+  const { ikonKotak } = await import(MODUL);
+  const ikon = ikonKotak(12, [236, 72, 153], [255, 255, 255]);
+  assert.strictEqual(ikon.width, 12);
+  assert.strictEqual(ikon.height, 12);
+  // Salah hitung buffer tidak melempar galat — ia menghasilkan ikon acak-acakan
+  // atau terpotong, dan itu cuma terlihat kalau ada yang membuka petanya.
+  assert.strictEqual(ikon.data.length, 12 * 12 * 4);
+});
+
+test('ikon kotak: tepi dan isi benar-benar berbeda', async () => {
+  const { ikonKotak } = await import(MODUL);
+  const n = 8;
+  const ikon = ikonKotak(n, [236, 72, 153], [255, 255, 255]);
+  const piksel = (x, y) => Array.from(ikon.data.slice((y * n + x) * 4, (y * n + x) * 4 + 4));
+  assert.deepStrictEqual(piksel(0, 0), [255, 255, 255, 255], 'sudut = tepi');
+  assert.deepStrictEqual(piksel(n - 1, n - 1), [255, 255, 255, 255], 'sudut jauh = tepi');
+  assert.deepStrictEqual(piksel(4, 4), [236, 72, 153, 255], 'tengah = isian');
+});
+
+test('ikon kotak: seluruh piksel buram', async () => {
+  const { ikonKotak } = await import(MODUL);
+  const ikon = ikonKotak(10, [236, 72, 153], [255, 255, 255]);
+  // Alfa nol = ikon terdaftar dengan sukses, tanpa galat, dan tidak terlihat sama
+  // sekali. Kegagalan paling diam yang mungkin terjadi di lapisan ini.
+  for (let i = 3; i < ikon.data.length; i += 4) {
+    assert.strictEqual(ikon.data[i], 255, `piksel ke-${(i - 3) / 4} tembus pandang`);
+  }
+});
+
+test('ikon kotak: ukuran mustahil dinaikkan, bukan menghasilkan ikon cacat', async () => {
+  const { ikonKotak } = await import(MODUL);
+  // Sisi 1 px tidak punya ruang untuk tepi DAN isi; yang keluar akan seluruhnya
+  // tepi dan tidak pernah terbaca sebagai kotak berwarna.
+  assert.strictEqual(ikonKotak(1, [1, 2, 3], [4, 5, 6]).width, 3);
+  assert.strictEqual(ikonKotak(0, [1, 2, 3], [4, 5, 6]).width, 12);
+});
+
 test('kelurahan MultiPolygon memakai cincin TERPANJANG, bukan yang pertama', async () => {
   const { cincinPerDesa } = await import(MODUL);
   // Kalau yang dipakai cincin pertama, seluruh penduduk tersebar di pulau kecil dan
