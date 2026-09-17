@@ -52,7 +52,8 @@ import {
 } from './tables.js';
 import {
   bukaTelusurMesin, cariCakupan, kirimPage, renderDeliveryTable, renderFusion,
-  renderServiceTable, servisPage, setModeGolongan, toggleCakupanPanel, toggleLiveFusion,
+  renderServiceTable, servisPage, setKpiServis, setModeGolongan, toggleCakupanPanel,
+  toggleLiveFusion,
   toggleSumberCakupan, tutupTelusurMesin,
 } from './fusion.js';
 import {
@@ -89,6 +90,7 @@ const HANDLERS = {
   renderCustomerTable, searchCustomers, customerPage,
   // penyatuan tiga sumber (docs/FUSION.md Tahap F)
   renderFusion, renderServiceTable, renderDeliveryTable, servisPage, kirimPage,
+  setKpiServis,
   toggleSumberCakupan, cariCakupan, bukaTelusurMesin, tutupTelusurMesin,
   setModeGolongan, toggleCakupanPanel, toggleLiveFusion,
   editDealerRingFromTable, editPosCoverageFromTable,

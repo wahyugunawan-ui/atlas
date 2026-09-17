@@ -438,13 +438,27 @@ yang sama: membaca ulang ROADMAP sebelum melaporkan sisa pekerjaan.
   periode. Pengiriman sengaja tidak bisa dihapus per bulan (tidak punya kolom
   periode) dan tombolnya tidak dirender. Lihat `docs/DECISIONS.md`.
 
+- **Hapus periode benar-benar menghapus** (permintaan tim, menindaklanjuti
+  temuan yang sebelumnya cuma dicatat). Delapan tabel dibuang termasuk Data
+  KTP, Servis, dan hasil penggolongan; bulan yang cuma punya Data KTP kini
+  bisa dihapus — dulu ditolak karena tidak punya baris penjualan.
+- **Peta di halaman Fusion ikut "fit"** ke lingkup terpilih seperti Insight &
+  Peta. Harus dipanggil sendiri: `renderAll()` berhenti di baris pertama kalau
+  halaman aktif bukan `peta`.
+- **Cakupan Sumber: KTP menyala secara bawaan** (permintaan tim; sebelumnya
+  saya matikan atas pertimbangan sendiri karena barnya selalu 100%).
+- **Tabel Lokasi Service** dengan kolom Jarak (Dekat/Jauh terhadap KPI yang
+  bisa diubah di halaman itu) DAN kolom Alamat cocok dalam bahasa Indonesia.
+  Keduanya terpisah karena menjawab dua pertanyaan berbeda — lihat
+  `docs/DECISIONS.md`. Hanya ~1% baris yang jaraknya terukur, dan itu
+  dikatakan di layar.
+- **Lokasi Delivery menampilkan kerangka tabel** walau isinya masih kosong,
+  dengan keterangan di atasnya.
+
 **Belum dikerjakan (sisa Tahap F, lihat tabel tahapan di `docs/FUSION.md`):**
-- `deletePeriod()` (hapus periode penuh) masih hanya membuang `sales`,
-  `unmatched`, dan `customers` — Data KTP dan Servis bulan itu TIDAK ikut
-  terhapus, jadi checklist tetap mencentangnya sesudah "hapus periode".
-  Ditemukan waktu membangun hapus-per-jenis; sengaja tidak diperluas diam-diam
-  karena memperbesar daya rusak satu rute yang sudah ada adalah keputusan
-  tersendiri.
+- Pasangan servis→KTP baru ~1%: `customer_ktp` hanya memuat satu bulan
+  pembelian, sedangkan `service_visit` memuat kunjungan seluruh populasi. Kolom
+  Jarak baru berguna luas kalau Data KTP beberapa periode sudah masuk.
 - Cross-filtering penuh di sidebar (mode Live-nya sudah jadi, lihat di atas)
 - Jalan ke dropdown "Import Data" untuk layar sentuh — panelnya sekarang hanya
   terbuka saat hover, karena tombolnya sendiri langsung membuka halamannya.

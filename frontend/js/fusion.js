@@ -24,7 +24,7 @@ import {
   formatJarak, jangkauanDiagram, kalimatAlasan, titikRelatif,
 } from './fusion-alasan.js';
 // map.js TIDAK mengimpor fusion.js, jadi arah impor ini tidak membuat lingkaran.
-import { gambarTelusurDiPeta, hapusTelusurDiPeta } from './map.js';
+import { fitToScope, gambarTelusurDiPeta, hapusTelusurDiPeta } from './map.js';
 import { $, esc, formatNumber } from './dom.js';
 import { ALLOWED_CITY_CODES } from './config.js';
 import { fusionFilter, kotaBerikutnya, pageFilters, persenSumber, setScope } from './filters.js';
@@ -231,12 +231,14 @@ function venn(data) {
 /**
  * Sumber mana yang sedang dicentang di panel Cakupan Sumber, dan teks pencariannya.
  *
- * KTP mati secara bawaan, dan itu bukan kelalaian: tiap pelanggan yang sampai ke panel
- * ini menurut definisi punya KTP, jadi barnya 100% di SETIAP baris. Bar yang selalu
- * penuh tidak membedakan apa pun — tapi sekarang itu pilihan pembaca, bukan keputusan
- * diam-diam saya. Sampai 2026-09-17 bar KTP memang tidak pernah digambar sama sekali.
+ * KTP MENYALA secara bawaan sejak 2026-09-17 (permintaan tim). Barnya memang akan
+ * 100% di setiap baris — tiap pelanggan yang sampai ke panel ini menurut definisi
+ * punya KTP — jadi ia tidak membedakan antar baris. Yang tetap diberitahukan:
+ * keterangan "selalu 100%" muncul di bawah daftar supaya pembaca tahu bar penuh itu
+ * sifat data, bukan prestasi. Sempat mati secara bawaan atas pertimbangan saya
+ * sendiri; tim memutuskan sebaliknya.
  */
-const sumberAktif = { ktp: false, servis: true, kirim: true };
+const sumberAktif = { ktp: true, servis: true, kirim: true };
 let cariCakupanTeks = '';
 
 /**
@@ -811,6 +813,16 @@ export async function renderFusion() {
     `per ${esc(cakupan && cakupan.groupBy === 'dealer' ? 'dealer' : 'kota')}`);
   isiSlot('fx-cakupan-kendali', kendaliCakupan());
   isiSlot('cakupan-isi', cakupanSumber(cakupan));
+
+  // Peta ikut menyesuaikan diri ke lingkup yang sedang dipilih, sama seperti di
+  // halaman Insight & Peta.
+  //
+  // Harus dipanggil DI SINI, bukan mengandalkan renderAll(): renderAll() berhenti di
+  // baris pertama kalau `S.filterPage !== 'peta'` (lihat app.js), jadi di halaman ini
+  // ia tidak pernah berjalan. Argumen `true` = otomatis: durasinya lebih lambat dan
+  // tidak memunculkan toast "tidak ada data" — pemanggilan ini bukan hasil orang
+  // menekan tombol Fokuskan.
+  if (S.layersReady) fitToScope(true);
 }
 
 /** Daftar Lokasi Service — sub-halaman menu Data. */
@@ -867,13 +879,67 @@ function tabelSumber(kolom, rows) {
     `style="background:#eef1f7"><tr>${kepala}</tr></thead><tbody>${isi}</tbody></table></div>`;
 }
 
-/** Status pencocokan wilayah ditampilkan apa adanya — banyak baris memang di luar cakupan. */
+/**
+ * Status PENCOCOKAN WILAYAH, dalam bahasa yang bisa dibaca orang.
+ *
+ * Kata aslinya (`ok`/`alias`/`fuzzy`/`unmatched`) istilah mesin, dan diminta diganti.
+ * Yang TIDAK boleh: menggantinya jadi "Dekat"/"Jauh". Kolom ini sama sekali bukan
+ * soal jarak — ia menjawab "alamat baris ini berhasil dikenali jadi kelurahan mana".
+ * Baris `unmatched` berarti alamatnya tidak dikenali, BUKAN lokasinya jauh. Jarak
+ * punya kolomnya sendiri di sebelah.
+ */
+const LABEL_COCOK = {
+  ok: { teks: 'Cocok', gaya: 'bg-emerald-50 text-emerald-700' },
+  alias: { teks: 'Cocok (alias)', gaya: 'bg-emerald-50 text-emerald-700' },
+  fuzzy: { teks: 'Mirip', gaya: 'bg-amber-50 text-amber-700' },
+  unmatched: { teks: 'Tidak dikenal', gaya: 'bg-slate-100 text-slate-500' },
+};
+
 function lencanaStatus(status) {
-  const gaya = status === 'ok' || status === 'alias'
-    ? 'bg-emerald-50 text-emerald-700'
-    : (status === 'fuzzy' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500');
-  return `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${gaya}">${
-    esc(status || '—')}</span>`;
+  const l = LABEL_COCOK[status] || { teks: status || '—', gaya: 'bg-slate-100 text-slate-500' };
+  return `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${l.gaya}" ` +
+    `title="Status pencocokan alamat ke kelurahan, bukan jarak">${esc(l.teks)}</span>`;
+}
+
+/**
+ * Penilaian JARAK terhadap ambang KPI yang sedang dipakai halaman ini.
+ *
+ * Tiga keadaan, bukan dua. "tidak terukur" bukan sinonim "Jauh": ia berarti baris itu
+ * tidak bisa dipasangkan ke Data KTP lewat nomor mesin, atau salah satu titiknya tidak
+ * diketahui. Diukur pada data Agustus 2026: dari 187.774 baris servis, cuma 1.994 yang
+ * punya titik di KEDUA sisi — sekitar 1%. Memaksa 99% sisanya jadi "Jauh" akan
+ * menciptakan kesimpulan yang tidak pernah diukur siapa pun.
+ */
+function lencanaJarak(meter, ambangKm) {
+  if (meter == null) {
+    return `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 ` +
+      `text-slate-400" title="Baris ini tidak bisa dipasangkan ke Data KTP lewat ` +
+      `Nomor Mesin, jadi jaraknya tidak pernah diukur">tidak terukur</span>`;
+  }
+  const km = Number(meter) / 1000;
+  const dekat = km <= Number(ambangKm);
+  const gaya = dekat ? 'bg-blue-50 text-blue-700' : 'bg-red-50 text-red-700';
+  return `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${gaya}" ` +
+    `title="${esc(km.toFixed(1).replace('.', ','))} km dari kelurahan KTP-nya">${
+      dekat ? 'Dekat' : 'Jauh'}</span>`;
+}
+
+/**
+ * KPI Jarak khusus halaman Lokasi Service, dalam km.
+ *
+ * SENGAJA terpisah dari ambang yang tersimpan di `app_config` dan dipakai mesin
+ * penggolongan. Yang ini alat lihat-lihat: mengubahnya hanya mengubah cara tabel ini
+ * menilai Dekat/Jauh, TIDAK menghitung ulang golongan siapa pun dan tidak tersimpan.
+ * Kalau ia menulis ke setelan yang sama, menggeser angka di sini diam-diam akan
+ * mengubah arti seluruh dashboard.
+ */
+let kpiServisKm = 50;
+
+/** Ubah ambang lalu gambar ulang — datanya sudah ada, jaraknya tidak perlu diminta lagi. */
+export function setKpiServis(nilai) {
+  const km = Number(nilai);
+  if (Number.isFinite(km) && km > 0) kpiServisKm = km;
+  renderServiceTable();
 }
 
 export async function renderServiceTable() {
@@ -884,15 +950,32 @@ export async function renderServiceTable() {
   try {
     const hasil = await fetchServis(saringSumber(servisOffset));
     servisOffset = hasil.offset;
-    wadah.innerHTML = tabelSumber([
+
+    // Berapa baris di halaman ini yang jaraknya benar-benar terukur. Dikatakan apa
+    // adanya: pada data Agustus 2026 cuma ~1% baris servis punya pasangan Data KTP
+    // lewat nomor mesin, jadi kolom Jarak akan sebagian besar "tidak terukur". Tanpa
+    // kalimat ini, kolom yang hampir kosong terbaca seperti fitur yang rusak.
+    const kendali =
+      `<div class="flex items-center gap-2 mb-2 flex-wrap">` +
+        `<span class="text-[11px] font-bold text-slate-600">KPI Jarak</span>` +
+        `<input id="servis-kpi" type="number" min="1" step="1" value="${esc(String(kpiServisKm))}" ` +
+        `onchange="setKpiServis(this.value)" ` +
+        `class="w-20 px-2 py-1 rounded-lg border border-slate-200 text-[11px] mono">` +
+        `<span class="text-[11px] text-slate-500">km — di bawahnya "Dekat", di atasnya "Jauh"</span>` +
+        `<span class="ml-auto text-[10px] text-slate-400">${
+          esc(formatNumber(hasil.terukur || 0))} dari ${esc(formatNumber(hasil.rows.length))} ` +
+        `baris di halaman ini punya jarak terukur</span>` +
+      `</div>`;
+
+    wadah.innerHTML = kendali + tabelSumber([
       { judul: 'Periode', nilai: (r) => esc(r.period || '—'), kelas: 'mono text-slate-500' },
       { judul: 'Nomor Mesin', nilai: (r) => esc(r.engineNo || '—'), kelas: 'mono text-slate-700' },
-      { judul: 'No Rangka', nilai: (r) => esc(r.frameNo || '—'), kelas: 'mono text-slate-400' },
       { judul: 'Jenis Service', nilai: (r) => esc(r.serviceType || '—') },
       { judul: 'Kelurahan', nilai: (r) => esc(r.villageText || '—') },
       { judul: 'Kecamatan', nilai: (r) => esc(r.districtText || '—') },
       { judul: 'Kota', nilai: (r) => esc(r.cityText || '—') },
-      { judul: 'Cocok', nilai: (r) => lencanaStatus(r.resolveStatus) },
+      { judul: 'Jarak', nilai: (r) => lencanaJarak(r.distanceM, kpiServisKm) },
+      { judul: 'Alamat cocok', nilai: (r) => lencanaStatus(r.resolveStatus) },
     ], hasil.rows) + navHalaman(hasil, 'servisPage');
   } catch (error) {
     wadah.innerHTML = `<p class="text-xs text-red-600 p-4">${esc(error.message)}</p>`;
@@ -922,19 +1005,22 @@ export async function renderDeliveryTable() {
     kirimOffset = hasil.offset;
 
     // Tabel kosong di sini BUKAN kegagalan: belum ada satu pun ping yang masuk,
-    // karena produsennya (integrasi sistem lapangan) memang belum ada. Dikatakan,
-    // supaya tidak terbaca sebagai halaman rusak.
-    if (!hasil.total) {
-      wadah.innerHTML = `<div class="bg-white rounded-xl border border-slate-200 p-6 text-center">` +
-        `<div class="text-sm font-bold text-slate-700">Belum ada data pengiriman</div>` +
-        `<p class="text-xs text-slate-500 mt-2 leading-relaxed max-w-lg mx-auto">Rute ` +
-        `penerimanya sudah ada (<span class="mono">/api/v1/pengiriman/ping</span>), tapi ` +
-        `belum ada satu pun ping yang dikirim — integrasi sistem lapangan belum ` +
-        `terpasang. Halaman ini akan terisi sendiri begitu ping pertama masuk.</p></div>`;
-      return;
-    }
+    // karena produsennya (integrasi sistem lapangan) memang belum ada.
+    //
+    // KERANGKA TABELNYA TETAP DIGAMBAR, lengkap dengan judul kolomnya (permintaan
+    // tim). Alasannya bagus: orang jadi tahu kolom apa saja yang akan datang, dan
+    // halaman kosong tanpa kerangka terbaca seperti halaman yang rusak. Penjelasannya
+    // ditaruh DI ATAS tabel, bukan menggantikannya.
+    const catatanKosong = hasil.total ? '' :
+      `<div class="rounded-xl border border-amber-200 bg-amber-50 p-3 mb-2">` +
+      `<div class="text-xs font-bold text-amber-900">Belum ada data pengiriman</div>` +
+      `<p class="text-[11px] text-amber-800 mt-1 leading-relaxed">Rute penerimanya ` +
+      `sudah ada (<span class="mono">/api/v1/pengiriman/ping</span>), tapi belum ada ` +
+      `satu pun ping yang dikirim — integrasi sistem lapangan belum terpasang. ` +
+      `Kerangka tabel di bawah menunjukkan kolom yang akan terisi sendiri begitu ping ` +
+      `pertama masuk.</p></div>`;
 
-    wadah.innerHTML = tabelSumber([
+    wadah.innerHTML = catatanKosong + tabelSumber([
       { judul: 'Waktu', nilai: (r) => esc(String(r.sentAt || '').slice(0, 16)), kelas: 'mono text-slate-500' },
       { judul: 'Nomor Mesin', nilai: (r) => esc(r.engineNo || '—'), kelas: 'mono text-slate-700' },
       { judul: 'Lokasi', nilai: (r) => esc(r.locationText || '—') },

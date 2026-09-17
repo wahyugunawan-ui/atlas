@@ -3928,6 +3928,79 @@ KTP dan Servis bulan itu tetap tinggal, jadi checklist tetap mencentangnya sesud
 "hapus periode". Memperbesar daya rusak satu rute yang sudah ada adalah keputusan
 tersendiri; dicatat di ROADMAP, bukan diam-diam dilebarkan.
 
+> **Ditindaklanjuti 2026-09-17 atas permintaan tim** — lihat entri
+> "Hapus periode benar-benar menghapus" di bawah.
+
+## [2026-09-17] Hapus periode benar-benar menghapus
+
+Tindak lanjut temuan di atas, sekarang dengan izin eksplisit.
+
+`deletePeriod()` dulu membuang `sales`, `unmatched`, dan `customers` saja. Dua
+akibatnya nyata: bulan yang "sudah dihapus" tetap dicentang checklist Periode
+Tersimpan karena Data KTP dan Servisnya masih tinggal, dan bulan yang cuma punya
+Data KTP **tidak bisa dihapus sama sekali** — fungsinya menolak di baris pertama
+karena tidak menemukan baris penjualan.
+
+Sekarang ia membuang delapan tabel: `sales`, `unmatched`, `segment_rollup`,
+`source_overlap` (database utama) dan `customers`, `customer_ktp`,
+`service_visit`, `customer_fusion` (database PII). Kedelapannya diperiksa dulu
+punya kolom `period` — satu saja tidak punya, rutenya akan mati di tengah jalan
+dan meninggalkan periode yang terhapus separuh.
+
+Hasil penggolongan ikut dibuang, bukan dihitung ulang. Ia DITURUNKAN dari baris
+yang barusan hilang; membiarkannya berarti dashboard menampilkan angka untuk bulan
+yang datanya sudah tidak ada — angka yang tidak bisa ditelusuri ke satu baris pun.
+
+Penolakannya dipindah: yang ditolak sekarang periode yang tidak punya data APA PUN,
+bukan yang kebetulan tidak punya penjualan.
+
+**Batas verifikasi:** jalur sukses tidak diuji, karena membuktikannya berarti
+menghapus data Agustus 2026 sungguhan. Yang diuji penolakannya, lalu dipastikan
+keempat tabel utama tetap utuh (10.019 / 19.598 / 186.471 / 11.090).
+
+## [2026-09-17] Tabel Lokasi Service: "Dekat/Jauh" TIDAK menggantikan status pencocokan
+
+Permintaannya: ganti istilah "match/unmatch" jadi "dekat/jauh", plus KPI Jarak
+khusus halaman itu.
+
+**Menggantinya begitu saja akan berbohong.** `resolve_status` menjawab "alamat
+baris ini berhasil dikenali jadi kelurahan mana" — `unmatched` berarti alamatnya
+tidak dikenali, BUKAN lokasinya jauh. Dua pertanyaan yang berbeda.
+
+Jadi keduanya ada, terpisah:
+
+- Kolom **Alamat cocok** — istilah mesinnya diterjemahkan (`ok` → "Cocok",
+  `alias` → "Cocok (alias)", `fuzzy` → "Mirip", `unmatched` → "Tidak dikenal").
+  Informasinya utuh untuk seluruh 186.471 baris.
+- Kolom **Jarak** — jarak sungguhan kelurahan KTP → kelurahan servis, dinilai
+  terhadap KPI yang bisa diubah di halaman itu.
+
+**Angka yang membuat keputusan ini penting:** dari 187.774 baris servis, cuma
+**2.606** punya pasangan Data KTP lewat nomor mesin, dan **1.994** punya kelurahan
+di kedua sisi — sekitar **1%**. Kalau "Dekat/Jauh" menggantikan kolom lama, 99%
+tabel jadi kosong dan informasi yang berlaku untuk semua baris ikut hilang.
+Baris tanpa pasangan ditulis **"tidak terukur"**, bukan "Jauh": memaksanya jadi
+"Jauh" menciptakan kesimpulan yang tidak pernah diukur siapa pun. Halaman pertama
+membuktikannya — 1 dari 100 baris terukur.
+
+**KPI-nya sengaja TERPISAH** dari ambang di `app_config` yang dipakai mesin
+penggolongan. Yang di halaman ini alat lihat-lihat: mengubahnya tidak menghitung
+ulang golongan siapa pun dan tidak tersimpan. Kalau ia menulis ke setelan yang
+sama, menggeser angka di sini diam-diam akan mengubah arti seluruh dashboard.
+
+Jaraknya dihitung di JS memakai `distanceMeters` dari `backend/core/geo.js` —
+modul yang sama dengan mesin penggolongan, jadi angka di tabel ini dan angka di
+Confidence Fusion lahir dari rumus yang sama persis. Tidak bisa lewat SQL karena
+koordinat kelurahan ada di database utama sedangkan servis/KTP di database PII.
+
+**Dua cacat yang saya buat sendiri di jalan ke sini**, keduanya ditemukan alat,
+bukan mata: (1) `village_code` jadi ambigu begitu tabelnya di-join ke
+`customer_ktp` — versi pertama saya menambal klausa WHERE yang sudah jadi dengan
+regex, yang salah karena klausanya memuat literal `ESCAPE` dan pola `LIKE`;
+diperbaiki dengan memberi awalan `s.` sejak dibangun. (2) Komentar SQL di dalam
+template literal saya memuat backtick, yang menutup template itu lebih awal dan
+membuat SELURUH `repository.js` gagal di-parse.
+
 39/39 berkas tes lolos. `panelBelum()` jadi kode mati begitu kedua panel "belum
 dibuat" hilang, dan ikut dibuang.
 

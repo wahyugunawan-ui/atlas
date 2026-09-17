@@ -14,6 +14,10 @@ const { toDealerCode } = require('../core/grouping');
 const { regionKey, normalizeName, toDottedCityCode } = require('../core/region');
 const { suggestVillages } = require('../core/matching');
 const { buildVillageIndex, resolveVillage } = require('../core/village-resolver');
+// Jarak kelurahan KTP -> kelurahan servis. Modul murni yang sama dipakai mesin
+// penggolongan, jadi angka di tabel Servis dan angka di Confidence Fusion lahir dari
+// rumus yang sama persis — bukan dua perhitungan yang kebetulan mirip.
+const { distanceMeters } = require('../core/geo');
 
 /**
  * Seluruh isi dashboard dalam satu permintaan.
@@ -778,20 +782,45 @@ async function deletePeriod(period, ip) {
   const sebelum = await store.one(db, `
     SELECT COALESCE(SUM(quantity), 0) AS units, COUNT(*) AS rows
     FROM sales WHERE period = ?`, [period]);
-  if (!Number(sebelum.rows)) {
-    throw new Error(`Periode ${period} tidak punya data penjualan.`);
+
+  // Sampai 2026-09-17 fungsi ini MENOLAK periode tanpa baris penjualan, dan hanya
+  // membuang sales/unmatched/customers. Akibatnya: bulan yang cuma punya Data KTP
+  // tidak bisa dihapus sama sekali, dan bulan yang "sudah dihapus" tetap dicentang
+  // checklist Periode Tersimpan karena KTP dan Servisnya masih tinggal.
+  //
+  // Sekarang menghapus SELURUH jejak periode itu. Penolakannya dipindah ke bawah:
+  // yang ditolak periode yang benar-benar tidak punya data APA PUN, bukan yang
+  // kebetulan tidak punya penjualan.
+  const customerDb = store.customers();
+  let customers = 0;
+  let ktp = 0;
+  let servis = 0;
+  let fusi = 0;
+
+  if (customerDb) {
+    const buang = async (tabel) =>
+      (await store.run(customerDb, `DELETE FROM ${tabel} WHERE period = ?`, [period]))
+        .rowCount || 0;
+    customers = await buang('customers');
+    ktp = await buang('customer_ktp');
+    servis = await buang('service_visit');
+    fusi = await buang('customer_fusion');
   }
 
-  let customers = 0;
-  const customerDb = store.customers();
-  if (customerDb) {
-    customers = (await store.run(customerDb,
-      'DELETE FROM customers WHERE period = ?', [period])).rowCount || 0;
+  const adaApaPun = Number(sebelum.rows) || customers || ktp || servis || fusi;
+  if (!adaApaPun) {
+    throw new Error(`Periode ${period} tidak punya data apa pun.`);
   }
 
   await store.transaction(db, async (conn) => {
     await conn.query('DELETE FROM sales WHERE period = ?', [period]);
     await conn.query('DELETE FROM unmatched WHERE period = ?', [period]);
+    // Hasil penggolongan ikut dibuang. Keduanya DITURUNKAN dari baris yang barusan
+    // hilang, jadi membiarkannya berarti dashboard Confidence Fusion menampilkan
+    // angka untuk bulan yang datanya sudah tidak ada — angka yang tidak bisa
+    // ditelusuri ke satu baris pun.
+    await conn.query('DELETE FROM segment_rollup WHERE period = ?', [period]);
+    await conn.query('DELETE FROM source_overlap WHERE period = ?', [period]);
   });
 
   // Jejaknya masuk tabel `imports`, bukan tabel sendiri.
@@ -806,8 +835,11 @@ async function deletePeriod(period, ip) {
                          rows_read, rows_used, new_outlets, result, message)
     VALUES (?, ?, ?, NULL, ?, NULL, ?, NULL, 'hapus', ?)`,
   [now, now, ip || null, period, Number(sebelum.units),
-    `Periode dihapus: ${sebelum.units} unit, ${sebelum.rows} baris` +
+    `Periode dihapus: ${sebelum.units} unit, ${sebelum.rows} baris penjualan` +
     (customers ? `, ${customers} data konsumen` : '') +
+    (ktp ? `, ${ktp} baris KTP` : '') +
+    (servis ? `, ${servis} baris servis` : '') +
+    (fusi ? `, ${fusi} hasil penggolongan` : '') +
     '. Berkas Excel di arsip tidak ikut dihapus.']);
 
   return {
@@ -815,6 +847,9 @@ async function deletePeriod(period, ip) {
     units: Number(sebelum.units),
     sales: Number(sebelum.rows),
     customers,
+    ktp,
+    servis,
+    fusi,
   };
 }
 
@@ -845,39 +880,85 @@ async function serviceVisits(filter) {
   const db = store.customers();
   if (!db) return null;
 
+  // Kolom DIBERI AWALAN `s.` sejak dibangun, bukan ditambal belakangan.
+  //
+  // Sejak tabel ini di-join ke customer_ktp, `village_code` ada di KEDUA sisi dan
+  // referensi tanpa awalan ditolak Postgres sebagai ambigu — kelas cacat yang sudah
+  // memakan satu perbaikan tersendiri di proyek ini (lihat entri "kolom ambigu" di
+  // DECISIONS). Versi pertama fungsi ini sempat menambal `clause` jadi dengan regex;
+  // itu salah karena klausanya juga memuat literal ESCAPE dan pola LIKE.
   const f = filter || {};
   const where = [];
   const params = [];
-  if (f.periodFrom) { where.push('period >= ?'); params.push(f.periodFrom); }
-  if (f.periodTo) { where.push('period <= ?'); params.push(f.periodTo); }
-  if (f.village) { where.push('village_code = ?'); params.push(f.village); }
+  if (f.periodFrom) { where.push('s.period >= ?'); params.push(f.periodFrom); }
+  if (f.periodTo) { where.push('s.period <= ?'); params.push(f.periodTo); }
+  if (f.village) { where.push('s.village_code = ?'); params.push(f.village); }
   if (f.city) {
-    where.push("village_code LIKE ? ESCAPE '\\'");
+    where.push("s.village_code LIKE ? ESCAPE '\\'");
     params.push(escapeLike(f.city) + '.%');
   }
   if (f.query) {
-    where.push("(engine_no ILIKE ? ESCAPE '\\' OR village_text ILIKE ? ESCAPE '\\')");
+    where.push("(s.engine_no ILIKE ? ESCAPE '\\' OR s.village_text ILIKE ? ESCAPE '\\')");
     const like = '%' + escapeLike(f.query) + '%';
     params.push(like, like);
   }
 
   const clause = where.length ? 'WHERE ' + where.join(' AND ') : '';
+  // Hitungan totalnya TIDAK ikut di-join: satu baris servis bisa punya lebih dari
+  // satu baris KTP bernomor mesin sama, dan COUNT di atas join akan menggelembung.
   const total = Number((await store.one(db,
-    `SELECT COUNT(*) AS n FROM service_visit ${clause}`, params)).n);
+    `SELECT COUNT(*) AS n FROM service_visit s ${clause}`, params)).n);
   const offset = jepitOffset(total, f.offset, SUMBER_LIMIT);
 
   // `row_no` di ujung ORDER BY adalah pemecah seri — tanpa itu urutan dua baris
   // sekelurahan tidak dijamin, dan baris yang sama bisa muncul di dua halaman.
+  //
+  // `ktpVillage` dipasangkan lewat nomor mesin DI DALAM database PII. Kelurahan KTP
+  // itulah acuan jarak — sama seperti mesin penggolongan (docs/FUSION.md 2.3).
   const rows = await store.all(db, `
-    SELECT period, engine_no AS "engineNo", frame_no AS "frameNo",
-           village_text AS "villageText", district_text AS "districtText",
-           city_text AS "cityText", service_type AS "serviceType",
-           village_code AS "villageCode", resolve_status AS "resolveStatus"
-    FROM service_visit ${clause}
-    ORDER BY period DESC, village_text, row_no
+    SELECT s.period, s.engine_no AS "engineNo", s.frame_no AS "frameNo",
+           s.village_text AS "villageText", s.district_text AS "districtText",
+           s.city_text AS "cityText", s.service_type AS "serviceType",
+           s.village_code AS "villageCode", s.resolve_status AS "resolveStatus",
+           k.village_code AS "ktpVillage"
+    FROM service_visit s
+    -- LATERAL + LIMIT 1 supaya satu baris servis tetap satu baris walau nomor
+    -- mesinnya punya beberapa baris KTP (mis. dua periode). Tanpa itu daftarnya
+    -- menggelembung dan jumlah barisnya tidak lagi cocok dengan hitungan total.
+    LEFT JOIN LATERAL (
+      SELECT village_code FROM customer_ktp k
+      WHERE k.engine_no = s.engine_no AND k.village_code IS NOT NULL
+      ORDER BY k.period DESC LIMIT 1
+    ) k ON true
+    ${clause}
+    ORDER BY s.period DESC, s.village_text, s.row_no
     LIMIT ? OFFSET ?`, params.concat([SUMBER_LIMIT, offset]));
 
-  return { rows, total, limit: SUMBER_LIMIT, offset };
+  // Jarak dihitung DI JS, bukan SQL: koordinat kelurahan ada di database UTAMA
+  // sedangkan servis/KTP di database PII, dan dua database tidak bisa di-JOIN.
+  // Polanya sama dengan recalculate() — muat peta kode->koordinat sekali, pakai
+  // berkali-kali. Hanya kode yang benar-benar muncul di halaman ini yang diambil.
+  const kode = [...new Set(rows.flatMap((r) => [r.villageCode, r.ktpVillage])
+    .filter(Boolean))];
+  const titik = {};
+  if (kode.length) {
+    (await store.all(store.db(),
+      'SELECT village_code AS kode, lat, lng FROM villages WHERE village_code = ANY(?)',
+      [kode])).forEach((v) => { titik[v.kode] = v; });
+  }
+
+  rows.forEach((r) => {
+    const a = titik[r.ktpVillage];
+    const b = titik[r.villageCode];
+    // null = TIDAK TERUKUR, bukan nol dan bukan "jauh". Baris tanpa pasangan KTP
+    // atau tanpa koordinat di salah satu sisi memang tidak pernah diukur.
+    r.distanceM = (a && b && a.lat != null && b.lat != null)
+      ? Math.round(distanceMeters(a.lat, a.lng, b.lat, b.lng))
+      : null;
+  });
+
+  const terukur = rows.filter((r) => r.distanceM != null).length;
+  return { rows, total, limit: SUMBER_LIMIT, offset, terukur };
 }
 
 /**
