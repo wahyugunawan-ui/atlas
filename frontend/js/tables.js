@@ -1637,6 +1637,31 @@ function closeDataMenu() {
   if (wrap) wrap.classList.remove('buka');
 }
 
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#nav-data-wrap')) closeDataMenu();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeDataMenu();
+});
+
+// Hover, sejak 2026-09-18 (permintaan tim) — pola SAMA PERSIS dengan Master/Import
+// di atas, termasuk jeda tutup 150ms yang dibatalkan kalau kursor kembali sebelum
+// habis (supaya tidak "kedip" waktu berpindah dari tombol Data ke daftar di
+// bawahnya). Ketiga sub-halamannya (berdasarkan KTP / Lokasi Service / berdasarkan
+// Lokasi Delivery) TETAP berpindah lewat KLIK seperti sebelumnya — yang berubah
+// cuma flyout-nya sekarang bisa TERBUKA tanpa klik, mengarahkan kursor sudah cukup.
+let dataHoverTimer = null;
+const navDataWrap = document.getElementById('nav-data-wrap');
+if (navDataWrap) {
+  navDataWrap.addEventListener('mouseenter', () => {
+    clearTimeout(dataHoverTimer);
+    openDataMenu();
+  });
+  navDataWrap.addEventListener('mouseleave', () => {
+    dataHoverTimer = setTimeout(closeDataMenu, 150);
+  });
+}
+
 /**
  * Flyout "Import Data" — salinan ketiga pola yang sama.
  *
@@ -1711,8 +1736,14 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeImportMenu();
 });
 
-// Hover, mengikuti Master (menu Data sengaja tidak saya sentuh — ia memang belum
-// punya hover, dan menambahkannya bukan bagian dari yang diminta).
+// Hover, mengikuti Master. Menu Data SEMPAT sengaja tidak disentuh di sini ("ia
+// memang belum punya hover, dan menambahkannya bukan bagian dari yang diminta") —
+// itu berubah 2026-09-18: permintaan tim eksplisit menyebut ketiga sub-halaman
+// Data harus tampil lewat arahan kursor, bukan cuma klik. Wiring hover-nya sendiri
+// ada di bawah, dekat openDataMenu()/closeDataMenu() — polanya SAMA PERSIS dengan
+// blok Master dan Import ini, bukan diabstraksikan bersama, dengan alasan yang
+// sama: tiga baris logika tidak sepadan dengan satu fungsi yang harus tahu tiga
+// panel berbeda.
 let importHoverTimer = null;
 const navImportWrap = document.getElementById('nav-import-wrap');
 if (navImportWrap) {

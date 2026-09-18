@@ -40,6 +40,55 @@ import { S } from './state.js';
  */
 let basemapLayerIds = [];
 
+/**
+ * Skala marker DOM dealer/pos mengikuti zoom peta — dekat = besar, jauh = kecil
+ * (permintaan tim). Titik acuan dan gaya interpolasinya SENGAJA meniru pola yang
+ * sudah dipakai lapisan circle/symbol lain (`jual-titik`, `ktp-titik`, dkk, semua
+ * pakai `['interpolate', ['linear'], ['zoom'], ...]`) — bukan skala linear murni,
+ * supaya di zoom rendah markernya tidak menyusut sampai tidak terlihat, dan di zoom
+ * tinggi tidak membesar sampai menutupi area yang sedang dilihat.
+ *
+ * Marker dealer/pos MARKER DOM, bukan lapisan MapLibre (lihat komentar di puncak
+ * outlets.js), jadi tidak bisa memakai `circle-radius`/`icon-size` interpolate
+ * bawaan MapLibre seperti lapisan lain — makanya perlu fungsi JS sendiri di sini,
+ * dipanggil dari event `zoom` peta (lihat pemanggilnya di bawah).
+ *
+ * Diekspor murni supaya bisa diuji tanpa membuat instance peta sungguhan.
+ *
+ * @returns {number} faktor skala CSS, mis. 0.7 di zoom rendah, 1.55 di zoom tinggi
+ */
+export function skalaMarkerZoom(zoom) {
+  const TITIK = [[6, 0.7], [10, 1], [14, 1.55]];
+  const z = Number(zoom);
+  if (!Number.isFinite(z) || z <= TITIK[0][0]) return TITIK[0][1];
+  if (z >= TITIK[TITIK.length - 1][0]) return TITIK[TITIK.length - 1][1];
+  for (let i = 0; i < TITIK.length - 1; i++) {
+    const [z0, s0] = TITIK[i];
+    const [z1, s1] = TITIK[i + 1];
+    if (z >= z0 && z <= z1) return s0 + (s1 - s0) * ((z - z0) / (z1 - z0));
+  }
+  return 1;
+}
+
+/**
+ * Tulis ulang variabel CSS `--zoom-scale` di `#map`. Custom property CSS mewarisi ke
+ * seluruh keturunan DOM secara bawaan — marker dealer/pos (elemen DOM biasa yang
+ * ditambahkan MapLibre sebagai anak `#map`) otomatis ikut membaca nilai ini lewat
+ * aturan `.marker-outlet { transform: scale(var(--zoom-scale, 1)); }` di index.html,
+ * TANPA perlu menyentuh style tiap marker satu per satu.
+ *
+ * `transform` di sini ditulis di STYLESHEET, bukan `style.transform` inline per
+ * elemen — sengaja, supaya aturan `:hover { transform: scale(1.18); }` yang sudah
+ * ada tetap menang saat kursor di atas marker (inline style SELALU mengalahkan
+ * stylesheet apa pun specificity-nya, jadi menyetel transform inline di sini akan
+ * mematikan efek hover yang sudah ada).
+ */
+function perbaruiSkalaMarker() {
+  const peta = $('map');
+  if (!S.map || !peta) return;
+  peta.style.setProperty('--zoom-scale', String(skalaMarkerZoom(S.map.getZoom())));
+}
+
 export function setupMap() {
   // Protokol pmtiles harus terdaftar SEBELUM Map dibuat, kalau tidak MapLibre tidak
   // tahu cara membaca url 'pmtiles://' dan basemapnya kosong tanpa pesan apa pun.
@@ -83,6 +132,13 @@ export function setupMap() {
   // aman menumpuk rapi dengan kontrol MapLibre lain di pojok yang sama.
   S.map.addControl(new maplibregl.NavigationControl(), 'bottom-left');
   S.map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }));
+
+  // Titik dealer/pos ikut skala zoom (permintaan tim) — lihat skalaMarkerZoom() di
+  // atas. Dipanggil sekali SEKARANG (zoom awal peta, bukan menunggu event 'zoom'
+  // pertama) supaya markernya tidak sekejap tampil ukuran bawaan lalu melompat
+  // begitu orang pertama kali menggeser/memperbesar peta.
+  S.map.on('zoom', perbaruiSkalaMarker);
+  perbaruiSkalaMarker();
 
   // Citra satelit datang dari internet. Kalau jaringan kantor menutupnya, petanya
   // akan diam-diam kosong; lebih baik memberi tahu daripada membiarkan orang mengira
