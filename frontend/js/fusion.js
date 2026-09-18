@@ -1054,9 +1054,17 @@ export async function renderFusion() {
   // permintaan tim 2026-09-18: dulu memilih Kares/Kota/Dealer membuat KETIGA blok ini
   // cuma menyisakan SATU baris. Sekarang server selalu mengirim baris LENGKAP, dan
   // yang sedang disaring disorot di layar (lihat gambarMatriks()/gambarDealer(),
-  // kotaSorotSet()) — bukan disembunyikan lagi. Segmentasi/Venn/Cakupan/Peta TETAP
-  // memakai `f` utuh: ketiganya memang representasi hasil TERSARING.
+  // kotaSorotSet()) — bukan disembunyikan lagi.
   const fSemua = { periode: f.periode };
+
+  // Pos TIDAK dipakai kelima panel halaman ini (permintaan tim 2026-09-18) — satu
+  // pos cuma melayani sebagian kecil kelurahan satu kota, dan Kota/Dealer/Kares
+  // sudah cukup. Dibuang DI SINI, bukan di fusionFilter() (filters.js) sendiri:
+  // fungsi itu juga dipakai muatTitikFusi() (map.js) untuk titik tiga sumber di
+  // peta yang SAMA tampil di halaman Sales Analytics, dan Pos masih relevan di
+  // sana — membuangnya di fusionFilter() langsung pernah dicoba dan salah, ikut
+  // mematikan saringan itu untuk halaman yang tidak diminta berubah.
+  const { pos: _posTidakDipakai, ...fPanel } = f;
 
   let hasil;
   let peringkat;
@@ -1065,8 +1073,8 @@ export async function renderFusion() {
   let cakupan;
   try {
     [hasil, peringkat, matrix, irisan, cakupan] = await Promise.all([
-      fetchSegmentation(f), fetchPeringkat(fSemua), fetchMatriks(fSemua), fetchIrisan(f),
-      fetchCakupanSumber(f),
+      fetchSegmentation(fPanel), fetchPeringkat(fSemua), fetchMatriks(fSemua),
+      fetchIrisan(fPanel), fetchCakupanSumber(fPanel),
     ]);
   } catch (error) {
     // Galat ditulis di sel Summary saja. Menimpa seluruh kerangka akan mencabut

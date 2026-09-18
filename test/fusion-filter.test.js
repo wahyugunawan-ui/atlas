@@ -8,11 +8,15 @@
  */
 const assert = require('node:assert');
 const test = require('node:test');
+const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
 const path = require('node:path');
 
 const MODUL = pathToFileURL(
   path.join(__dirname, '..', 'frontend', 'js', 'filters.js')).href;
+
+const FUSION_JS = fs.readFileSync(
+  path.join(__dirname, '..', 'frontend', 'js', 'fusion.js'), 'utf8');
 
 const filter = (patch) => Object.assign({
   from: 'ALL', to: 'ALL', kares: 'ALL',
@@ -53,18 +57,52 @@ test('periode yang belum lengkap tidak dikirim setengah jadi', async () => {
   assert.strictEqual(fusionFilter(filter({ to: '' })).periode, null);
 });
 
-test('pos TIDAK terkirim — dihapus dari halaman ini 2026-09-18', async () => {
+test('pos IKUT terkirim dari fusionFilter() — dipakai muatTitikFusi() di map.js', async () => {
   const { fusionFilter } = await import(MODUL);
-  // Riwayatnya bolak-balik. Sampai 2026-09-17 pos masuk daftar `abaikan`; sehari
-  // sesudahnya sempat DIKIRIM (server menerjemahkannya lewat tabel coverage); sekarang
-  // dihapus lagi atas permintaan tim — satu pos cuma melayani sebagian kecil kelurahan
-  // satu kota, jadi menyaring sesempit itu jarang berarti apa pun untuk penggolongan.
-  // Bukan `abaikan` juga: itu daftar untuk saringan yang PERNAH dikirim tapi diabaikan
-  // server; pos sekarang tidak pernah dikirim sama sekali dari fungsi ini.
+  // fusionFilter() TETAP menerjemahkan pos: fungsi ini bukan cuma dipakai kelima
+  // panel Confidence Fusion, tapi juga titik tiga sumber di peta (map.js), yang
+  // tampil di halaman Sales Analytics juga dan Pos masih relevan di sana.
+  //
+  // Riwayatnya sempat bolak-balik SATU LANGKAH SALAH: giliran 2026-09-18 pernah
+  // membuang pos di SINI langsung (permintaan tim: pos tidak lagi dipakai kelima
+  // panel Confidence Fusion) — dan itu ikut mematikan saringan Pos untuk titik tiga
+  // sumber di Sales Analytics, yang tidak pernah diminta berubah. Yang benar:
+  // pembuangannya ada di renderFusion() (fusion.js), satu-satunya pemanggil yang
+  // perlu membuangnya — lihat tes berikutnya di berkas ini untuk penjaganya.
   const hasil = fusionFilter(filter({ outletCode: 'POS01' }));
-  assert.strictEqual(hasil.pos, undefined,
-    'fusionFilter() tidak boleh lagi punya field pos sama sekali');
+  assert.strictEqual(hasil.pos, 'POS01');
   assert.deepStrictEqual(hasil.abaikan, []);
+});
+
+test('renderFusion() (fusion.js) membuang pos SENDIRI sebelum tiga panelnya', () => {
+  // Struktural, bukan menjalankan renderFusion(): fungsinya async, memanggil fetch
+  // sungguhan, dan menyentuh DOM lewat isiSlot() — memalsukan semua itu untuk
+  // menguji satu baris pembuangan field jauh lebih rapuh daripada memeriksa
+  // POLANYA di sumber, mengikuti cara test/fusion-klik-filter.test.js menjaga
+  // wiring serupa.
+  const mulai = FUSION_JS.indexOf('export async function renderFusion(');
+  assert.notStrictEqual(mulai, -1, 'renderFusion() tidak ketemu di fusion.js');
+  const akhir = FUSION_JS.indexOf('\n}', mulai);
+  const badan = FUSION_JS.slice(mulai, akhir);
+
+  assert.match(badan, /const\s*\{\s*pos:\s*\w+,\s*\.\.\.(\w+)\s*\}\s*=\s*f;/,
+    'renderFusion() tidak lagi membuang field pos dari f sebelum memakainya');
+  const namaVar = /const\s*\{\s*pos:\s*\w+,\s*\.\.\.(\w+)\s*\}\s*=\s*f;/.exec(badan)[1];
+
+  // Ketiga panel yang mewakili hasil TERSARING (segmentasi, irisan, cakupan sumber)
+  // wajib memakai variabel yang SUDAH dipangkas itu, bukan `f` mentah — kalau salah
+  // satu diam-diam kembali memakai `f`, Pos hidup lagi untuk panel itu saja, dan
+  // tidak ada satu pun tes lain yang akan menangkapnya.
+  for (const panggilan of ['fetchSegmentation', 'fetchIrisan', 'fetchCakupanSumber']) {
+    assert.ok(badan.includes(`${panggilan}(${namaVar})`),
+      `${panggilan}() harus dipanggil dengan ${namaVar} (tanpa pos), bukan f mentah`);
+    assert.ok(!badan.includes(`${panggilan}(f)`),
+      `${panggilan}() masih dipanggil dengan f mentah — pos ikut terkirim lagi`);
+  }
+
+  // fetchPeringkat/fetchMatriks memang SUDAH period-only lewat fSemua — bukan
+  // fPanel — jadi tidak diperiksa di sini; itu bagian pengujian yang berbeda
+  // (lihat test/page.test.js bagian "sistem pemfilteran" dan fusion-sort.test.js).
 });
 
 test('karesidenan jadi DAFTAR kode kota, bukan diabaikan', async () => {

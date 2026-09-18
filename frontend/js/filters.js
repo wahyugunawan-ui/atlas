@@ -115,17 +115,29 @@ export function setPeriod(which, value) {
  *    (`config.js`). Dilaporkan lewat `abaikan` supaya halaman bisa mengatakannya,
  *    bukan diam-diam menampilkan angka se-provinsi seolah itu angka yang disaring.
  *
- * Pos DIHAPUS dari halaman ini sejak 2026-09-18 — permintaan tim. Sempat dipahami
- * sejak 2026-09-17 (server menerjemahkannya jadi daftar kelurahan lewat tabel
- * `coverage`, lihat POS_FILTER di repository.js), tapi satu pos hanya melayani
- * sebagian kecil kelurahan satu kota — menyaring penggolongan sampai sesempit itu
- * jarang berarti apa pun, dan bilah filter Kota/Dealer/Kares sudah cukup untuk
- * kebutuhan halaman ini. `filters.outletCode` TIDAK disentuh (dropdown Pos tetap
- * berfungsi penuh di halaman lain); di sini nilainya cuma tidak pernah dibaca.
+ * Pos TETAP diterjemahkan di sini — fungsi ini bukan cuma dipakai kelima panel
+ * Confidence Fusion (renderFusion(), fusion.js), tapi juga muatTitikFusi() di
+ * map.js untuk titik tiga sumber di peta yang SAMA, yang tampil di halaman Sales
+ * Analytics juga. Pos masih relevan menyaring peta di sana.
+ *
+ * Yang DIHAPUS sejak 2026-09-18 (permintaan tim) bukan penerjemahan pos di sini,
+ * tapi PEMAKAIANNYA di kelima panel Confidence Fusion (Pelanggan Terfilter, CW
+ * Sales, Confidence Ratio, Venn, Cakupan Sumber) — renderFusion() sengaja MEMBUANG
+ * field `pos` dari hasil fungsi ini sebelum mengirimkannya ke lima fetch itu (lihat
+ * komentar di sana). Sempat dipahami sejak 2026-09-17 (server menerjemahkannya jadi
+ * daftar kelurahan lewat tabel `coverage`, lihat POS_FILTER di repository.js), tapi
+ * satu pos hanya melayani sebagian kecil kelurahan satu kota — menyaring
+ * penggolongan sesempit itu jarang berarti apa pun untuk KELIMA panel itu, dan
+ * bilah filter Kota/Dealer/Kares sudah cukup.
+ *
+ * PERCOBAAN PERTAMA (giliran ini) membuang pos DI SINI langsung — salah: itu ikut
+ * mematikan saringan Pos untuk titik tiga sumber di halaman Sales Analytics, yang
+ * tidak pernah diminta berubah. Diperbaiki dengan memindahkan pembuangannya ke
+ * renderFusion(), yang memang satu-satunya pemanggil yang perlu membuangnya.
  *
  * @returns {{periode: string|null, kota: string|null, dealer: string|null,
- *   abaikan: string[]}} `null` berarti "tanpa saringan"; periode null = periode
- *   terbaru yang ada di server.
+ *   pos: string|null, abaikan: string[]}} `null` berarti "tanpa saringan"; periode
+ *   null = periode terbaru yang ada di server.
  */
 export function fusionFilter(f) {
   const filters = f || pageFilters('fusion');
@@ -163,6 +175,7 @@ export function fusionFilter(f) {
     kota,
     kotaBanyak,
     dealer: pakai(filters.dealerCode),
+    pos: pakai(filters.outletCode),
     abaikan,
   };
 }
