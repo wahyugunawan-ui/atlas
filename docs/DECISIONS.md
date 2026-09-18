@@ -4088,3 +4088,70 @@ checklist Periode Tersimpan: tanpa produsen ping setiap bulan akan terbaca "3 da
 jenis data tersimpan", dan tombol hapusnya toh cuma muncul kalau datanya ada.
 Ditambahkan begitu ping pertama masuk. Dijaga `test/delivery-ping-period.test.js`,
 termasuk migrasi pada tabel bentuk lama.
+
+## [2026-09-18] Hover di titik peta KTP/Servis/Pengiriman: agregat saja, bukan data per orang
+
+**Konteks:** Permintaan tim: mengarahkan kursor ke titik KTP/Servis/Pengiriman di peta
+menampilkan info pelanggan — nama, nomor mesin, golongan, data KTP, riwayat servis,
+riwayat pengiriman. Diminta secara harfiah sebagai data SATU ORANG per titik.
+**Keputusan:** Dibuat lebih sempit dari yang diminta. Tooltip-nya menampilkan AGREGAT
+per titik — nama dealer, nama kelurahan, dan jumlah KTP/Servis/Pengiriman di bucket
+(kelurahan, dealer) itu — bukan identitas satu orang mana pun.
+**Alasan, tiga hal, ketiganya keamanan/privasi bukan selera:**
+1. Satu titik MEWAKILI SEKIAN pelanggan yang disebar ACAK di dalam kelurahannya
+   (docs/FUSION.md 2.3) — posisinya tidak berarti apa-apa sebagai lokasi. Titik-titik
+   ini bahkan tidak membawa nomor mesin sama sekali, disengaja (lihat komentar
+   `#telusur-mesin` di index.html). Menampilkan nama satu orang di posisi yang acak
+   akan dibaca seolah itu alamat sungguhannya — salah yang berbahaya.
+2. Rute PII (`/v1/mesin/:engine`) dibatasi `piiLimiter` 30/menit. Hover bergerak lewat
+   ribuan titik dalam hitungan detik; memicu rute itu per hover akan menembak batas
+   itu dalam satu gerakan mouse yang tidak disengaja.
+3. Aturan proyek: tiap akses PII wajib tercatat `access_log`. Mencatat gerakan mouse
+   yang lewat begitu saja mencemari log yang seharusnya jadi jejak audit sungguhan.
+**Alternatif yang ditolak:** (a) Hover memicu pencarian PII per-titik seperti Telusur
+Nomor Mesin — ditolak, tiga alasan di atas. (b) Klik (bukan hover) untuk memicu
+pencarian PII — juga ditolak untuk sesi ini: titik-titik itu tidak membawa nomor mesin
+sama sekali, jadi "klik untuk melihat satu orang" tidak bisa dijalankan tanpa mengubah
+arsitektur scatter-titik yang sengaja anonim.
+**Konsekuensi:** Fitur "Telusur Nomor Mesin" (index.html `#telusur-mesin`) tetap
+satu-satunya jalan sah melihat data satu orang — sengaja butuh KETIKAN nomor mesin,
+bukan sekadar arahan kursor, dan sudah lewat `piiLimiter` + `access_log`. Golongan
+(segment breakdown) juga TIDAK ada di tooltip — itu butuh agregasi per-segmen baru di
+backend yang tidak dikerjakan sesi ini (lihat ROADMAP "Utang 2026-09-18"). Kalau tim
+tetap menginginkan versi penuh setelah memahami risikonya, itu keputusan eksplisit
+terpisah yang belum diambil, dan mengambilnya berarti memikirkan ulang arsitektur
+titik yang sengaja anonim ini dulu — bukan cuma mengubah tooltipnya.
+
+## [2026-09-18] Matriks/Peringkat Kota/Peringkat Dealer: sorot baris yang cocok, bukan saring jadi satu baris
+
+**Konteks:** Sejak filter disatukan (2026-09-17), memilih Kares/Kota/Dealer membuat
+`fetchMatriks()`/`fetchPeringkat()` menyaring server-side dan MENYISAKAN SATU BARIS di
+ketiga blok ini — kehilangan konteks (di mana posisi kota/dealer itu dibanding yang
+lain) tepat saat orang paling butuh perbandingan itu.
+**Keputusan:** `fetchMatriks()`/`fetchPeringkat()` sekarang selalu diminta dengan
+PERIODE SAJA (`fSemua = { periode: f.periode }`) — server selalu mengembalikan baris
+LENGKAP. Baris yang cocok dengan filter Kota/Kares/Dealer yang aktif disorot (latar
+amber, kelas `fx-sorot`) dan di-scroll otomatis ke pandangan lewat
+`element.scrollIntoView({ block: 'nearest' })`, dihitung ulang dari state filter tiap
+render (bukan disimpan sebagai flag terpisah) — jadi otomatis bertahan sampai filter
+diganti/dihapus tanpa state tambahan yang bisa tidak sinkron.
+**Alasan:** Melihat SATU dealer sekaligus tahu peringkatnya dibanding yang lain adalah
+kebutuhan yang lebih umum daripada melihat satu baris terisolasi.
+**Alternatif yang ditolak:** Menyaring TAPI menambah baris "peringkat kamu: #12 dari
+49" di luar tabel — ditolak, dua sumber tampilan (tabel tersaring + teks ringkasan)
+untuk fakta yang sama, salah satunya bisa menyimpang.
+**Konsekuensi WAJIB, bukan pilihan:** batas 25 baris di `daftarPeringkat()` DIHAPUS
+seluruhnya. Kalau tidak, baris yang seharusnya disorot bisa jatuh di luar 25 teratas
+dan TIDAK PERNAH tergambar — bertentangan langsung dengan tujuan fitur ini.
+`matriks()` juga tidak lagi memotong/mengurutkan sendiri; pembungkus
+`overflow-y-auto`/`max-height:230px` miliknya dibuang karena `#fx-matriks` (index.html)
+sudah punya `overflow-y-auto` sendiri — dua scrollbox bersarang cuma memotong ruang
+yang sudah ada (permintaan terpisah tim, "jangan dibatasi 10 baris").
+**Bug yang lahir dari perubahan ini, sudah diperbaiki (lihat commit `46c8233`):**
+percobaan pertama membuang field `pos` dari `fusionFilter()` (filters.js) langsung
+untuk permintaan "hapus filter Pos khusus Confidence Fusion" — ikut mematikan
+saringan Pos untuk titik tiga sumber di peta Sales Analytics, yang memakai fungsi
+yang sama dan tidak pernah diminta berubah. Pelajarannya: fungsi bersama yang
+dipakai lebih dari satu halaman tidak boleh diubah untuk kebutuhan SATU halaman
+saja — pembuangannya dipindah ke `renderFusion()` sendiri, satu-satunya pemanggil
+yang benar-benar perlu membuangnya.

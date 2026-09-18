@@ -211,10 +211,92 @@ cuma perluasan ke Sulawesi ke timur.
     filter sudah dipakai bersama sejak 2026-09-17. Namanya saja yang diganti.
   - Pengiriman belum masuk checklist Periode Tersimpan — sengaja, sampai ada ping
     pertama (tanpa itu setiap bulan terbaca "3 dari 4").
+- **Utang dari sesi 2026-09-18, dicatat bukan diperbaiki:**
+  - **Hover titik KTP/Servis/Pengiriman cuma menampilkan AGREGAT**, bukan data per
+    orang (nama, nomor mesin, riwayat servis/pengiriman) seperti yang diminta
+    secara harfiah. Sengaja — tiga alasan keamanan/privasi ada di entri "Selesai"
+    di bawah. Kalau tim tetap menginginkan versi penuh setelah memahami risikonya
+    (posisi titik acak dibaca seolah alamat sungguhan, piiLimiter tertembak dalam
+    hitungan detik, access_log tercemar gerakan mouse), itu keputusan eksplisit
+    yang belum diambil — dan kalau diambil, arsitektur titiknya sendiri (yang
+    sengaja TIDAK membawa nomor mesin, docs/FUSION.md 3.1) perlu dipikirkan ulang
+    dulu, bukan cuma tooltipnya.
+  - Golongan (segment breakdown) TIDAK ada di tooltip hover titik peta — hanya
+    dealer/kelurahan/tiga hitungan sumber. Menambahkannya butuh agregasi
+    per-segmen baru di backend (source_overlap sudah punya kolom `segment`, tapi
+    fusionVillagePoints() belum mengembalikannya per bucket); tidak dikerjakan
+    sesi ini karena risiko SQL baru yang terburu-buru lebih besar daripada
+    manfaatnya untuk satu sesi yang sudah sangat padat.
+  - Seluruh tata letak grid 12x12 revisi 2026-09-18 (lima blok baru/berubah
+    posisi) belum diverifikasi MUAT TANPA GULIR di layar sungguhan — cuma
+    diverifikasi lewat penjaga string kelas Tailwind, bukan rendering nyata.
 
 ---
 
 ## Selesai
+
+### Dua belas perapian Confidence Fusion: grid direvisi, sorot bukan saring, hover agregat, skala zoom (2026-09-18)
+
+Enam commit, `2b6f873` sampai `64b968d`, 44 → **47/47 berkas tes**. Permintaan tim
+sebanyak dua belas butir, semuanya soal halaman Confidence Fusion dan peta yang
+dipakai bersama Sales Analytics.
+
+- **Grid 12x12 direvisi lagi**: pita kiri 7→5 kolom, Matriks 3→4 kolom, Peringkat
+  Dealer 2→3 kolom (permintaan "lebih lebar kanan-kiri"). Peta 7→4 baris — sengaja
+  dikorbankan supaya Golongan Final dan Venn, yang sekarang **dua blok terpisah**
+  (dulu satu blok bermode-dua), sama-sama dapat ruang tanpa gulir. Golongan Final
+  sendiri jadi pie kiri + legenda kanan (dulu ditumpuk atas-bawah). Empat kartu KPI
+  (KPI baru: "Cakupan Sumber") dipadatkan jadi grid 2x2 bersarang, bukan sebaris.
+- **Matriks/Peringkat Kota/Peringkat Dealer: sorot, bukan saring lagi.** Dulu
+  memilih Kares/Kota/Dealer membuat ketiganya cuma menyisakan SATU baris. Sekarang
+  `fetchMatriks()`/`fetchPeringkat()` selalu diminta PERIODE SAJA — baris LENGKAP
+  (49 kota, ~78 dealer) selalu tampil, dan yang cocok dengan filter aktif disorot
+  (latar amber) + di-scroll otomatis ke pandangan, bertahan sampai filter diganti.
+  Konsekuensi wajib: batas 25 baris di `daftarPeringkat()` dan pembungkus
+  overflow/max-height sendiri di `matriks()` DIHAPUS — kalau tidak, baris yang
+  seharusnya disorot bisa jatuh di luar batas dan tidak pernah tergambar.
+- **Urutkan Confidence Ratio**: tombol baru di kedua blok, bawaan ASCENDING
+  (confidence terendah — paling perlu perhatian — dulu). Baris yang confidence-nya
+  tidak bisa dihitung selalu di ujung, arah mana pun.
+- **Filter Pos dihapus dari lima panel Confidence Fusion** (Pelanggan
+  Terfilter/CW Sales/Confidence Ratio/Venn/Cakupan Sumber). **Bug yang saya buat
+  sendiri lalu diperbaiki di commit terpisah (`46c8233`)**: percobaan pertama
+  membuang field `pos` dari `fusionFilter()` (filters.js) langsung — itu ikut
+  mematikan saringan Pos untuk titik tiga sumber di peta Sales Analytics, yang
+  memakai fungsi yang sama dan tidak pernah diminta berubah. Diperbaiki dengan
+  memindahkan pembuangannya ke `renderFusion()` (fusion.js) sendiri.
+- **Kata "Kabupaten" dihapus dari SELURUH tampilan sistem**, tetap terbaca dari
+  impor: `displayCityName()` (dom.js) memangkas awalan itu (bukan "Kota ") di satu
+  titik pusat (app.js, saat data desa diindeks) plus di render Confidence Fusion
+  sendiri (sumber datanya API terpisah).
+- **Legenda peta "Dynamic Relative Tiering"**: lima label Inggris
+  (bottom/lower/.../top) diganti Indonesia + WARNA TEKS (Terbawah merah ... kelas
+  terbaik diberi nama "Hijau", bukan "Teratas" — permintaan tim). Simbol Titik
+  Servis diganti kotak (mengikuti bentuk sungguhan di peta). Mode heatmap bawaan
+  diperiksa — sudah benar sejak awal, tidak ada yang diubah.
+- **Titik dealer/pos ikut skala zoom** (dekat besar, jauh kecil) — marker DOM,
+  jadi butuh fungsi JS sendiri (`skalaMarkerZoom()`) yang meniru gaya interpolasi
+  lapisan circle/symbol lain, ditulis ke custom property CSS `--zoom-scale`.
+- **Flyout "Data" bisa dibuka lewat hover**, menyusul Master dan Import yang
+  sudah bisa lebih dulu — sebelumnya sengaja dibiarkan klik-saja.
+- **Hover di titik KTP/Servis/Pengiriman: info AGREGAT, BUKAN data per orang** —
+  **penyimpangan sengaja dari permintaan tim yang harfiah** (diminta: nama, nomor
+  mesin, riwayat servis/pengiriman PER ORANG). Yang dibuat: dealer, kelurahan, dan
+  jumlah KTP/Servis/Pengiriman di titik itu. Tiga alasan keamanan/privasi, bukan
+  selera: (1) posisi titik ACAK di dalam kelurahan — menampilkan nama satu orang di
+  situ membuat posisi acak terbaca seolah alamat sungguhan; (2) hover bergerak
+  lewat ribuan titik dalam hitungan detik — kalau memicu rute PII, `piiLimiter`
+  (30/menit) habis oleh gerakan mouse yang tidak disengaja; (3) tiap akses PII
+  wajib tercatat `access_log`, dan mencatat gerakan mouse mencemari log yang
+  seharusnya jadi jejak audit sungguhan. **Kalau tim tetap menginginkan versi
+  penuh setelah memahami risikonya, itu keputusan eksplisit terpisah yang belum
+  diambil.**
+
+**Belum dilihat di browser**, sama seperti giliran sebelumnya: seluruh perubahan
+di atas dibuktikan lewat tes teruji mutasi dan pemeriksaan struktur, bukan klik di
+layar. Yang paling perlu dicoba: tata letak grid baru muat tanpa gulir di ukuran
+layar sungguhan, sorot+auto-scroll benar-benar terlihat, warna teks legenda, dan
+tooltip hover titik peta.
 
 ### Tujuh perbaikan + akses internet: warna KTP, peta ikut LIVE, grid 12×12, klik-untuk-menyaring, periode ping (2026-09-17 sesi malam)
 
