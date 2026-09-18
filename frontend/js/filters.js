@@ -181,6 +181,28 @@ export function fusionFilter(f) {
 }
 
 /**
+ * Saringan untuk TITIK TIGA SUMBER di peta, satu-satunya bentuk yang boleh dipakai
+ * `muatTitikFusi()` dan `tandaSaringPeta()` (map.js).
+ *
+ * Bedanya dengan fusionFilter() apa adanya cuma satu: di halaman Confidence Fusion,
+ * `pos` DIBUANG. Pil Pos disembunyikan di halaman itu (syncFilterBar(), filter-bar.js
+ * — permintaan tim 2026-09-18), dan kendali yang tidak terlihat TAPI tetap menyaring
+ * lebih membingungkan daripada tidak dihapus sama sekali: orang melihat titik yang
+ * lebih sedikit tanpa satu pun petunjuk kenapa. Di Sales Analytics pilnya ada, jadi
+ * pos tetap berlaku penuh di sana.
+ *
+ * WAJIB dipakai untuk KEDUANYA — tanda tangan cache maupun permintaannya. Kalau tanda
+ * tangan dihitung dari objek yang berbeda dengan yang dikirim, pindah halaman tidak
+ * menginvalidasi cache dan titiknya diam saja: bug yang sudah sekali terjadi di
+ * proyek ini (lihat catatan "PERCOBAAN PERTAMA" di fusionFilter() di atas).
+ */
+export function fusionFilterPeta() {
+  const f = fusionFilter(pageFilters('peta'));
+  if (S.filterPage === 'fusion') f.pos = null;
+  return f;
+}
+
+/**
  * Persentase kepemilikan sumber, dibulatkan untuk dibaca orang.
  *
  * Nol pembagi mengembalikan null, BUKAN 0: "0%" berarti "diukur, hasilnya nol",

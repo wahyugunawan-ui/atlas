@@ -213,6 +213,19 @@ export function syncFilterBar() {
 
   setComboValue('kares', f.kares);
   SCOPE_KINDS.forEach((kind) => setComboValue(kind, scopeValue(kind, f)));
+
+  // Pos TIDAK berlaku di Confidence Fusion (permintaan tim 2026-09-18), jadi pilnya
+  // disembunyikan di sana — bukan dibiarkan tampil tapi tidak berefek. Presedennya
+  // #fx-kendali di switchTab() (tables.js): kendali yang cuma berarti di satu halaman
+  // memang disembunyikan di halaman lain.
+  //
+  // Nilainya sengaja TIDAK direset. Filter dipakai bersama antar halaman sejak
+  // 2026-09-17; mengosongkan Pos di sini berarti pilihan orang di Sales Analytics
+  // hilang cuma karena ia sempat menengok halaman sebelah. Yang dibuang cuma
+  // PENGARUHNYA selama di halaman ini — lihat fusionFilterPeta() (filters.js) untuk
+  // titik peta, dan renderFusion() (fusion.js) untuk kelima panelnya.
+  const pilihPos = $('pilih-pos');
+  if (pilihPos) pilihPos.classList.toggle('hidden', S.filterPage === 'fusion');
 }
 
 /**

@@ -87,3 +87,32 @@ export function displayCityName(name) {
   return s.replace(/^kabupaten\s+/i, '').trim();
 }
 
+/**
+ * Nama kota untuk ditampilkan, dengan jalan keluar waktu namanya memang tidak ada.
+ *
+ * Tabel wilayah proyek ini hanya memuat Jateng + DIY. Pelanggan ber-KTP Jakarta,
+ * Tangerang, atau Bandung yang membeli di wilayah cakupan TETAP masuk hitungan —
+ * kotanya nyata, cuma namanya tidak pernah di-seed. Sampai 2026-09-18 baris seperti
+ * itu tampil sebagai kode telanjang ("31.74", "36.73") di Matriks dan Peringkat Kota,
+ * dan pengguna non-IT membacanya sebagai data rusak, bukan sebagai kota luar daerah.
+ *
+ * Kodenya TETAP disebut, tidak disembunyikan: itu satu-satunya pegangan kalau suatu
+ * saat ada yang perlu menelusuri baris itu. Barisnya juga tidak dibuang — penjualan
+ * ke luar daerah tetap penjualan, dan membuangnya diam-diam akan membuat total di
+ * layar tidak cocok dengan total di panel lain.
+ *
+ * Kalimatnya sengaja SAMA PERSIS dengan yang sudah dipakai panel Cakupan Sumber
+ * (`namaBaris()` di fusion.js), yang lebih dulu memecahkan masalah yang sama untuk
+ * panelnya sendiri. Satu keadaan data seharusnya punya satu sebutan di seluruh
+ * layar; dua kalimat berbeda untuk hal yang sama membuat orang mengira itu dua hal.
+ *
+ * @param {string|null} name nama kota dari server; kosong/null untuk luar cakupan
+ * @param {string|null} code kode BPS kota (bertitik), dipakai kalau namanya kosong
+ */
+export function labelKota(name, code) {
+  const bersih = displayCityName(name);
+  if (bersih) return bersih;
+  const kode = String(code ?? '').trim();
+  return kode ? `Luar cakupan (${kode})` : '—';
+}
+
