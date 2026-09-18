@@ -4155,3 +4155,84 @@ yang sama dan tidak pernah diminta berubah. Pelajarannya: fungsi bersama yang
 dipakai lebih dari satu halaman tidak boleh diubah untuk kebutuhan SATU halaman
 saja — pembuangannya dipindah ke `renderFusion()` sendiri, satu-satunya pemanggil
 yang benar-benar perlu membuangnya.
+
+## [2026-09-18, sore] Info pelanggan di titik peta JADI dibuat — pemicunya yang menyelesaikan keberatannya
+
+**MENGGANTIKAN** entri "[2026-09-18] Hover di titik peta KTP/Servis/Pengiriman:
+agregat saja, bukan data per orang" di atas. Entri itu TIDAK dihapus — ia mencatat
+alasan yang saat itu benar, dan yang berubah bukan alasannya melainkan bentuk
+pemicunya.
+
+**Konteks:** Pagi itu saya mempersempit permintaan tim jadi tooltip agregat, dengan
+tiga keberatan: (1) posisi titik acak akan dibaca sebagai alamat rumah, (2) hover
+menembak `piiLimiter` (30/menit) dalam hitungan detik, (3) `access_log` tercemar
+gerakan mouse yang tidak disengaja. Tim menegaskan ulang permintaannya dan sekaligus
+menentukan pemicunya sendiri: "bukan saat sekali lewat, melainkan misal jika bertahan
+3 detik atau saat klik".
+
+**Keputusan:** Dibuat penuh, dua tingkat.
+- *lewat begitu saja* → tooltip agregat (dealer, kelurahan, jumlah tiga sumber).
+  Seluruh isinya sudah ada di browser; nol permintaan ke server.
+- *klik atau diam 3 detik* → daftar pelanggan kantong (kelurahan, dealer) itu: nama,
+  nomor mesin, golongan, jejak servis/kirim. Satu baris → riwayat lengkapnya lewat
+  `isiTelusur()` yang sudah dipakai Telusur Nomor Mesin.
+
+**Alasan:** Pemicu yang ditentukan tim menyelesaikan keberatan (2) dan (3) secara
+langsung — satu perbuatan yang disengaja = satu permintaan = satu baris log, bukan
+satu per gerakan mouse. Keberatan (1) diselesaikan BENTUK panelnya: yang ditampilkan
+daftar orang di kelurahan+dealer itu, bukan pengakuan tahu siapa yang tinggal di
+koordinat yang diklik. Koordinat itu memang bukan alamat siapa-siapa, dan panelnya
+tidak berpura-pura sebaliknya.
+
+**Yang TIDAK berubah, dan ini pokoknya:** titik peta tetap anonim. Muatan peta
+melintasi seluruh wilayah cakupan sekaligus — menaruh nomor mesin di sana sama saja
+menaruh seluruh basis data konsumen di browser. Titik cuma membawa kelurahan +
+dealer; identitas selalu diminta terpisah, satu kantong per permintaan, lewat rute
+ber-pagar `/v1/kelurahan/:village/pelanggan` (`piiLimiter` + `logCustomerAccess`,
+`village` sebagai parameter path supaya tidak mungkin dihilangkan, batas keras 200).
+
+**Alternatif yang ditolak:** (a) Menaruh `engine_no` di properti fitur peta supaya
+klik langsung tahu satu orang — ditolak, itu persis vektor penyedotan yang dicegah
+arsitektur ini. (b) Hover biasa memicu rute PII — ditolak, alasan (2) dan (3) di atas
+masih berlaku penuh untuk pemicu itu. (c) Pewaktu dikunci ke fitur titik, bukan ke
+kantong — ditolak setelah dipikir: satu kantong digambar sebagai banyak titik acak,
+jadi hitungan mundur akan mulai dari nol tiap gerakan kursor dan pemicunya tidak akan
+pernah menyala.
+
+**Konsekuensi:** `kunciBucket()` (map.js) jadi aturan "masih di kantong yang sama?"
+dan diuji terpisah. Pewaktu dibatalkan di `mouseleave`, `movestart`, dan `zoomstart`.
+Kantong yang sedang dibuka disimpan sebagai PERTANYAANNYA, bukan jawabannya — barisnya
+PII, dan "kembali ke daftar" mengambil ulang supaya aksesnya tercatat lagi.
+Dijaga `test/fusion-village-customers.test.js` dan penjaga rute PII baru di
+`test/hardening.test.js`.
+
+## [2026-09-18, sore] CSS hasil bangun adalah titik kegagalan senyap, dan sekarang dijaga tes
+
+**Konteks:** Halaman Confidence Fusion hancur total di browser tim — kartu menumpuk,
+peta menciut. Sebabnya bukan tata letaknya: `frontend/css/app.css` adalah hasil
+`npm run css`, sengaja di luar git, dan tidak dibangun ulang setelah `index.html`
+ditulis ulang. Enam kelas penempatan tidak ada di CSS yang disajikan, jadi tiap blok
+jatuh ke aliran otomatis. **Seluruh 47 berkas tes hijau** sementara halamannya tidak
+bisa dibaca sama sekali.
+
+**Keputusan:** `test/css-terbangun.test.js` mengumpulkan kelas PENEMPATAN
+(`col/row-start/span`, `grid-cols/rows`, `gap`) dari `index.html` dan seluruh modul
+`frontend/js`, lalu memastikan selektornya ada di `app.css` yang terbangun.
+
+**Alasan:** Kelas yang hilang tidak menimbulkan error, tidak membuat tes merah, dan
+tidak meninggalkan gejala apa pun di sisi kode — cuma layar yang berantakan, yang
+baru ketahuan kalau ada manusia membukanya. Kelas kegagalan seperti itu justru yang
+paling butuh penjaga otomatis.
+
+**Alternatif yang ditolak:** (a) Membandingkan waktu ubah `app.css` dengan
+`index.html` — ditolak, mtime berubah sendiri saat `git checkout` dan penjaganya akan
+merah tanpa sebab lalu dimatikan orang. (b) Memeriksa SEMUA kelas Tailwind — ditolak,
+ribut oleh nilai arbitrer (`text-[11px]`) dan kelas komponen buatan sendiri
+(`fx-mode`); penjaga yang berisik tidak menjaga apa pun. (c) Memasukkan `app.css` ke
+git — ditolak, hasil bangun di git selalu berakhir konflik dan basi.
+
+**Konsekuensi:** Lingkupnya sengaja sempit — kelas warna yang hilang membuat halaman
+jelek, kelas penempatan yang hilang membuat halaman tidak terbaca. Titik di-escape di
+CSS (`gap-1.5` → `.gap-1\.5`, `xl:col-span-2` → `.xl\:col-span-2`), dan pencocokan
+yang lupa itu memberi false negative — saya sendiri tertipu persis di situ waktu
+mendiagnosis, jadi jebakannya ditulis di komentar berkasnya.

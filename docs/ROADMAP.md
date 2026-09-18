@@ -211,29 +211,71 @@ cuma perluasan ke Sulawesi ke timur.
     filter sudah dipakai bersama sejak 2026-09-17. Namanya saja yang diganti.
   - Pengiriman belum masuk checklist Periode Tersimpan — sengaja, sampai ada ping
     pertama (tanpa itu setiap bulan terbaca "3 dari 4").
-- **Utang dari sesi 2026-09-18, dicatat bukan diperbaiki:**
-  - **Hover titik KTP/Servis/Pengiriman cuma menampilkan AGREGAT**, bukan data per
-    orang (nama, nomor mesin, riwayat servis/pengiriman) seperti yang diminta
-    secara harfiah. Sengaja — tiga alasan keamanan/privasi ada di entri "Selesai"
-    di bawah. Kalau tim tetap menginginkan versi penuh setelah memahami risikonya
-    (posisi titik acak dibaca seolah alamat sungguhan, piiLimiter tertembak dalam
-    hitungan detik, access_log tercemar gerakan mouse), itu keputusan eksplisit
-    yang belum diambil — dan kalau diambil, arsitektur titiknya sendiri (yang
-    sengaja TIDAK membawa nomor mesin, docs/FUSION.md 3.1) perlu dipikirkan ulang
-    dulu, bukan cuma tooltipnya.
-  - Golongan (segment breakdown) TIDAK ada di tooltip hover titik peta — hanya
-    dealer/kelurahan/tiga hitungan sumber. Menambahkannya butuh agregasi
-    per-segmen baru di backend (source_overlap sudah punya kolom `segment`, tapi
-    fusionVillagePoints() belum mengembalikannya per bucket); tidak dikerjakan
-    sesi ini karena risiko SQL baru yang terburu-buru lebih besar daripada
-    manfaatnya untuk satu sesi yang sudah sangat padat.
-  - Seluruh tata letak grid 12x12 revisi 2026-09-18 (lima blok baru/berubah
-    posisi) belum diverifikasi MUAT TANPA GULIR di layar sungguhan — cuma
-    diverifikasi lewat penjaga string kelas Tailwind, bukan rendering nyata.
+- **Utang dari sesi 2026-09-18, sesudah putaran kedua sore itu:**
+  - ~~Hover titik cuma agregat~~ **SUDAH, dengan bentuk yang berbeda.** Tim
+    menegaskan ulang permintaannya dan menentukan pemicunya sendiri (klik atau diam
+    3 detik), dan pemicu itu yang menyelesaikan keberatan saya. Sekarang dua
+    tingkat: hover = tooltip agregat gratis, klik/3 detik = daftar pelanggan
+    kantong itu lalu rincian penuh per orang. Lihat DECISIONS 2026-09-18 (entri
+    kedua, yang menggantikan entri pertama).
+  - Golongan per orang SUDAH ada di daftar kantong (dari `customer_fusion.segment`),
+    tapi **tooltip hover-nya sendiri tetap tanpa rincian golongan** — itu masih
+    butuh agregasi per-segmen di `fusionVillagePoints()`. Tidak dikerjakan; nilainya
+    kecil sekarang karena golongan sudah terbaca satu tingkat di bawahnya.
+  - **Tata letak grid 12x12 masih belum diverifikasi di layar sungguhan.** Ukuran
+    kartu KPI dirampingkan berdasarkan PERHITUNGAN dari tangkapan layar tim (±67 px
+    per kartu di layar 2000 CSS px), bukan pengukuran. Kalau layar orang lain lebih
+    pendek, kartunya bisa meluber lagi.
+  - Pewaktu 3 detik belum pernah dijalankan di browser: yang teruji cuma aturan
+    kuncinya (kunciBucket), bukan bahwa `setTimeout` benar-benar matang di tengah
+    gerakan kursor nyata.
+  - Rute PII baru `/v1/kelurahan/:village/pelanggan` belum pernah ditembak lewat
+    HTTP sungguhan — yang teruji fungsi repository-nya dan keberadaan pagarnya di
+    sumber, bukan jawabannya di jaringan.
 
 ---
 
 ## Selesai
+
+### Halaman hancur karena CSS basi, plus POS/kota luar cakupan dan info pelanggan per titik (2026-09-18, putaran kedua)
+
+Tiga commit, `e277fe1` sampai `2b1dd52`, 47 → **49/49 berkas tes**.
+
+Tim mengirim tangkapan layar: halaman Confidence Fusion **hancur** — kartu KPI
+menumpuk, peta menciut jadi sepotong, blok Matriks memanjang sempit.
+
+- **Sebabnya CSS hasil bangun yang basi, bukan tata letaknya.**
+  `frontend/css/app.css` di luar git dan terakhir dibangun 17 Sep 21:00, sebelum
+  `index.html` ditulis ulang. Enam kelas grid (`col-span-5`, `col-span-4`,
+  `col-start-10`, `row-span-4`, `row-start-7`, `grid-rows-2`) tidak ada di CSS
+  yang dikirim ke browser, jadi tiap blok jatuh ke aliran otomatis. Markupnya
+  benar sejak awal. **Seluruh 47 tes hijau sementara halamannya tidak terbaca** —
+  itu yang membuat kegagalan ini pantas dijaga, bukan kesalahannya sendiri.
+  `test/css-terbangun.test.js` baru menjaga 35 kelas penempatan dari index.html
+  dan seluruh modul JS.
+- **Pil POS dihilangkan dari Confidence Fusion** — giliran sebelumnya baru
+  membuang pos dari pengambilan datanya, kendalinya masih terpampang. Sekalian
+  titik peta di halaman itu berhenti menyaring pakai pos lewat `fusionFilterPeta()`
+  (kendali tak terlihat yang tetap menyaring lebih membingungkan daripada tidak
+  dihapus). Nilainya tidak direset — pilihan di Sales Analytics tetap utuh.
+- **Kota luar cakupan dijelaskan**: "Luar cakupan (31.74)", bukan kode telanjang.
+  Kalimatnya sama persis dengan yang sudah dipakai panel Cakupan Sumber.
+- **Kartu KPI dirampingkan** supaya muat di pita 2 baris tanpa gulir.
+- **Info pelanggan per titik peta SELESAI PENUH** (butir yang sesi pagi saya
+  persempit). Dua tingkat: hover memberi tooltip agregat tanpa biaya, klik atau
+  diam 3 detik membuka daftar pelanggan kantong itu, dan satu baris membuka
+  riwayat lengkapnya lewat `isiTelusur()` yang sudah ada. Rute PII baru
+  `/v1/kelurahan/:village/pelanggan` ber-`piiLimiter` dan tercatat; titik petanya
+  sendiri tetap anonim.
+- **Penjaga struktural rute PII** di `test/hardening.test.js`: tiap rute yang
+  menyentuh fungsi repository ber-PII wajib punya `piiLimiter` DAN
+  `logCustomerAccess`. Menjaga 4 rute, termasuk yang sudah ada sebelumnya — belum
+  pernah ada penjaga seperti ini.
+
+**Dua mutasi sempat selamat** waktu menguji `fusionVillageCustomers`, dan keduanya
+kelemahan tes saya: batas 200 diperiksa pada data enam baris, dan penjagaan
+"database PII tidak ada" tidak pernah dijalankan tanpa database PII. Diperbaiki
+dengan 250 baris sungguhan dan `dropCustomerDatabase()`.
 
 ### Dua belas perapian Confidence Fusion: grid direvisi, sorot bukan saring, hover agregat, skala zoom (2026-09-18)
 
