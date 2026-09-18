@@ -51,7 +51,8 @@ import {
   openDealerEditor, closeDealerEditor, saveDealerEditor, deleteDealerConfirm,
 } from './tables.js';
 import {
-  bukaTelusurMesin, cariCakupan, filterDariFusi, kirimPage, renderDeliveryTable,
+  bukaDaftarTitik, bukaTelusurMesin, bukaTelusurMesinDari,
+  cariCakupan, filterDariFusi, kembaliKeDaftarTitik, kirimPage, renderDeliveryTable,
   renderFusion,
   renderServiceTable, servisPage, setKpiServis, setModeMatriks,
   toggleCakupanPanel, toggleSortDealer, toggleSortMatriks,
@@ -97,6 +98,9 @@ const HANDLERS = {
   toggleSumberCakupan, cariCakupan, bukaTelusurMesin, tutupTelusurMesin,
   setModeMatriks, filterDariFusi, toggleCakupanPanel, toggleLiveFusion,
   toggleSortMatriks, toggleSortDealer,
+  // Panel titik peta. bukaDaftarTitik dipanggil map.js lewat window (import balik ke
+  // fusion.js akan membuat lingkaran modul); dua sisanya dari onclick markup.
+  bukaDaftarTitik, bukaTelusurMesinDari, kembaliKeDaftarTitik,
   editDealerRingFromTable, editPosCoverageFromTable,
   openNewOutlet, closeNewOutlet, newOutletDealerChanged, saveNewOutlet,
   askResetOutlets, closeResetOutlets, resetOutletsTyped, confirmResetOutlets,

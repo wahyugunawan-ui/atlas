@@ -232,6 +232,23 @@ export function fetchPengiriman(filter) {
 export const fetchEngineDetail = (engineNo) =>
   request(`${API}v1/mesin/${encodeURIComponent(engineNo)}`);
 
+/**
+ * Daftar pelanggan satu kantong (kelurahan, dealer) di balik satu titik peta.
+ *
+ * RUTE PII — dibatasi laju dan dicatat di server, jadi ia HANYA boleh dipanggil dari
+ * perbuatan yang disengaja (klik titik, atau berhenti 3 detik di atasnya), tidak
+ * pernah dari gerakan kursor biasa. Lihat komentar rutenya di routes.js.
+ */
+export function fetchVillageCustomers(village, opsi) {
+  const o = opsi || {};
+  const q = new URLSearchParams();
+  if (o.dealer) q.set('dealer', o.dealer);
+  if (o.periode) q.set('periode', o.periode);
+  const tanya = q.toString();
+  return request(`${API}v1/kelurahan/${encodeURIComponent(village)}/pelanggan${
+    tanya ? `?${tanya}` : ''}`);
+}
+
 export function fetchDistricts() {
   return request(`${API}districts`);
 }

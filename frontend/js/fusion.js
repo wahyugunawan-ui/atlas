@@ -18,7 +18,7 @@
  */
 import {
   fetchCakupanSumber, fetchEngineDetail, fetchIrisan, fetchMatriks, fetchPeringkat,
-  fetchPengiriman, fetchSegmentation, fetchServis,
+  fetchPengiriman, fetchSegmentation, fetchServis, fetchVillageCustomers,
 } from './api.js';
 import {
   formatJarak, jangkauanDiagram, kalimatAlasan, titikRelatif,
@@ -27,7 +27,7 @@ import {
 import {
   fitToScope, gambarTelusurDiPeta, hapusTelusurDiPeta, refreshMapVisual,
 } from './map.js';
-import { $, displayCityName, esc, formatNumber } from './dom.js';
+import { $, displayCityName, esc, formatNumber, labelKota } from './dom.js';
 import { ALLOWED_CITY_CODES, KARESIDENAN } from './config.js';
 import { fusionFilter, kotaBerikutnya, pageFilters, persenSumber, setScope } from './filters.js';
 import { S } from './state.js';
@@ -51,24 +51,39 @@ const WARNA_STATUS = {
   sehat: 'text-emerald-600', waspada: 'text-amber-600', berisiko: 'text-red-600',
 };
 
+/**
+ * Kartu KPI angka.
+ *
+ * DIRAMPINGKAN 2026-09-18 (`p-3`→`p-2`, `text-xl`→`text-lg`, `mt-0.5` dibuang): pita
+ * KPI cuma 2 dari 12 baris grid dan memuat 2x2 kartu, jadi tiap kartu dapat ±67 px.
+ * Ukuran lama butuh ±75 px — meluber, dan permintaannya eksplisit "tanpa scroll".
+ * Angkanya tetap paling menonjol di kartu; yang hilang cuma kelegaan yang tidak ada
+ * ruangnya.
+ */
 function kartuKpi(label, angka, sub, warna) {
-  return `<div class="bg-white rounded-xl border border-slate-200 p-3 flex-1 min-w-0">` +
+  return `<div class="bg-white rounded-xl border border-slate-200 p-2 flex-1 min-w-0 overflow-hidden">` +
     `<div class="text-[10px] uppercase font-bold text-slate-400 tracking-wide truncate">${esc(label)}</div>` +
-    `<div class="text-xl font-extrabold text-slate-800 mono leading-tight mt-0.5">${esc(angka)}</div>` +
-    `<div class="text-[10px] font-bold ${warna || 'text-slate-400'} truncate">${esc(sub)}</div></div>`;
+    `<div class="text-lg font-extrabold text-slate-800 mono leading-tight truncate" ` +
+    `title="${esc(angka)}">${esc(angka)}</div>` +
+    `<div class="text-[10px] font-bold ${warna || 'text-slate-400'} truncate" ` +
+    `title="${esc(sub)}">${esc(sub)}</div></div>`;
 }
 
 /**
  * Kartu KPI ke-4: "Cakupan Sumber" — bukan ANGKA, tapi KALIMAT ("Karesidenan Kedu ·
- * Dealer X"), jadi kartuKpi() TIDAK dipakai apa adanya: kolom angkanya di sana
- * `text-xl mono` dan TANPA `truncate`, cocok untuk "24.567" tapi meluber kalau
- * isinya kalimat. `line-clamp-2` di sini supaya kalimat panjang berhenti rapi,
- * bukan mendorong kartu lain di grid 2x2 jadi tidak sejajar.
+ * Dealer X"), jadi kartuKpi() TIDAK dipakai apa adanya: kolomnya di sana `mono`,
+ * cocok untuk "24.567" tapi salah untuk kalimat.
+ *
+ * `truncate` SATU BARIS, bukan `line-clamp-2` seperti versi pertama: tiap kartu di
+ * pita 2x2 cuma dapat ±67 px, dan kalimat dua baris membuat kartu ini lebih tinggi
+ * dari tiga tetangganya — persis ketidaksejajaran yang mau dihindari. Kalimat
+ * penuhnya tetap terbaca lewat `title` saat di-hover.
  */
 function kartuKpiTeks(label, teks, sub) {
-  return `<div class="bg-white rounded-xl border border-slate-200 p-3 flex-1 min-w-0 flex flex-col">` +
+  return `<div class="bg-white rounded-xl border border-slate-200 p-2 flex-1 min-w-0 flex flex-col overflow-hidden">` +
     `<div class="text-[10px] uppercase font-bold text-slate-400 tracking-wide truncate">${esc(label)}</div>` +
-    `<div class="text-sm font-extrabold text-slate-800 leading-snug mt-0.5 line-clamp-2">${esc(teks)}</div>` +
+    `<div class="text-sm font-extrabold text-slate-800 leading-snug truncate" ` +
+    `title="${esc(teks)}">${esc(teks)}</div>` +
     `<div class="text-[10px] font-bold text-slate-400 truncate mt-auto">${esc(sub)}</div></div>`;
 }
 
@@ -208,10 +223,12 @@ function matriks(data, sorotKota) {
       ? ` onclick="filterDariFusi('kota','${esc(r.cityCode)}')" title="Saring seluruh ` +
         `halaman ke kota ini" class="${kelasBaris} cursor-pointer hover:bg-blue-50"`
       : ` class="${kelasBaris}"`;
-    // displayCityName() DI SINI, bukan di server: baris ini juga dipakai klik-untuk-
+    // labelKota() DI SINI, bukan di server: baris ini juga dipakai klik-untuk-
     // menyaring (filterDariFusi memakai r.cityCode, bukan namanya), jadi kode kotanya
-    // wajib apa adanya sementara cuma teks yang tampil di layar yang dipangkas.
-    const namaKota = displayCityName(r.cityName) || r.cityCode || '—';
+    // wajib apa adanya sementara cuma teks yang tampil di layar yang dipangkas. Kota
+    // luar Jateng+DIY tidak punya nama di tabel wilayah dan dulu tampil sebagai kode
+    // telanjang — sekarang "Luar cakupan (31.74)".
+    const namaKota = labelKota(r.cityName, r.cityCode);
     return `<tr${klik}>` +
       `<td class="px-1 py-0.5 text-[10px] text-slate-700 truncate" style="max-width:130px" ` +
       `title="${esc(namaKota)}">${esc(namaKota)}</td>` +
@@ -461,6 +478,151 @@ function isiTelusur(detail) {
       `pribadi. Tiap pembukaan halaman ini tercatat di log akses server.</p>`;
 }
 
+/**
+ * Kantong titik peta yang sedang dibuka, supaya tombol "kembali ke daftar" tahu harus
+ * kembali ke mana tanpa meminta ulang ke server.
+ *
+ * Disimpan sebagai argumen, bukan hasilnya: barisnya PII, dan menyimpannya di variabel
+ * modul berarti nama-nama itu menggantung di memori halaman sampai tab ditutup. Yang
+ * disimpan cuma pertanyaannya — jawabannya diambil lagi, dan pengambilan ulang itu
+ * tercatat di access_log seperti seharusnya.
+ */
+let kantongTitikTerakhir = null;
+
+/** Satu baris pelanggan di daftar kantong titik. Semua nilai dari PII — WAJIB esc(). */
+function barisPelangganKantong(r) {
+  const golongan = SEGMENTS[r.segment];
+  const jejak = [];
+  if (Number(r.serviceCount) > 0) jejak.push(`${Number(r.serviceCount)}x servis`);
+  if (Number(r.deliveryCount) > 0) jejak.push(`${Number(r.deliveryCount)}x kirim`);
+
+  return `<button type="button" onclick="bukaTelusurMesinDari('${esc(r.engineNo)}')" ` +
+    `class="w-full text-left p-2 rounded-lg hover:bg-blue-50 border-b border-slate-100">` +
+    `<div class="flex items-baseline gap-2">` +
+      `<span class="text-[11px] font-bold text-slate-700 truncate flex-1">${
+        esc(r.name || 'Nama tidak ada di data KTP')}</span>` +
+      `<span class="text-[9px] font-bold shrink-0" style="color:${
+        golongan ? golongan.color : '#64748b'}">${
+        esc(golongan ? golongan.short : r.segment || '—')}</span>` +
+    `</div>` +
+    `<div class="text-[10px] text-slate-400 mono truncate">${esc(r.engineNo)}${
+      jejak.length ? ` · ${esc(jejak.join(' · '))}` : ''}</div>` +
+    `</button>`;
+}
+
+/**
+ * Isi panel untuk SATU kantong titik peta: daftar orang di kelurahan+dealer itu.
+ *
+ * Bukan satu orang, karena satu titik memang bukan satu orang — posisinya disebar ACAK
+ * di dalam kelurahan (fusion-points.js). Menampilkan satu nama di koordinat acak akan
+ * dibaca sebagai alamat rumah sungguhan, dan itu salah yang berbahaya, bukan sekadar
+ * tidak akurat. Yang jujur: "di kelurahan ini, dealer ini, ada orang-orang berikut".
+ */
+function isiDaftarKantong(kantong, rows) {
+  const desa = S.villageByCode[kantong.village];
+  const namaDesa = desa ? desa.name : (kantong.village || '—');
+  const namaKota = desa ? displayCityName(desa.cityName) : '';
+  const namaDealer = S.dealerNames[kantong.dealer] || kantong.dealer || 'dealer tidak dikenal';
+
+  const kepala = `<div class="text-[10px] font-bold uppercase tracking-wide text-slate-400">` +
+      `${esc(LABEL_TITIK_PANEL[kantong.jenis] || 'Titik peta')}</div>` +
+    `<div class="text-sm font-extrabold text-slate-900 pr-6">${esc(namaDesa)}${
+      namaKota ? `, ${esc(namaKota)}` : ''}</div>` +
+    `<div class="text-[11px] text-slate-500">${esc(namaDealer)}</div>`;
+
+  if (!rows.length) {
+    return kepala + `<p class="text-[11px] text-slate-400 mt-3">Tidak ada pelanggan yang ` +
+      `cocok di kantong ini.</p>`;
+  }
+
+  // Batas 200 dari server. Kalau kena, katakan — daftar yang diam-diam terpotong
+  // membuat orang menghitung dari layar dan mendapat angka yang salah.
+  const terpotong = rows.length >= 200
+    ? `<p class="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg ` +
+      `p-2 mt-2">Ditampilkan 200 teratas. Kantong ini punya lebih banyak.</p>`
+    : '';
+
+  return kepala +
+    `<p class="text-[10px] text-slate-400 mt-1">${esc(String(rows.length))} pelanggan · ` +
+      `klik satu baris untuk rinciannya</p>` + terpotong +
+    `<div class="mt-2">${rows.map(barisPelangganKantong).join('')}</div>` +
+    `<p class="text-[9px] text-slate-400 mt-3 pt-2 border-t border-slate-100">Data ` +
+      `pribadi. Tiap pembukaan daftar ini tercatat di log akses server.</p>`;
+}
+
+/** Nama jenis titik untuk kepala panel. Sengaja terpisah dari legenda Opsi Peta. */
+const LABEL_TITIK_PANEL = {
+  ktp: 'Titik KTP', servis: 'Titik Servis', kirim: 'Titik Pengiriman',
+};
+
+/**
+ * Buka daftar pelanggan di balik satu titik peta.
+ *
+ * Dipanggil map.js saat titik DIKLIK atau kursor berhenti 3 detik di atasnya — dua
+ * perbuatan yang disengaja. TIDAK boleh dipanggil dari mousemove biasa: tiap panggilan
+ * menembus pagar PII (dibatasi 30/menit) dan meninggalkan baris di access_log.
+ */
+export async function bukaDaftarTitik(jenis, village, dealer) {
+  const panel = $('telusur-panel');
+  const isi = $('telusur-isi');
+  if (!panel || !isi || !village) return;
+
+  kantongTitikTerakhir = { jenis, village, dealer };
+  panel.classList.remove('hidden');
+  requestAnimationFrame(() => panel.classList.remove('translate-x-full'));
+  isi.innerHTML = '<p class="text-xs text-slate-400 p-4 text-center">Mengambil data…</p>';
+
+  try {
+    const periode = fusionFilter(pageFilters('peta')).periode;
+    const jawab = await fetchVillageCustomers(village, { dealer, periode });
+    isi.innerHTML = isiDaftarKantong(kantongTitikTerakhir, jawab.rows || []);
+  } catch (error) {
+    // 404 (database PII tidak ada) dan 429 (terlalu sering) artinya sangat berbeda,
+    // dan pesan servernya sudah membedakannya — jadi itu yang ditampilkan.
+    isi.innerHTML = `<p class="text-xs text-red-600 p-4 text-center">${esc(error.message)}</p>`;
+  }
+}
+
+/**
+ * Buka rincian satu mesin DARI daftar kantong, bukan dari kotak ketik.
+ *
+ * Tampilannya persis sama dengan hasil Telusur Nomor Mesin — fungsi isiTelusur() yang
+ * sama — ditambah satu tautan kembali ke daftar asalnya, supaya orang tidak terjebak
+ * di satu orang dan harus mengklik ulang titiknya di peta.
+ */
+export async function bukaTelusurMesinDari(nomor) {
+  const panel = $('telusur-panel');
+  const isi = $('telusur-isi');
+  if (!panel || !isi || !nomor) return;
+
+  panel.classList.remove('hidden');
+  requestAnimationFrame(() => panel.classList.remove('translate-x-full'));
+  isi.innerHTML = '<p class="text-xs text-slate-400 p-4 text-center">Mencari…</p>';
+
+  const kembali = kantongTitikTerakhir
+    ? `<button type="button" onclick="kembaliKeDaftarTitik()" class="text-[10px] ` +
+      `font-bold text-blue-600 hover:underline mb-2">&larr; Kembali ke daftar titik</button>`
+    : '';
+
+  try {
+    const detail = await fetchEngineDetail(nomor);
+    isi.innerHTML = kembali + isiTelusur(detail);
+    gambarTelusurDiPeta(detail);
+  } catch (error) {
+    isi.innerHTML = kembali +
+      `<p class="text-xs text-red-600 p-4 text-center">${esc(error.message)}</p>`;
+    hapusTelusurDiPeta();
+  }
+}
+
+/** Kembali ke daftar kantong yang tadi dibuka. Datanya diminta ulang, bukan disimpan. */
+export function kembaliKeDaftarTitik() {
+  if (!kantongTitikTerakhir) return;
+  const { jenis, village, dealer } = kantongTitikTerakhir;
+  hapusTelusurDiPeta();
+  bukaDaftarTitik(jenis, village, dealer);
+}
+
 /** Buka panel telusur untuk nomor mesin yang diketik. */
 export async function bukaTelusurMesin() {
   const kotak = $('telusur-mesin');
@@ -697,9 +859,11 @@ function daftarPeringkat(rows, kunciNama, opsi) {
 
     // "Kabupaten " dipangkas HANYA saat kolom namanya memang nama kota (mode Peringkat
     // Kota, kunciNama === 'cityName'). Mode dealer memakai kolom yang sama untuk
-    // dealerName; menerapkan displayCityName ke situ tidak salah tapi juga tidak
-    // berarti apa-apa — dijaga eksplisit di sini supaya jelas ini bukan kebetulan.
-    const namaUtama = kunciNama === 'cityName' ? displayCityName(r[kunciNama]) : r[kunciNama];
+    // dealerName; menerapkan labelKota ke situ akan SALAH — dealer tanpa nama bukan
+    // "luar cakupan", jadi cabangnya dijaga eksplisit, bukan kebetulan.
+    const namaUtama = kunciNama === 'cityName'
+      ? labelKota(r[kunciNama], r.cityCode)
+      : r[kunciNama];
     return `<div${klik}>` +
       `<span class="text-[11px] text-slate-700 truncate flex-1">${
         esc(namaUtama || r.cityCode || r.dealerCode || '—')}${kota}</span>` +

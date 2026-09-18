@@ -148,8 +148,69 @@ function testPeringatanRahasia() {
   console.log('  peringatan    : problems dan warnings terpisah');
 }
 
+/**
+ * Tiap rute yang mengeluarkan PII WAJIB punya piiLimiter DAN logCustomerAccess.
+ *
+ * Masuk ke berkas ini, bukan ke berkas tes rute, karena sifatnya sama persis dengan
+ * tiga tes di atas: kalau rusak, TIDAK ADA yang gagal. Rute PII tanpa pembatas laju
+ * tetap menjawab dengan benar — cuma bisa disedot 10.000 kali semenit. Rute PII tanpa
+ * pencatatan juga menjawab dengan benar — cuma tidak meninggalkan jejak siapa pun.
+ * Keduanya bug yang tidak punya gejala sampai hari ada yang menyalahgunakannya.
+ *
+ * Yang diperiksa POLA SUMBER, bukan permintaan HTTP sungguhan: menyalakan server dan
+ * menembaknya 31 kali untuk membuktikan pembatas laju terpasang jauh lebih lambat dan
+ * lebih rapuh daripada membaca apakah penjaganya ada di badan penangannya. Yang mau
+ * dijaga memang "penjaganya terpasang", bukan "pembatas lajunya bisa menghitung" —
+ * itu urusan tes piiLimiter sendiri.
+ */
+function testRutePii() {
+  const sumber = fs.readFileSync(
+    path.join(__dirname, '..', 'backend', 'server', 'routes.js'), 'utf8');
+
+  // Rute dianggap PII kalau badannya menyentuh salah satu fungsi repository yang
+  // membaca database astra_customers dan mengembalikan nama/alamat orang.
+  const FUNGSI_PII = [
+    'fusionEngineDetail',
+    'fusionVillageCustomers',
+    'customersInVillage',
+    'browseCustomers',
+  ];
+
+  // Pecah per pendaftaran rute: "api.get('/...', async (req, res) => {" sampai
+  // pendaftaran berikutnya. Kasar tapi cukup — yang dicari cuma "di badan rute yang
+  // sama ada tiga hal ini".
+  const potongan = sumber.split(/\n  api\.(?:get|post|put|delete|patch)\(/);
+  const rutePii = [];
+
+  for (const bagian of potongan.slice(1)) {
+    const jalur = (bagian.match(/^'([^']+)'/) || [])[1];
+    if (!jalur) continue;
+    const dipakai = FUNGSI_PII.filter((f) => bagian.includes('repo.' + f + '('));
+    if (dipakai.length) rutePii.push({ jalur, bagian, dipakai });
+  }
+
+  // Kalau pemecahnya rusak atau rutenya pindah berkas, tes ini akan hijau tanpa
+  // memeriksa apa pun. Jumlah minimum menolak keadaan itu.
+  assert.ok(rutePii.length >= 3,
+    `cuma ${rutePii.length} rute PII yang terdeteksi di routes.js — pemecahnya ` +
+    `kemungkinan rusak, dan penjaga yang tidak menemukan apa-apa selalu hijau`);
+
+  for (const { jalur, bagian, dipakai } of rutePii) {
+    assert.ok(bagian.includes('piiLimiter'),
+      `rute PII ${jalur} (memakai ${dipakai.join(', ')}) TIDAK lewat piiLimiter — ` +
+      `bisa disedot tanpa batas`);
+    assert.ok(bagian.includes('logCustomerAccess'),
+      `rute PII ${jalur} (memakai ${dipakai.join(', ')}) TIDAK memanggil ` +
+      `logCustomerAccess — aksesnya tidak meninggalkan jejak apa pun`);
+  }
+
+  console.log(`  rute PII      : ${rutePii.length} rute, semuanya ber-piiLimiter dan tercatat`);
+}
+
 testRetensiArsip();
 testLog();
 testLogRetensi();
 testPeringatanRahasia();
-console.log('OK hardening — retensi arsip PII, catatan log berotasi, peringatan terpisah');
+testRutePii();
+console.log('OK hardening — retensi arsip PII, catatan log berotasi, peringatan terpisah, ' +
+  'rute PII berpagar lengkap');

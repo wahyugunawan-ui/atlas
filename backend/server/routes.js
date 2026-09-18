@@ -1333,6 +1333,59 @@ function build(config) {
     res.json(detail);
   });
 
+  /**
+   * Daftar pelanggan satu kantong (kelurahan, dealer) — RUTE PII.
+   *
+   * Dipakai panel yang terbuka saat orang MENGKLIK, atau berhenti 3 detik di atas,
+   * satu titik KTP/Servis/Pengiriman di peta. Titiknya sendiri anonim (cuma membawa
+   * kelurahan + dealer); identitasnya diminta di sini, satu kantong per permintaan.
+   *
+   * Pemicunya sengaja perbuatan yang DISENGAJA, bukan kursor yang kebetulan lewat.
+   * Kalau tiap gerakan mouse memanggil rute ini, piiLimiter (30/menit) habis dalam
+   * hitungan detik dan access_log penuh oleh lewatan yang tidak pernah diminta siapa
+   * pun — dua hal yang membuat pagar PII berhenti berarti apa-apa.
+   *
+   * `village` sebagai parameter PATH, bukan query: dengan begitu ia tidak mungkin
+   * dihilangkan. Tanpa kelurahan, rutenya bahkan tidak cocok. Sejalan dengan aturan
+   * proyek "/api/customers wajib punya village" — satu permintaan tidak boleh bisa
+   * menyapu lebih dari satu kelurahan.
+   */
+  api.get('/v1/kelurahan/:village/pelanggan', async (req, res) => {
+    if (!piiLimiter.allow(req.ip || 'tidak diketahui')) {
+      return res.status(429).json({
+        error: 'Terlalu banyak permintaan data konsumen. Tunggu sebentar lalu coba lagi.',
+      });
+    }
+
+    const village = String(req.params.village || '').trim();
+    if (!VILLAGE.test(village)) {
+      return res.status(400).json({ error: 'Kode kelurahan tidak sah.' });
+    }
+
+    const periode = String(req.query.periode || '').trim();
+    if (periode && !PERIOD.test(periode)) {
+      return res.status(400).json({ error: 'Periode tidak sah.' });
+    }
+
+    // Titik peta membawa kode dealer TURUNAN NAMA, sedangkan customer_fusion menyimpan
+    // kode numerik lama. Tanpa terjemahan ini daftarnya selalu kosong — tanpa galat,
+    // tanpa petunjuk. Dua kosakata kode dealer sudah berkali-kali jadi sumber cacat
+    // senyap di proyek ini; legacyDealerCode() memang dibuat untuk jembatan ini.
+    const dealerMinta = String(req.query.dealer || '').trim();
+    if (dealerMinta && !DEALER.test(dealerMinta) && !OUTLET.test(dealerMinta)) {
+      return res.status(400).json({ error: 'Kode dealer tidak sah.' });
+    }
+    const dealerCode = dealerMinta ? await repo.legacyDealerCode(dealerMinta) : null;
+
+    const rows = await repo.fusionVillageCustomers(village, { dealerCode, period: periode || null });
+    if (rows === null) {
+      return res.status(404).json({ error: 'Data konsumen tidak tersedia di server ini.' });
+    }
+
+    repo.logCustomerAccess(req.ip, village, rows.length);
+    res.json({ village, dealer: dealerMinta || null, periode: periode || null, rows });
+  });
+
   /* ------------------------------------------------------------------------
      IMPOR MASSAL POS (Master Dealer/Pos)
      ------------------------------------------------------------------------

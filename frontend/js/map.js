@@ -7,7 +7,7 @@ import {
 import { classOf, dealerColor, percentileBreaks, RAMP, COLOR_EMPTY } from './colors.js';
 import { $, bbox, displayCityName, esc, formatNumber, sumBy, toast } from './dom.js';
 import { fetchGeo, fetchKpiJarak, fetchTitikPeta } from './api.js';
-import { activeRows, fusionFilter, pageFilters, scopeValue } from './filters.js';
+import { activeRows, fusionFilterPeta, pageFilters, scopeValue } from './filters.js';
 import { circle, EMPTY_COLLECTION } from './geo.js';
 import {
   cincinPerDesa, ikonKotak, pembangkitAcak, sebarDiPoligon, titikPerDesa,
@@ -300,17 +300,28 @@ export function addLayers() {
     },
   });
 
-  // Hover: info AGREGAT per titik (dealer, kelurahan, jumlah KTP/Servis/Kirim di
-  // desa+dealer itu) — permintaan tim minta lebih dari ini (nama, no mesin,
-  // riwayat servis/pengiriman PER ORANG), TAPI itu sengaja TIDAK dibuat. Satu
-  // titik di sini mewakili SEKIAN pelanggan yang disebar ACAK di dalam kelurahan
-  // (lihat fusion-points.js) — posisinya tidak berarti apa-apa sebagai lokasi,
-  // dan tidak ada nomor mesin yang melekat padanya sama sekali (disengaja, lihat
-  // komentar #telusur-mesin di index.html: "supaya tidak ada PII di sana").
-  // Mengaitkan hover ke identitas SATU orang akan (a) menyesatkan — posisi acak
-  // dibaca seolah lokasi rumah sungguhan, (b) menembak piiLimiter (30/menit)
-  // dalam hitungan detik begitu kursor lewat beberapa titik, dan (c) mencatat
-  // access_log untuk gerakan mouse yang tidak disengaja. Lihat tampilkanTooltipTitikFusi().
+  // DUA TINGKAT, sengaja, dan bedanya soal biaya — bukan soal kerahasiaan:
+  //
+  //   lewat begitu saja  -> tooltip AGREGAT (dealer, kelurahan, jumlah tiga sumber).
+  //                         Murni dari data yang sudah ada di browser, nol permintaan.
+  //   klik / diam 3 detik -> daftar pelanggan kantong itu (nama, nomor mesin,
+  //                         golongan), lalu klik satu baris untuk riwayat lengkapnya.
+  //                         Ini menembus pagar PII: dibatasi 30/menit dan ditulis ke
+  //                         access_log.
+  //
+  // Versi pertama (2026-09-18 pagi) berhenti di tingkat pertama saja, dengan alasan
+  // hover memicu PII terlalu sering. Tim menegaskan ulang permintaannya DAN menjawab
+  // keberatan itu dengan menentukan pemicunya: bukan sekali lewat, melainkan klik atau
+  // diam 3 detik. Pemicu itulah yang menyelesaikan masalahnya — satu perbuatan yang
+  // disengaja = satu permintaan = satu baris log, bukan satu per gerakan mouse.
+  //
+  // Yang TIDAK berubah: titiknya sendiri tetap anonim. Posisinya acak di dalam
+  // kelurahan (fusion-points.js) dan muatan petanya tidak membawa satu pun nomor
+  // mesin — identitas selalu datang dari permintaan terpisah per kantong, tidak
+  // pernah ikut menumpang di peta. Karena itu panelnya menampilkan DAFTAR orang di
+  // kelurahan+dealer itu, bukan mengaku tahu siapa yang tinggal di koordinat titik
+  // yang diklik: koordinat itu memang bukan alamat siapa-siapa.
+  //
   // Object.entries(LAYER_TITIK), BUKAN daftar id ditulis ulang: LAYER_TITIK
   // (didefinisikan di bawah, dipakai lagi di redrawMap()) sudah memetakan
   // jenis->id lapisan — menuliskannya kedua kali di sini cuma membuka celah dua
@@ -318,15 +329,30 @@ export function addLayers() {
   Object.entries(LAYER_TITIK).forEach(([jenis, layerId]) => {
     S.map.on('mouseenter', layerId, () => { S.map.getCanvas().style.cursor = 'pointer'; });
     S.map.on('mousemove', layerId, (e) => {
-      if (e.features && e.features.length) {
-        tampilkanTooltipTitikFusi(jenis, e.features[0].properties, e.originalEvent);
-      }
+      if (!e.features || !e.features.length) return;
+      const props = e.features[0].properties;
+      tampilkanTooltipTitikFusi(jenis, props, e.originalEvent);
+      jadwalkanDaftarTitik(jenis, props);
     });
     S.map.on('mouseleave', layerId, () => {
       S.map.getCanvas().style.cursor = '';
       $('tooltip').classList.remove('show');
+      batalkanDaftarTitik();
+    });
+    // Klik = pemicu kedua, dan yang paling jelas disengaja. Pewaktunya dibatalkan
+    // dulu supaya satu klik tidak berbuntut panggilan kedua tiga detik kemudian.
+    S.map.on('click', layerId, (e) => {
+      if (!e.features || !e.features.length) return;
+      batalkanDaftarTitik();
+      bukaDaftarTitikDariProps(jenis, e.features[0].properties);
     });
   });
+
+  // Peta yang digeser/di-zoom membatalkan hitungan mundur: kursor yang kebetulan
+  // berhenti di atas titik selama animasi bukan permintaan siapa pun, dan tiap
+  // bukaan menembus pagar PII sekaligus menulis satu baris access_log.
+  S.map.on('movestart', batalkanDaftarTitik);
+  S.map.on('zoomstart', batalkanDaftarTitik);
 
   // Lingkaran radius KPI Jarak. Fill sangat tipis + garis putus-putus: ini alat ukur,
   // bukan data — tidak boleh menutupi wilayah di bawahnya.
@@ -462,7 +488,11 @@ const LAYER_TITIK = { ktp: 'ktp-titik', servis: 'servis-titik', kirim: 'kirim-ti
  * salah yang tidak kelihatan salah, karena sebaran acak selalu tampak wajar.
  */
 function tandaSaringPeta() {
-  const f = fusionFilter(pageFilters('peta'));
+  // fusionFilterPeta(), BUKAN fusionFilter(pageFilters('peta')): pos ikut dibuang di
+  // halaman Confidence Fusion, dan tanda tangan ini WAJIB dihitung dari objek yang
+  // sama persis dengan yang dikirim muatTitikFusi() — kalau tidak, pindah halaman
+  // tidak menginvalidasi cache dan titiknya diam saja.
+  const f = fusionFilterPeta();
   return [f.periode, f.kota, f.dealer, f.pos].join('|');
 }
 
@@ -472,7 +502,7 @@ async function muatTitikFusi() {
   S.fusionPointsLoading = true;
   const tanda = tandaSaringPeta();
   try {
-    const jawab = await fetchTitikPeta(fusionFilter(pageFilters('peta')));
+    const jawab = await fetchTitikPeta(fusionFilterPeta());
     S.fusionPoints = { tanda, rows: jawab.rows || [], cache: {}, cincin: null };
   } catch (e) {
     S.fusionPoints = { tanda, rows: [], cache: {}, cincin: null, galat: e.message };
@@ -519,15 +549,13 @@ export function carikanBagianTitikFusi(rows, village, dealer) {
  * Tooltip AGREGAT satu titik KTP/Servis/Pengiriman: dealer, kelurahan, dan jumlah
  * KETIGA sumber di bucket (kelurahan, dealer) itu — BUKAN identitas satu orang.
  *
- * SENGAJA TERBATAS pada agregat. Yang diminta tim ("nama, no mesin, golongan, data
- * KTP, riwayat servis, riwayat pengiriman") adalah data PER ORANG, dan itu TIDAK
- * dibuat di sini — lihat komentar panjang di addLayers() (tempat fungsi ini
- * dikaitkan ke event hover) untuk tiga alasannya: posisi titik acak akan dibaca
- * seolah lokasi rumah sungguhan, hover yang bergerak cepat di atas ribuan titik
- * akan menembak piiLimiter (30/menit) dalam hitungan detik, dan tiap gerakan mouse
- * yang tidak disengaja akan tercatat di access_log. Fitur "Telusur Nomor Mesin"
- * yang sudah ada (index.html #telusur-mesin) tetap satu-satunya jalan sah melihat
- * data satu orang — sengaja butuh KETIKAN, bukan sekadar lewat kursor.
+ * TINGKAT PERTAMA dari dua (lihat komentar panjang di addLayers()). Sengaja tanpa
+ * identitas siapa pun: dia menyala di SETIAP gerakan kursor, jadi ia harus gratis —
+ * seluruh isinya sudah ada di S.fusionPoints.rows, nol permintaan ke server.
+ *
+ * Data per orang ada di tingkat kedua (klik, atau diam 3 detik), yang memanggil rute
+ * PII ber-pagar. Pembagian ini yang membuat pembatas 30/menit dan access_log tetap
+ * berarti: yang sering terjadi tidak berbiaya, yang berbiaya tidak sering terjadi.
  */
 function tampilkanTooltipTitikFusi(jenis, properties, event) {
   const tip = $('tooltip');
@@ -556,9 +584,71 @@ function tampilkanTooltipTitikFusi(jenis, properties, event) {
     `</div>` +
     `<div class="text-[10px] text-slate-400 mt-1.5 pt-1.5 border-t border-slate-600 ` +
     `leading-snug">Jumlah pelanggan di kelurahan ini, BUKAN satu orang — posisi titik ` +
-    `acak di dalam kelurahan, bukan alamat sebenarnya.</div>`;
+    `acak di dalam kelurahan, bukan alamat sebenarnya.<br>` +
+    `<span class="text-slate-300 font-bold">Klik</span> atau diam 3 detik untuk daftar ` +
+    `pelanggannya.</div>`;
   tip.classList.add('show');
   moveTooltip(event);
+}
+
+/** Lama kursor harus DIAM di atas satu titik sebelum daftar pelanggannya diminta. */
+const TUNDA_DAFTAR_TITIK_MS = 3000;
+
+let pewaktuDaftarTitik = null;
+let kunciDaftarTitik = null;
+
+/**
+ * Identitas satu kantong titik: jenis + kelurahan + dealer.
+ *
+ * Dipakai untuk tahu apakah kursor masih di atas kantong yang SAMA. Titik-titik satu
+ * kantong digambar terpisah-pisah (satu fitur per pelanggan, disebar acak), jadi
+ * bergeser satu piksel sering berarti pindah FITUR tapi tidak pindah kantong — dan
+ * hitungan mundur tidak boleh mulai dari nol lagi setiap kali itu terjadi.
+ *
+ * Murni dan diekspor supaya aturan ini bisa diuji tanpa peta sungguhan.
+ */
+export function kunciBucket(props, jenis) {
+  const p = props || {};
+  return [jenis || '', p.village || '', p.dealer || ''].join('|');
+}
+
+/**
+ * Mulai (atau lanjutkan) hitungan mundur 3 detik untuk satu kantong.
+ *
+ * Kantong yang sama: pewaktunya DIBIARKAN berjalan — kalau di-reset tiap mousemove,
+ * kursor manusia yang tidak pernah benar-benar diam tidak akan pernah mencapai tiga
+ * detik, dan pemicunya jadi fitur yang tidak pernah menyala.
+ * Kantong berbeda: hitungan lama dibuang, mulai dari nol.
+ */
+function jadwalkanDaftarTitik(jenis, props) {
+  const kunci = kunciBucket(props, jenis);
+  if (kunci === kunciDaftarTitik && pewaktuDaftarTitik) return;
+
+  batalkanDaftarTitik();
+  kunciDaftarTitik = kunci;
+  pewaktuDaftarTitik = setTimeout(() => {
+    pewaktuDaftarTitik = null;
+    bukaDaftarTitikDariProps(jenis, props);
+  }, TUNDA_DAFTAR_TITIK_MS);
+}
+
+function batalkanDaftarTitik() {
+  if (pewaktuDaftarTitik) clearTimeout(pewaktuDaftarTitik);
+  pewaktuDaftarTitik = null;
+  kunciDaftarTitik = null;
+}
+
+/**
+ * Minta panel daftar pelanggan untuk satu kantong.
+ *
+ * Lewat `window`, bukan import langsung: fusion.js sudah meng-import berkas ini
+ * (gambarTelusurDiPeta dkk), jadi meng-import baliknya membuat lingkaran modul. Pola
+ * yang sama dipakai `window.openDealerDetail` di filter-bar.js dan outlets.js.
+ */
+function bukaDaftarTitikDariProps(jenis, props) {
+  const p = props || {};
+  if (!p.village || !window.bukaDaftarTitik) return;
+  window.bukaDaftarTitik(jenis, p.village, p.dealer || null);
 }
 
 function bangunTitikFusi(jenis) {

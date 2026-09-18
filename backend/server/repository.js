@@ -1866,8 +1866,59 @@ async function fusionEngineDetail(engineNo) {
   return { fusion, ktp, services, pings };
 }
 
+/**
+ * Daftar pelanggan satu kantong (kelurahan, dealer) — RUTE PII, bahan panel titik peta.
+ *
+ * KENAPA ADA. Titik di peta sengaja TIDAK membawa nomor mesin (docs/FUSION.md 3.1):
+ * muatan petanya melintasi seluruh wilayah cakupan sekaligus, dan menaruh pengenal
+ * per orang di sana sama saja menaruh seluruh basis data konsumen di browser. Yang
+ * dibawa titik cuma kelurahan + dealer, dan itu justru cukup: identitasnya diminta
+ * TERPISAH, satu kantong per permintaan, lewat pagar PII yang sudah ada.
+ *
+ * `LEFT JOIN LATERAL ... ORDER BY period DESC LIMIT 1`, BUKAN join biasa pada
+ * `k.period = f.period`. Baris KTP satu mesin bisa ada di beberapa periode, dan
+ * periode fusion tidak selalu sama dengan periode KTP terbarunya — join naif akan
+ * mengembalikan nama KOSONG untuk orang yang datanya justru lengkap, tanpa galat
+ * apa pun. Ini menyamakan perilakunya dengan fusionEngineDetail() di atas.
+ *
+ * Batas 200 keras: satu kelurahan+dealer yang besar pun tidak sampai segitu, dan
+ * batas yang longgar di rute PII adalah jalan penyedotan yang menunggu dipakai.
+ *
+ * @returns {Array|null} null kalau database PII tidak ada — fiturnya mati, sisanya
+ *   jalan penuh (aturan DROP DATABASE astra_customers).
+ */
+async function fusionVillageCustomers(villageCode, opsi) {
+  const pii = store.customers();
+  if (!pii) return null;
+
+  const o = opsi || {};
+  const where = ['f.village_code = ?'];
+  const params = [villageCode];
+  // Kode dealer di SINI kosakata numerik lama (fusion-store.js menulis r.dealerCode
+  // yang sama ke customer_fusion dan source_overlap). Penerjemahan dari kode turunan
+  // nama yang dibawa titik peta dilakukan pemanggilnya lewat legacyDealerCode().
+  if (o.dealerCode) { where.push('f.dealer_code = ?'); params.push(o.dealerCode); }
+  if (o.period) { where.push('f.period = ?'); params.push(o.period); }
+
+  return store.all(pii, `
+    SELECT f.engine_no AS "engineNo", f.period, f.segment,
+           f.dealer_code AS "dealerCode",
+           f.service_count AS "serviceCount",
+           f.delivery_count AS "deliveryCount",
+           k.name
+    FROM customer_fusion f
+    LEFT JOIN LATERAL (
+      SELECT name FROM customer_ktp
+      WHERE engine_no = f.engine_no ORDER BY period DESC LIMIT 1
+    ) k ON TRUE
+    WHERE ${where.join(' AND ')}
+    ORDER BY k.name NULLS LAST, f.engine_no
+    LIMIT ?`, params.concat([Math.min(Number(o.limit) || 200, 200)]));
+}
+
 module.exports = {
   resolveVillageByName,
+  fusionVillageCustomers,
   latestFusionPeriod, fusionTotals, fusionRows, fusionByCity, fusionByDealer,
   fusionEngineDetail, setAppConfig, fusionMatrix, fusionOverlap, legacyDealerCode,
   fusionSourceCoverage, fusionVillagePoints,

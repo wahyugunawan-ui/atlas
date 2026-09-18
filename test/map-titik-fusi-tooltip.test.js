@@ -58,9 +58,43 @@ async function main() {
     'sebelum S.fusionPoints pernah terisi');
   assert.strictEqual(carikanBagianTitikFusi(undefined, '34.04.01.2001', 'X'), null);
 
+
+  // --- kunciBucket(): aturan "masih di kantong yang sama?" -------------------
+  //
+  // Dipakai pewaktu 3 detik di map.js. Satu kantong (kelurahan, dealer) digambar
+  // sebagai BANYAK fitur titik terpisah yang disebar acak, jadi menggeser kursor satu
+  // piksel sering berarti pindah FITUR tanpa pindah kantong. Kalau kunci ini terlalu
+  // halus (ikut membedakan koordinat), hitungan mundur mulai dari nol tiap gerakan
+  // dan pemicunya tidak akan pernah menyala — kursor manusia tidak pernah benar-benar
+  // diam. Kalau terlalu kasar (mengabaikan dealer atau jenis), pindah ke kantong lain
+  // tidak me-reset dan panel yang terbuka memuat kantong yang SALAH.
+  const { kunciBucket } = await import(MODUL);
+
+  const titikA1 = { village: '34.04.01.2001', dealer: 'NUSANTARASAKTIGEJAYAN', warna: '#111' };
+  const titikA2 = { village: '34.04.01.2001', dealer: 'NUSANTARASAKTIGEJAYAN', warna: '#999' };
+
+  assert.strictEqual(kunciBucket(titikA1, 'ktp'), kunciBucket(titikA2, 'ktp'),
+    'dua titik di kantong yang sama harus berkunci sama — kalau tidak, hitungan ' +
+    'mundur 3 detik tidak akan pernah selesai');
+
+  assert.notStrictEqual(kunciBucket(titikA1, 'ktp'),
+    kunciBucket({ village: '33.01.01.2001', dealer: 'NUSANTARASAKTIGEJAYAN' }, 'ktp'),
+    'kelurahan berbeda harus berkunci beda');
+  assert.notStrictEqual(kunciBucket(titikA1, 'ktp'),
+    kunciBucket({ village: '34.04.01.2001', dealer: 'DEALERLAIN' }, 'ktp'),
+    'dealer berbeda di kelurahan yang sama harus berkunci beda');
+  assert.notStrictEqual(kunciBucket(titikA1, 'ktp'), kunciBucket(titikA1, 'servis'),
+    'jenis titik berbeda harus berkunci beda — lapisan KTP dan Servis bertumpuk di ' +
+    'koordinat yang sama, dan panelnya menyebut jenis yang sedang dibuka');
+
+  assert.strictEqual(typeof kunciBucket(null, 'ktp'), 'string',
+    'props null tidak boleh melempar galat — event hover bisa datang tanpa properti');
+  assert.strictEqual(typeof kunciBucket(undefined, undefined), 'string',
+    'dipanggil tanpa argumen pun harus mengembalikan string, bukan meledak');
+
   console.log('OK map-titik-fusi-tooltip — carikanBagianTitikFusi mencocokkan desa DAN ' +
     'dealer sekaligus (tidak tertukar kalau salah satunya sama), null untuk yang tidak ' +
-    'ketemu maupun rows kosong');
+    'ketemu maupun rows kosong; kunciBucket membedakan kantong, bukan tiap titik');
 }
 
 main().catch((error) => {
