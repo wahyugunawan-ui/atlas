@@ -5,7 +5,7 @@ import {
   ATTRIBUTION, ATTRIBUTION_SATELLITE, BASEMAP_PMTILES, BASEMAP_SATELLITE, KARESIDENAN,
 } from './config.js';
 import { classOf, dealerColor, percentileBreaks, RAMP, COLOR_EMPTY } from './colors.js';
-import { $, bbox, sumBy, toast } from './dom.js';
+import { $, bbox, displayCityName, esc, formatNumber, sumBy, toast } from './dom.js';
 import { fetchGeo, fetchKpiJarak, fetchTitikPeta } from './api.js';
 import { activeRows, fusionFilter, pageFilters, scopeValue } from './filters.js';
 import { circle, EMPTY_COLLECTION } from './geo.js';
@@ -18,7 +18,7 @@ import { contributionsForRows, fixedContributionClass } from './sales-stats.js';
 // state), jadi impor ini tidak membuat lingkaran modul. Lihat catatan serupa di
 // outlets.js yang memakai window.openDealerDetail justru untuk menghindari lingkaran
 // ke tables.js.
-import { drawDealerMarkers, drawMarkers } from './outlets.js';
+import { drawDealerMarkers, drawMarkers, moveTooltip } from './outlets.js';
 import { S } from './state.js';
 
 /**
@@ -300,6 +300,34 @@ export function addLayers() {
     },
   });
 
+  // Hover: info AGREGAT per titik (dealer, kelurahan, jumlah KTP/Servis/Kirim di
+  // desa+dealer itu) — permintaan tim minta lebih dari ini (nama, no mesin,
+  // riwayat servis/pengiriman PER ORANG), TAPI itu sengaja TIDAK dibuat. Satu
+  // titik di sini mewakili SEKIAN pelanggan yang disebar ACAK di dalam kelurahan
+  // (lihat fusion-points.js) — posisinya tidak berarti apa-apa sebagai lokasi,
+  // dan tidak ada nomor mesin yang melekat padanya sama sekali (disengaja, lihat
+  // komentar #telusur-mesin di index.html: "supaya tidak ada PII di sana").
+  // Mengaitkan hover ke identitas SATU orang akan (a) menyesatkan — posisi acak
+  // dibaca seolah lokasi rumah sungguhan, (b) menembak piiLimiter (30/menit)
+  // dalam hitungan detik begitu kursor lewat beberapa titik, dan (c) mencatat
+  // access_log untuk gerakan mouse yang tidak disengaja. Lihat tampilkanTooltipTitikFusi().
+  // Object.entries(LAYER_TITIK), BUKAN daftar id ditulis ulang: LAYER_TITIK
+  // (didefinisikan di bawah, dipakai lagi di redrawMap()) sudah memetakan
+  // jenis->id lapisan — menuliskannya kedua kali di sini cuma membuka celah dua
+  // daftar diam-diam menyimpang kalau suatu hari ada jenis titik baru.
+  Object.entries(LAYER_TITIK).forEach(([jenis, layerId]) => {
+    S.map.on('mouseenter', layerId, () => { S.map.getCanvas().style.cursor = 'pointer'; });
+    S.map.on('mousemove', layerId, (e) => {
+      if (e.features && e.features.length) {
+        tampilkanTooltipTitikFusi(jenis, e.features[0].properties, e.originalEvent);
+      }
+    });
+    S.map.on('mouseleave', layerId, () => {
+      S.map.getCanvas().style.cursor = '';
+      $('tooltip').classList.remove('show');
+    });
+  });
+
   // Lingkaran radius KPI Jarak. Fill sangat tipis + garis putus-putus: ini alat ukur,
   // bukan data — tidak boleh menutupi wilayah di bawahnya.
   //
@@ -462,6 +490,77 @@ async function muatTitikFusi() {
  * sendiri begitu saringannya berubah — tidak ada cache yang hidup lebih lama daripada
  * data yang melahirkannya.
  */
+/** Label ramah-baca per jenis titik, dipakai tooltip hover di bawah — BUKAN
+ * legenda Opsi Peta, yang sudah punya labelnya sendiri di index.html. */
+const LABEL_TITIK = { ktp: 'Titik KTP', servis: 'Titik Servis', kirim: 'Titik Pengiriman' };
+
+/**
+ * Cari baris bucket (kelurahan, dealer) asal satu titik yang sedang di-hover.
+ *
+ * Satu FITUR titik TIDAK membawa hitungan ktp/servis/kirim-nya sendiri —
+ * titikPerDesa() (fusion-points.js) mengempiskan satu bucket jadi satu angka `n`
+ * untuk JENIS yang sedang diminta saja, membuang dua hitungan sisanya. Baris ASLI
+ * (ketiga hitungan utuh) masih tersimpan apa adanya di S.fusionPoints.rows —
+ * dicari ulang di sini lewat kode desa + kode dealer, TANPA permintaan baru ke
+ * server sama sekali.
+ *
+ * Murni: diekspor supaya bisa diuji tanpa membuat instance peta sungguhan.
+ *
+ * @returns {Object|null} baris {villageCode, dealerCode, ktp, servis, kirim}, atau
+ *   null kalau tidak ketemu (semestinya tidak pernah terjadi — titiknya sendiri
+ *   lahir dari baris ini — tapi dijaga daripada melempar galat di tengah hover).
+ */
+export function carikanBagianTitikFusi(rows, village, dealer) {
+  if (!Array.isArray(rows)) return null;
+  return rows.find((r) => r.villageCode === village && r.dealerCode === dealer) || null;
+}
+
+/**
+ * Tooltip AGREGAT satu titik KTP/Servis/Pengiriman: dealer, kelurahan, dan jumlah
+ * KETIGA sumber di bucket (kelurahan, dealer) itu — BUKAN identitas satu orang.
+ *
+ * SENGAJA TERBATAS pada agregat. Yang diminta tim ("nama, no mesin, golongan, data
+ * KTP, riwayat servis, riwayat pengiriman") adalah data PER ORANG, dan itu TIDAK
+ * dibuat di sini — lihat komentar panjang di addLayers() (tempat fungsi ini
+ * dikaitkan ke event hover) untuk tiga alasannya: posisi titik acak akan dibaca
+ * seolah lokasi rumah sungguhan, hover yang bergerak cepat di atas ribuan titik
+ * akan menembak piiLimiter (30/menit) dalam hitungan detik, dan tiap gerakan mouse
+ * yang tidak disengaja akan tercatat di access_log. Fitur "Telusur Nomor Mesin"
+ * yang sudah ada (index.html #telusur-mesin) tetap satu-satunya jalan sah melihat
+ * data satu orang — sengaja butuh KETIKAN, bukan sekadar lewat kursor.
+ */
+function tampilkanTooltipTitikFusi(jenis, properties, event) {
+  const tip = $('tooltip');
+  if (!tip) return;
+  const { village, dealer } = properties || {};
+  const desa = S.villageByCode[village];
+  const namaDesa = desa ? desa.name : (village || '—');
+  const namaKota = desa ? displayCityName(desa.cityName) : '';
+  const namaDealer = S.dealerNames[dealer] || dealer || 'dealer tidak dikenal';
+  const bagian = carikanBagianTitikFusi(
+    (S.fusionPoints && S.fusionPoints.rows) || [], village, dealer);
+
+  const baris = (label, n) => `<div class="text-[11px] text-slate-300 flex ` +
+    `items-center justify-between gap-3"><span>${esc(label)}</span>` +
+    `<span class="mono text-white font-bold">${esc(formatNumber(Number(n) || 0))}</span></div>`;
+
+  tip.innerHTML =
+    `<div class="font-bold text-white">${esc(LABEL_TITIK[jenis] || 'Titik')}</div>` +
+    `<div class="text-[11px] text-slate-300 mt-0.5">${esc(namaDesa)}${
+      namaKota ? `, ${esc(namaKota)}` : ''}</div>` +
+    `<div class="text-[11px] text-slate-300">${esc(namaDealer)}</div>` +
+    `<div class="mt-1.5 pt-1.5 border-t border-slate-600">` +
+    baris('KTP', bagian ? bagian.ktp : 0) +
+    baris('Servis', bagian ? bagian.servis : 0) +
+    baris('Pengiriman', bagian ? bagian.kirim : 0) +
+    `</div>` +
+    `<div class="text-[10px] text-slate-400 mt-1.5 pt-1.5 border-t border-slate-600 ` +
+    `leading-snug">Jumlah pelanggan di kelurahan ini, BUKAN satu orang — posisi titik ` +
+    `acak di dalam kelurahan, bukan alamat sebenarnya.</div>`;
+  tip.classList.add('show');
+  moveTooltip(event);
+}
+
 function bangunTitikFusi(jenis) {
   const data = S.fusionPoints;
   if (!data || !S.geo) return EMPTY_COLLECTION;
