@@ -53,12 +53,17 @@ test('periode yang belum lengkap tidak dikirim setengah jadi', async () => {
   assert.strictEqual(fusionFilter(filter({ to: '' })).periode, null);
 });
 
-test('pos IKUT terkirim, bukan diabaikan', async () => {
+test('pos TIDAK terkirim — dihapus dari halaman ini 2026-09-18', async () => {
   const { fusionFilter } = await import(MODUL);
-  // Sampai 2026-09-17 pos masuk daftar `abaikan`. Sekarang server menerjemahkannya
-  // jadi daftar kelurahan lewat tabel coverage, jadi ia harus benar-benar dikirim.
+  // Riwayatnya bolak-balik. Sampai 2026-09-17 pos masuk daftar `abaikan`; sehari
+  // sesudahnya sempat DIKIRIM (server menerjemahkannya lewat tabel coverage); sekarang
+  // dihapus lagi atas permintaan tim — satu pos cuma melayani sebagian kecil kelurahan
+  // satu kota, jadi menyaring sesempit itu jarang berarti apa pun untuk penggolongan.
+  // Bukan `abaikan` juga: itu daftar untuk saringan yang PERNAH dikirim tapi diabaikan
+  // server; pos sekarang tidak pernah dikirim sama sekali dari fungsi ini.
   const hasil = fusionFilter(filter({ outletCode: 'POS01' }));
-  assert.strictEqual(hasil.pos, 'POS01');
+  assert.strictEqual(hasil.pos, undefined,
+    'fusionFilter() tidak boleh lagi punya field pos sama sekali');
   assert.deepStrictEqual(hasil.abaikan, []);
 });
 

@@ -154,7 +154,7 @@ export function openDealerDetail(dealerCode) {
     `<div><div class="text-[10px] uppercase font-bold text-slate-400">Mode Heatmap</div>` +
     `<div class="text-sm font-bold text-slate-700 mt-0.5">${esc(heatmapModeLabel())}</div></div>` +
     '</div>' +
-    sectionHeader('buildings', 'Sebaran per Kabupaten', cities.length) +
+    sectionHeader('buildings', 'Sebaran per Kota', cities.length) +
     (cities.length
       ? cities.map((k) => dealerCityHtml(k, dealerCode)).join('')
       : '<p class="text-xs text-slate-400 text-center py-4">Tidak ada penjualan pada filter ini.</p>');

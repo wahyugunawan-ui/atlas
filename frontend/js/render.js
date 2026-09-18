@@ -19,12 +19,25 @@ import { S } from './state.js';
 
 
 /**
- * Label tier legenda peta — HANYA di sini, permintaan Pakbos 2026-08-31. TIDAK
- * menimpa POSISI_LABEL (Terbawah/Bawah/Tengah/Atas/Teratas): badge di panel
- * kelurahan, ringkasan kota, dan blok Performa Pos Dealer TETAP bahasa Indonesia,
- * cuma legenda peta yang pakai istilah ini.
+ * Label tier legenda peta — HANYA di sini, TIDAK menimpa POSISI_LABEL
+ * (Terbawah/Bawah/Tengah/Atas/Teratas): badge di panel kelurahan, ringkasan kota, dan
+ * blok Performa Pos Dealer tetap memakai istilah itu, cuma legenda peta yang berbeda.
+ *
+ * Sampai 2026-09-17 istilahnya Inggris (bottom/lower/middle/upper/top, permintaan
+ * Pakbos 2026-08-31). Diganti Indonesia + warna teks per permintaan tim: empat kelas
+ * bawah memakai kata posisi (Terbawah/Bawah/Tengah/Atas), kelas TERATAS sengaja diberi
+ * nama "Hijau" — bukan "Teratas" — supaya kelas terbaik langsung dikenali dari
+ * namanya sendiri, bukan cuma dari swatch warnanya.
+ *
+ * Warna TEKS-nya (bukan cuma swatch-nya) ikut permintaan: merah di kelas terburuk,
+ * hijau di kelas terbaik — tangga warna yang sama arahnya dengan RAMP di colors.js
+ * (terang -> gelap = kontribusi kecil -> besar), supaya membaca cepat tanpa perlu
+ * mencocokkan swatch satu per satu.
  */
-const MAP_TIER_LABEL = ['bottom', 'lower', 'middle', 'upper', 'top'];
+const MAP_TIER_LABEL = ['Terbawah', 'Bawah', 'Tengah', 'Atas', 'Hijau'];
+const MAP_TIER_TEXT_COLOR = [
+  'text-red-600', 'text-orange-600', 'text-slate-500', 'text-blue-600', 'text-emerald-600',
+];
 
 /** Judul panel legenda — mengikuti S.heatmapMode. */
 function legendTitle() {
@@ -67,7 +80,8 @@ export function renderLegend(perVillage, breaks) {
         `<div class="flex items-center gap-2 text-[11px] ${counts[i] ? 'text-slate-600' : 'text-slate-300'}" ` +
         `title="Interval tetap, sama di mana pun dan kapan pun dipakai — tidak bergantung wilayah lain yang sedang tampil.">` +
         `<span class="w-3.5 h-3.5 rounded shrink-0" style="background:${color}"></span>` +
-        `<span class="flex-1">${esc(MAP_TIER_LABEL[i])}: ${esc(KONTRIBUSI_LABEL[i])}</span>` +
+        `<span class="flex-1 font-semibold ${MAP_TIER_TEXT_COLOR[i]}">${esc(MAP_TIER_LABEL[i])}</span>` +
+        `<span class="flex-1">: ${esc(KONTRIBUSI_LABEL[i])}</span>` +
         `<span class="mono ${counts[i] ? 'text-slate-400' : 'text-slate-300'}">${esc(formatNumber(counts[i]))}</span></div>`).join('') +
       `<p class="text-[10px] text-slate-400 pt-1.5 leading-snug">` +
       `Interval Kontribusi Penjualan TETAP — sama di mana pun dan kapan pun, tidak bergantung wilayah lain yang sedang tampil.</p>`;
@@ -88,7 +102,8 @@ export function renderLegend(perVillage, breaks) {
       `<div class="flex items-center gap-2 text-[11px] ${ranges[i].empty ? 'text-slate-300' : 'text-slate-600'}" ` +
       `title="${esc(TIER_INFO[i])}">` +
       `<span class="w-3.5 h-3.5 rounded shrink-0" style="background:${color}"></span>` +
-      `<span class="flex-1">${esc(MAP_TIER_LABEL[i])}</span>` +
+      `<span class="flex-1 font-semibold ${ranges[i].empty ? 'text-slate-300' : MAP_TIER_TEXT_COLOR[i]}">${
+        esc(MAP_TIER_LABEL[i])}</span>` +
       `<span class="mono ${ranges[i].empty ? 'text-slate-300' : 'text-slate-400'}">${esc(ranges[i].label)}</span></div>`).join('') +
     `<p class="text-[10px] text-slate-400 pt-1.5 leading-snug">` +
     (used < RAMP.length && values.length

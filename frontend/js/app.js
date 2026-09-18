@@ -8,7 +8,7 @@
  */
 import { fetchGeo, fetchSummary } from './api.js';
 import { buildColorRegistry } from './colors.js';
-import { $, bbox, esc, formatNumber, monthLabel, toast } from './dom.js';
+import { $, bbox, displayCityName, esc, formatNumber, monthLabel, toast } from './dom.js';
 import { chooseCombo, comboSearch, toggleCombo } from './combobox.js';
 import {
   anyGroupEditing, assignRing, cancelRingEdit, closeRingChooser,
@@ -53,8 +53,8 @@ import {
 import {
   bukaTelusurMesin, cariCakupan, filterDariFusi, kirimPage, renderDeliveryTable,
   renderFusion,
-  renderServiceTable, servisPage, setKpiServis, setModeGolongan, setModeMatriks,
-  toggleCakupanPanel,
+  renderServiceTable, servisPage, setKpiServis, setModeMatriks,
+  toggleCakupanPanel, toggleSortDealer, toggleSortMatriks,
   toggleLiveFusion,
   toggleSumberCakupan, tutupTelusurMesin,
 } from './fusion.js';
@@ -95,7 +95,8 @@ const HANDLERS = {
   renderFusion, renderServiceTable, renderDeliveryTable, servisPage, kirimPage,
   setKpiServis,
   toggleSumberCakupan, cariCakupan, bukaTelusurMesin, tutupTelusurMesin,
-  setModeGolongan, setModeMatriks, filterDariFusi, toggleCakupanPanel, toggleLiveFusion,
+  setModeMatriks, filterDariFusi, toggleCakupanPanel, toggleLiveFusion,
+  toggleSortMatriks, toggleSortDealer,
   editDealerRingFromTable, editPosCoverageFromTable,
   openNewOutlet, closeNewOutlet, newOutletDealerChanged, saveNewOutlet,
   askResetOutlets, closeResetOutlets, resetOutletsTyped, confirmResetOutlets,
@@ -244,7 +245,14 @@ function buildIndexes(data) {
 
   S.villageByCode = {};
   S.cityNames = {};
+  // "Kabupaten " dipangkas SATU KALI di sini, sumber tunggal untuk seluruh aplikasi —
+  // bukan di tiap tempat yang menampilkannya. `v.cityName` diubah di tempat (objek yang
+  // sama disimpan ke S.villageByCode), jadi setiap kode yang membaca lewat kedua jalur
+  // ini (S.cityNames[kode] ATAU S.villageByCode[kode].cityName) otomatis konsisten.
+  // TIDAK menyentuh data mentah dari server maupun apa pun di jalur impor/pencocokan —
+  // ini murni salinan tampilan milik frontend.
   data.villages.forEach((v) => {
+    v.cityName = displayCityName(v.cityName);
     S.villageByCode[v.code] = v;
     S.cityNames[v.cityCode] = v.cityName;
   });

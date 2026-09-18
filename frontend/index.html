@@ -630,7 +630,11 @@
         <summary class="text-[10px] font-bold text-slate-400 uppercase mb-1 cursor-pointer select-none">Titik Tiga Sumber</summary>
         <div class="mt-1">
           <label class="toggle-row"><span class="text-xs font-semibold text-slate-600"><span class="inline-block w-2 h-2 rounded-full align-middle mr-1.5" style="background:#0b2f6b"></span>Titik KTP</span><span class="switch"><input type="checkbox" id="opt-titik-ktp" onchange="toggleFusionPoints()"><span class="track"></span></span></label>
-          <label class="toggle-row"><span class="text-xs font-semibold text-slate-600"><span class="inline-block w-2 h-2 rounded-full align-middle mr-1.5" style="background:#ec4899"></span>Titik Servis</span><span class="switch"><input type="checkbox" id="opt-titik-servis" onchange="toggleFusionPoints()"><span class="track"></span></span></label>
+          <!-- Swatch kotak, BUKAN lingkaran seperti Titik KTP/Pengiriman: mengikuti
+               bentuk sungguhan titik Servis di peta (ikonKotak(), fusion-points.js —
+               permintaan tim, spesifikasi FUSION.md 3.1). Legenda yang bentuknya beda
+               dari yang digambar di peta menyesatkan, bukan sekadar tidak konsisten. -->
+          <label class="toggle-row"><span class="text-xs font-semibold text-slate-600"><span class="inline-block w-2 h-2 align-middle mr-1.5" style="background:#ec4899"></span>Titik Servis</span><span class="switch"><input type="checkbox" id="opt-titik-servis" onchange="toggleFusionPoints()"><span class="track"></span></span></label>
           <label class="toggle-row"><span class="text-xs font-semibold text-slate-600"><span class="inline-block w-2 h-2 rounded-full align-middle mr-1.5 border-2" style="border-color:#f59e0b"></span>Titik Pengiriman</span><span class="switch"><input type="checkbox" id="opt-titik-kirim" onchange="toggleFusionPoints()"><span class="track"></span></span></label>
           <label class="toggle-row"><span class="text-xs font-semibold text-slate-600">Lingkaran Radius KPI Jarak</span><span class="switch"><input type="checkbox" id="opt-kpi-jarak" onchange="redrawMap()"><span class="track"></span></span></label>
           <p class="text-[10px] text-slate-400 leading-snug mt-1 px-0.5">Titik disebar merata di dalam kelurahannya, bukan alamat sebenarnya. Radius KPI dipusatkan di pos atau dealer yang sedang dipilih.</p>
@@ -1012,7 +1016,7 @@
           <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Nama</th>
           <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Alamat</th>
           <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Kelurahan</th>
-          <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Kabupaten/Kota</th>
+          <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Kota</th>
           <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Pos Dealer</th>
           <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Periode</th>
         </tr></thead>
@@ -1040,7 +1044,7 @@
           <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Kode</th>
           <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Kelurahan &amp; Koordinat</th>
           <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Kecamatan</th>
-          <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Kabupaten/Kota</th>
+          <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Kota</th>
           <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Provinsi</th>
           <th class="px-3 py-2.5 text-right text-[11px] font-bold text-slate-500 uppercase">Total Pelanggan</th>
         </tr></thead>
@@ -1100,26 +1104,42 @@
        induknya berarti mencabut elemen #map dari DOM dan mematikan instance
        MapLibre-nya. Sebelumnya seluruh halaman ini satu innerHTML besar.
 
-       12 kolom x 12 baris, tata letak yang diminta tim:
-         Pelanggan Terfilter  kolom 1-3   baris 1-2
-         CW Sales             kolom 4-5   baris 1-2
-         Confidence Ratio     kolom 6-7   baris 1-2
-         Tampilan Peta        kolom 1-7   baris 3-9    <- titik fokus
-         Golongan + Venn      kolom 1-7   baris 10-12
-         Matriks / Peringkat Kota  kolom 8-10  baris 1-12  <- SATU blok, dua mode
-         Peringkat Dealer     kolom 11-12 baris 1-12
+       12 kolom x 12 baris, tata letak REVISI 2026-09-18 (permintaan tim):
+         Pita KIRI, kolom 1-5:
+           4 kartu KPI (2x2)     baris 1-2   <- Pelanggan/CW/Ratio/Cakupan Sumber
+           Tampilan Peta         baris 3-6   <- diperkecil tingginya dengan sengaja,
+                                                 memberi ruang Golongan Final + Venn
+           Golongan Final        baris 7-9   <- pie KIRI, legenda KANAN (bukan lagi
+                                                 satu blok bermode-dua dengan Venn)
+           Venn                  baris 10-12 <- blok TERPISAH, di-fit tanpa gulir
+         Pita KANAN, kolom 6-12 (diperlebar dari 5 kolom -> 7 kolom):
+           Matriks/Peringkat Kota  kolom 6-9   baris 1-12  <- SATU blok, dua mode,
+                                                              3 kol -> 4 kol
+           Peringkat Dealer        kolom 10-12 baris 1-12  <- 2 kol -> 3 kol
+
+       Peta KEHILANGAN tinggi (7 baris -> 4 baris) supaya Golongan Final dan Venn
+       masing-masing dapat blok penuh sendiri, bukan berbagi satu blok lewat tombol
+       mode seperti sebelumnya — pertukaran yang disetujui tim secara eksplisit.
 
        Letaknya ditulis EKSPLISIT (col-start/row-start), bukan diserahkan ke
-       penempatan otomatis CSS grid: dengan tujuh blok yang tingginya berbeda-beda,
+       penempatan otomatis CSS grid: dengan delapan blok yang tingginya berbeda-beda,
        penempatan otomatis bisa menyelipkan blok ke celah yang kebetulan kosong dan
        hasilnya bergeser tanpa ada yang mengubah apa pun. Tanpa gulir halaman. -->
   <div id="fusion-isi" class="flex-1 min-h-0 grid grid-cols-12 grid-rows-12 gap-2">
 
-    <div id="fx-kpi-pelanggan" class="col-start-1 col-span-3 row-start-1 row-span-2 min-h-0 flex"></div>
-    <div id="fx-kpi-cw" class="col-start-4 col-span-2 row-start-1 row-span-2 min-h-0 flex"></div>
-    <div id="fx-kpi-ratio" class="col-start-6 col-span-2 row-start-1 row-span-2 min-h-0 flex"></div>
+    <!-- Wadah 2x2 EMPAT kartu KPI, bukan lagi satu baris empat kolom: pita kiri kini
+         cuma 5 kolom (turun dari 7) supaya Matriks/Dealer bisa lebih lebar (poin di
+         bawah), dan 4 kartu berdampingan di 5 kolom akan terlalu sempit untuk teks
+         seperti "24.567 terkoreksi keyakinan". Grid bersarang ini SATU sel di grid
+         luar (kolom 1-5, baris 1-2); di dalamnya bebas dari batas 12 kolom. -->
+    <div class="col-start-1 col-span-5 row-start-1 row-span-2 min-h-0 grid grid-cols-2 grid-rows-2 gap-1.5">
+      <div id="fx-kpi-pelanggan" class="min-h-0 flex"></div>
+      <div id="fx-kpi-cw" class="min-h-0 flex"></div>
+      <div id="fx-kpi-ratio" class="min-h-0 flex"></div>
+      <div id="fx-kpi-cakupan" class="min-h-0 flex"></div>
+    </div>
 
-    <div class="col-start-1 col-span-7 row-start-3 row-span-7 min-h-0 bg-white rounded-xl border border-slate-200 p-2 flex flex-col">
+    <div class="col-start-1 col-span-5 row-start-3 row-span-4 min-h-0 bg-white rounded-xl border border-slate-200 p-2 flex flex-col">
       <!-- Elemen #map DIPINDAHKAN ke sini saat tab Fusion aktif, lalu dikembalikan ke
            #map-shell saat keluar. Satu instance peta, bukan dua: S.map global dan
            hampir semua kode peta bergantung padanya. Panel Opsi Peta tidak ikut
@@ -1127,30 +1147,47 @@
       <div id="fx-peta-host" class="flex-1 min-h-0 rounded-lg overflow-hidden bg-slate-50"></div>
     </div>
 
-    <div class="col-start-1 col-span-7 row-start-10 row-span-3 min-h-0 bg-white rounded-xl border border-slate-200 p-3 flex flex-col">
-      <div class="flex items-center gap-1 mb-1 shrink-0">
-        <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wide mr-auto">Golongan</span>
-        <button id="fx-mode-golongan" onclick="setModeGolongan('golongan')" class="fx-mode fx-mode-aktif">Final</button>
-        <button id="fx-mode-venn" onclick="setModeGolongan('venn')" class="fx-mode">Venn</button>
-      </div>
-      <div id="fx-golongan" class="flex-1 min-h-0 overflow-y-auto"></div>
+    <!-- Golongan Final — dulu setengah dari blok bermode-dua dengan Venn. Sekarang
+         blok sendiri: pie di KIRI, daftar golongan (legenda) di KANAN — permintaan
+         tim, bukan lagi ditumpuk atas-bawah. flex-row, bukan flex-col. -->
+    <div class="col-start-1 col-span-5 row-start-7 row-span-3 min-h-0 bg-white rounded-xl border border-slate-200 p-3 flex flex-col">
+      <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1 shrink-0">Golongan final</div>
+      <div id="fx-golongan-final" class="flex-1 min-h-0 flex items-center gap-2"></div>
+    </div>
+
+    <!-- Venn — blok sendiri, DI-FIT: SVG-nya memakai height 100% + preserveAspectRatio
+         (lihat venn() di fusion.js), bukan lagi max-height piksel tetap, supaya
+         mengisi persis tinggi blok ini tanpa gulir ke arah mana pun. -->
+    <div class="col-start-1 col-span-5 row-start-10 row-span-3 min-h-0 bg-white rounded-xl border border-slate-200 p-3 flex flex-col overflow-hidden">
+      <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1 shrink-0">Venn irisan sumber</div>
+      <div id="fx-venn" class="flex-1 min-h-0 flex items-center justify-center overflow-hidden"></div>
     </div>
 
     <!-- SATU blok, dua mode — permintaan tim, menggantikan dua sel terpisah
          (Matriks dan Peringkat Kota). Polanya sama persis dengan blok Golongan/Venn
-         di atas: dua tombol .fx-mode, satu wadah isi, dan pergantian mode TIDAK
-         meminta apa pun lagi ke server karena angkanya disimpan di fusion.js. -->
-    <div class="col-start-8 col-span-3 row-start-1 row-span-12 min-h-0 bg-white rounded-xl border border-slate-200 p-3 flex flex-col">
+         yang dulu ada di sini: dua tombol .fx-mode, satu wadah isi, dan pergantian
+         mode TIDAK meminta apa pun lagi ke server karena angkanya disimpan di
+         fusion.js. Diperlebar 3 kol -> 4 kol (permintaan tim). Tambahan tombol
+         urutkan: lihat toggleSortMatriks() di fusion.js — berlaku untuk MODE yang
+         sedang aktif (Matriks ATAU Kota), default confidence terendah dulu. -->
+    <div class="col-start-6 col-span-4 row-start-1 row-span-12 min-h-0 bg-white rounded-xl border border-slate-200 p-3 flex flex-col">
       <div class="flex items-center gap-1 mb-1 shrink-0">
         <span id="fx-matriks-jumlah" class="text-[10px] text-slate-400 mr-auto"></span>
+        <button id="fx-sort-matriks" onclick="toggleSortMatriks()" title="Urutkan berdasarkan Confidence Ratio" class="fx-mode">CR &uarr;</button>
         <button id="fx-mode-matriks" onclick="setModeMatriks('matriks')" class="fx-mode fx-mode-aktif">Matriks</button>
         <button id="fx-mode-kota" onclick="setModeMatriks('kota')" class="fx-mode">Kota</button>
       </div>
       <div id="fx-matriks" class="flex-1 min-h-0 overflow-y-auto"></div>
     </div>
 
-    <div class="col-start-11 col-span-2 row-start-1 row-span-12 min-h-0 bg-white rounded-xl border border-slate-200 p-3 flex flex-col">
-      <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1 shrink-0">Peringkat dealer</div>
+    <!-- Diperlebar 2 kol -> 3 kol (permintaan tim). Tombol urutkan sendiri, terpisah
+         dari milik blok Matriks/Kota — dua daftar berbeda, dua urutan yang bisa
+         berbeda pula. -->
+    <div class="col-start-10 col-span-3 row-start-1 row-span-12 min-h-0 bg-white rounded-xl border border-slate-200 p-3 flex flex-col">
+      <div class="flex items-center gap-1 mb-1 shrink-0">
+        <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wide mr-auto">Peringkat dealer</span>
+        <button id="fx-sort-dealer" onclick="toggleSortDealer()" title="Urutkan berdasarkan Confidence Ratio" class="fx-mode">CR &uarr;</button>
+      </div>
       <div id="fx-dealer" class="flex-1 min-h-0 overflow-y-auto"></div>
     </div>
   </div>

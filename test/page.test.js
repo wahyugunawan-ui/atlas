@@ -267,7 +267,7 @@ function test() {
     'switchTab tidak menyembunyikan kendali Fusion (#fx-kendali) di halaman lain');
 
   /* --------------------------------------------------------------------
-     TATA LETAK 12x12 HALAMAN CONFIDENCE FUSION
+     TATA LETAK 12x12 HALAMAN CONFIDENCE FUSION — REVISI 2026-09-18
      --------------------------------------------------------------------
      Letak tiap blok DIMINTA tim secara spesifik, kolom dan baris disebut satu per
      satu. Penjaga lain di berkas ini cuma memastikan id-nya ada dan handlernya
@@ -276,6 +276,12 @@ function test() {
      Letaknya ditulis eksplisit (col-start/row-start) justru supaya bisa dijaga:
      dengan penempatan otomatis CSS grid, blok bertinggi beda-beda bisa terselip ke
      celah yang kebetulan kosong, dan tidak ada string apa pun yang bisa diperiksa.
+
+     Pita kiri (kolom 1-5) menyempit dari kolom 1-7 sebelumnya — dikorbankan supaya
+     Matriks/Dealer di pita kanan bisa diperlebar (permintaan tim). Peta juga
+     kehilangan tinggi (7 baris -> 4 baris) supaya Golongan Final dan Venn — yang
+     sekarang DUA BLOK TERPISAH, bukan satu blok bermode-dua seperti sebelumnya —
+     sama-sama dapat ruang tanpa gulir.
      -------------------------------------------------------------------- */
   const gridFusion = /<div id="fusion-isi"([^>]*)>/.exec(htmlTanpaKomentar);
   assert.ok(gridFusion, 'kerangka grid #fusion-isi hilang dari markup');
@@ -284,46 +290,92 @@ function test() {
 
   // kolom & baris persis seperti yang diminta, satu baris per blok.
   const letakDiminta = [
-    ['Pelanggan Terfilter', 'col-start-1 col-span-3 row-start-1 row-span-2'],
-    ['CW Sales', 'col-start-4 col-span-2 row-start-1 row-span-2'],
-    ['Confidence Ratio', 'col-start-6 col-span-2 row-start-1 row-span-2'],
-    ['Tampilan Peta', 'col-start-1 col-span-7 row-start-3 row-span-7'],
-    ['Golongan + Venn', 'col-start-1 col-span-7 row-start-10 row-span-3'],
-    ['Matriks / Peringkat Kota', 'col-start-8 col-span-3 row-start-1 row-span-12'],
-    ['Peringkat Dealer', 'col-start-11 col-span-2 row-start-1 row-span-12'],
+    ['Wadah 2x2 empat KPI', 'col-start-1 col-span-5 row-start-1 row-span-2'],
+    ['Tampilan Peta', 'col-start-1 col-span-5 row-start-3 row-span-4'],
+    ['Golongan Final', 'col-start-1 col-span-5 row-start-7 row-span-3'],
+    ['Venn', 'col-start-1 col-span-5 row-start-10 row-span-3'],
+    ['Matriks / Peringkat Kota', 'col-start-6 col-span-4 row-start-1 row-span-12'],
+    ['Peringkat Dealer', 'col-start-10 col-span-3 row-start-1 row-span-12'],
   ];
   for (const [blok, kelas] of letakDiminta) {
     assert.ok(htmlTanpaKomentar.includes(kelas),
       `blok "${blok}" tidak lagi di posisi yang diminta tim (${kelas})`);
   }
 
-  // Peta harus benar-benar DI DALAM blok baris 3-9, bukan sekadar kebetulan ada
-  // kelas itu di suatu tempat. Diperiksa lewat urutan kemunculan.
-  const posPeta = htmlTanpaKomentar.indexOf('col-start-1 col-span-7 row-start-3');
+  // Peta harus benar-benar DI DALAM blok baris 3-6, Golongan Final di dalam blok
+  // baris 7-9, dan Venn di dalam blok baris 10-12 — bukan sekadar kebetulan ada
+  // kelas itu di suatu tempat. Diperiksa lewat urutan kemunculan berturut-turut.
+  const posKpi = htmlTanpaKomentar.indexOf('col-start-1 col-span-5 row-start-1');
+  const posPeta = htmlTanpaKomentar.indexOf('col-start-1 col-span-5 row-start-3');
   const posHost = htmlTanpaKomentar.indexOf('id="fx-peta-host"');
-  const posGolongan = htmlTanpaKomentar.indexOf('col-start-1 col-span-7 row-start-10');
-  assert.ok(posPeta < posHost && posHost < posGolongan,
-    '#fx-peta-host tidak berada di dalam blok Tampilan Peta (kolom 1-7, baris 3-9)');
+  const posFinal = htmlTanpaKomentar.indexOf('col-start-1 col-span-5 row-start-7');
+  const posGolonganFinal = htmlTanpaKomentar.indexOf('id="fx-golongan-final"');
+  const posVennBlok = htmlTanpaKomentar.indexOf('col-start-1 col-span-5 row-start-10');
+  const posVenn = htmlTanpaKomentar.indexOf('id="fx-venn"');
+  assert.ok(posKpi < posPeta && posPeta < posHost && posHost < posFinal,
+    '#fx-peta-host tidak berada di dalam blok Tampilan Peta (kolom 1-5, baris 3-6)');
+  assert.ok(posFinal < posGolonganFinal && posGolonganFinal < posVennBlok,
+    '#fx-golongan-final tidak berada di dalam bloknya sendiri (kolom 1-5, baris 7-9)');
+  assert.ok(posVennBlok < posVenn,
+    '#fx-venn tidak berada di dalam bloknya sendiri (kolom 1-5, baris 10-12)');
 
-  // Tiga KPI jadi TIGA sel terpisah. Dulu ketiganya menumpuk di satu #fx-summary;
-  // kalau id lama itu hidup lagi, tata letak barunya diam-diam tidak terpakai.
-  for (const id of ['fx-catatan', 'fx-kpi-pelanggan', 'fx-kpi-cw', 'fx-kpi-ratio']) {
+  // EMPAT KPI jadi EMPAT sel terpisah (Cakupan Sumber ditambahkan 2026-09-18). Dulu
+  // tiga sel menumpuk di satu #fx-summary sebelum itu pun — kalau id lama itu hidup
+  // lagi, tata letak barunya diam-diam tidak terpakai.
+  for (const id of ['fx-catatan', 'fx-kpi-pelanggan', 'fx-kpi-cw', 'fx-kpi-ratio', 'fx-kpi-cakupan']) {
     assert.ok(htmlTanpaKomentar.includes(`id="${id}"`), `slot #${id} hilang dari markup`);
   }
   assert.ok(!htmlTanpaKomentar.includes('id="fx-summary"'),
-    '#fx-summary hidup lagi — tiga KPI kembali menumpuk di satu sel');
+    '#fx-summary hidup lagi — KPI kembali menumpuk di satu sel');
   assert.ok(!source['fusion.js'].includes("'fx-summary'"),
     "fusion.js masih mengisi 'fx-summary' yang sudah tidak ada di markup");
   assert.ok(!source['fusion.js'].includes("'fx-kota'"),
     "fusion.js masih mengisi 'fx-kota'; blok itu sudah jadi mode di dalam #fx-matriks");
 
-  // Matriks dan Peringkat Kota SATU blok dua mode, polanya sama dengan Golongan/Venn.
+  // Golongan Final dan Venn BUKAN LAGI satu blok bermode-dua — dulu #fx-golongan
+  // (bare) dengan tombol fx-mode-golongan/fx-mode-venn. Kalau salah satu hidup lagi,
+  // tata letak dua-blok-terpisah yang baru diam-diam tidak terpakai.
+  assert.ok(!htmlTanpaKomentar.includes('id="fx-golongan"'),
+    '#fx-golongan (bare, satu blok bermode) hidup lagi — seharusnya sudah jadi ' +
+    'dua blok terpisah #fx-golongan-final dan #fx-venn');
+  for (const idLama of ['fx-mode-golongan', 'fx-mode-venn']) {
+    assert.ok(!htmlTanpaKomentar.includes(`id="${idLama}"`),
+      `#${idLama} hidup lagi — Golongan Final/Venn sudah tidak bermode lagi`);
+  }
+  // Dicocokkan sebagai DEKLARASI/EKSPOR, bukan substring bebas — komentar penjelas di
+  // fusion.js sengaja menyebut nama lama ini untuk riwayat, dan itu bukan pelanggaran.
+  assert.ok(!/function setModeGolongan\s*\(/.test(source['fusion.js']),
+    'setModeGolongan masih jadi fungsi di fusion.js — seharusnya sudah diganti ' +
+    'gambarGolonganFinal()/gambarVenn()');
+
+  // Matriks dan Peringkat Kota SATU blok dua mode, polanya sama dengan Golongan/Venn
+  // yang dulu ada di sini.
   for (const mode of ['matriks', 'kota']) {
     assert.ok(htmlTanpaKomentar.includes(`id="fx-mode-${mode}"`),
       `tombol mode "${mode}" hilang dari blok gabungan`);
     assert.ok(htmlTanpaKomentar.includes(`setModeMatriks('${mode}')`),
       `tombol mode "${mode}" tidak memanggil setModeMatriks('${mode}')`);
   }
+
+  /* --------------------------------------------------------------------
+     URUTKAN CONFIDENCE RATIO — Matriks/Peringkat Kota dan Peringkat Dealer
+     --------------------------------------------------------------------
+     Permintaan tim: kedua blok bisa diurutkan berdasarkan Confidence Ratio, bawaan
+     dari yang paling RENDAH (paling perlu perhatian) dulu. Dua tombol terpisah —
+     dua daftar berbeda bisa punya urutan berbeda pula.
+     -------------------------------------------------------------------- */
+  for (const [id, fungsi] of [['fx-sort-matriks', 'toggleSortMatriks'],
+    ['fx-sort-dealer', 'toggleSortDealer']]) {
+    assert.ok(htmlTanpaKomentar.includes(`id="${id}"`), `tombol urutkan #${id} hilang`);
+    assert.ok(htmlTanpaKomentar.includes(`onclick="${fungsi}()"`),
+      `tombol #${id} tidak memanggil ${fungsi}()`);
+  }
+  assert.ok(source['fusion.js'].includes('let arahSortMatriks = ') &&
+    /arahSortMatriks\s*=\s*['"]asc['"]/.test(source['fusion.js']),
+    "arahSortMatriks harus berawal 'asc' (confidence terendah dulu, bawaan)");
+  assert.ok(source['fusion.js'].includes('let arahSortDealer = ') &&
+    /arahSortDealer\s*=\s*['"]asc['"]/.test(source['fusion.js']),
+    "arahSortDealer harus berawal 'asc' (confidence terendah dulu, bawaan)");
 
   /* --------------------------------------------------------------------
      KETIGA FLYOUT NAVBAR HARUS BISA DIBUKA DENGAN KLIK

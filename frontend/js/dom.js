@@ -63,3 +63,27 @@ export function sumBy(rows, key) {
   return out;
 }
 
+/**
+ * Nama kota untuk TAMPILAN saja — buang awalan "Kabupaten ", biarkan "Kota " apa
+ * adanya.
+ *
+ * PERMINTAAN TIM: kata "Kabupaten" dihapus dari layar, TAPI kata itu tetap harus bisa
+ * dibaca dari berkas Excel yang diimpor — pencocokan nama kelurahan dan `city_name` di
+ * database TIDAK disentuh sama sekali, cuma tempat menampilkannya yang dipangkas.
+ * Karena itu fungsi ini murni untuk TAMPILAN: dipanggil di titik render, bukan pernah
+ * di jalur impor atau pencocokan.
+ *
+ * "Kota " sengaja DIBIARKAN, bukan ikut dibuang: itu bagian nama resmi yang
+ * membedakan satu wilayah dari yang lain (mis. "Kota Yogyakarta" vs empat
+ * "Kabupaten ..." lain di Karesidenan Yogyakarta) — membuangnya akan membuat dua
+ * wilayah berbeda terlihat sama di layar.
+ *
+ * Dibuat case-insensitive dan tahan spasi ganda: sumbernya Excel, dan variasi
+ * "KABUPATEN  Sleman" (dua spasi, huruf besar semua) sudah pernah muncul di data
+ * nyata proyek lain.
+ */
+export function displayCityName(name) {
+  const s = String(name ?? '').trim();
+  return s.replace(/^kabupaten\s+/i, '').trim();
+}
+

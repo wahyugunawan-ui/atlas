@@ -76,7 +76,10 @@ test('semua centang dilepas: memberi tahu, bukan menampilkan daftar tanpa bar', 
   m.toggleSumberCakupan('kirim');
   const html = m.cakupanSumber(DATA);
   assert.match(html, /Centang minimal satu sumber/);
-  assert.ok(!html.includes('Kabupaten Sleman'),
+  // 'Sleman', bukan 'Kabupaten Sleman': sejak displayCityName() (dom.js) memangkas
+  // awalan "Kabupaten " dari tampilan, nama itu tidak pernah muncul apa adanya lagi —
+  // memeriksa string lama akan selalu benar apa pun isi html-nya, bukan menjaga apa pun.
+  assert.ok(!html.includes('Sleman'),
     'daftar nama tanpa satu pun bar terbaca seperti data yang hilang');
   await resetCentang(m);
 });
@@ -87,8 +90,13 @@ test('pencarian benar-benar menyaring, dan cocoknya tidak peduli huruf besar-kec
   nilaiKotakCari = 'sleman';
   m.cariCakupan();
   const html = m.cakupanSumber(DATA);
-  assert.ok(html.includes('Kabupaten Sleman'), 'yang cocok harus tetap tampil');
-  assert.ok(!html.includes('Kabupaten Cilacap'), 'yang tidak cocok harus hilang');
+  // Nama sumbernya di fixture DATA sengaja masih "Kabupaten Sleman" (bentuk mentah
+  // dari database) — yang diperiksa di sini justru HASIL TAMPILANNYA sesudah
+  // displayCityName() memangkas awalan itu, jadi dicari "Sleman" bukan "Kabupaten
+  // Sleman". Pencariannya sendiri (cariCakupanTeks) tetap cocok tanpa peduli awalan
+  // itu ada atau tidak, karena namaBaris() membandingkan versi yang SUDAH dipangkas.
+  assert.ok(html.includes('Sleman'), 'yang cocok harus tetap tampil');
+  assert.ok(!html.includes('Cilacap'), 'yang tidak cocok harus hilang');
   await resetCentang(m);
 });
 

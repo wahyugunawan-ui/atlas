@@ -123,7 +123,7 @@ function isiComboKota() {
   const f = pageFilters();
   const allowed = f.kares !== 'ALL' ? new Set(KARESIDENAN[f.kares].cities) : ALLOWED_CITY_CODES;
 
-  fillCombo('kota', 'Kabupaten', Object.keys(S.cityNames)
+  fillCombo('kota', 'Kota', Object.keys(S.cityNames)
     .filter((c) => allowed.has(c))
     .sort((a, b) => S.cityNames[a].localeCompare(S.cityNames[b]))
     .map((c) => [c, S.cityNames[c]]), 'Semua', (value) => {

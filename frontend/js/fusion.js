@@ -27,8 +27,8 @@ import {
 import {
   fitToScope, gambarTelusurDiPeta, hapusTelusurDiPeta, refreshMapVisual,
 } from './map.js';
-import { $, esc, formatNumber } from './dom.js';
-import { ALLOWED_CITY_CODES } from './config.js';
+import { $, displayCityName, esc, formatNumber } from './dom.js';
+import { ALLOWED_CITY_CODES, KARESIDENAN } from './config.js';
 import { fusionFilter, kotaBerikutnya, pageFilters, persenSumber, setScope } from './filters.js';
 import { S } from './state.js';
 // CATATAN: `syncFilterBar` SENGAJA dipanggil lewat `window`, bukan di-import.
@@ -56,6 +56,43 @@ function kartuKpi(label, angka, sub, warna) {
     `<div class="text-[10px] uppercase font-bold text-slate-400 tracking-wide truncate">${esc(label)}</div>` +
     `<div class="text-xl font-extrabold text-slate-800 mono leading-tight mt-0.5">${esc(angka)}</div>` +
     `<div class="text-[10px] font-bold ${warna || 'text-slate-400'} truncate">${esc(sub)}</div></div>`;
+}
+
+/**
+ * Kartu KPI ke-4: "Cakupan Sumber" — bukan ANGKA, tapi KALIMAT ("Karesidenan Kedu ·
+ * Dealer X"), jadi kartuKpi() TIDAK dipakai apa adanya: kolom angkanya di sana
+ * `text-xl mono` dan TANPA `truncate`, cocok untuk "24.567" tapi meluber kalau
+ * isinya kalimat. `line-clamp-2` di sini supaya kalimat panjang berhenti rapi,
+ * bukan mendorong kartu lain di grid 2x2 jadi tidak sejajar.
+ */
+function kartuKpiTeks(label, teks, sub) {
+  return `<div class="bg-white rounded-xl border border-slate-200 p-3 flex-1 min-w-0 flex flex-col">` +
+    `<div class="text-[10px] uppercase font-bold text-slate-400 tracking-wide truncate">${esc(label)}</div>` +
+    `<div class="text-sm font-extrabold text-slate-800 leading-snug mt-0.5 line-clamp-2">${esc(teks)}</div>` +
+    `<div class="text-[10px] font-bold text-slate-400 truncate mt-auto">${esc(sub)}</div></div>`;
+}
+
+/**
+ * Keterangan singkat kartu "Cakupan Sumber": saringan APA yang sedang berlaku di
+ * seluruh halaman ini.
+ *
+ * SENGAJA TIDAK memakai scopeLabel() (filters.js) apa adanya — fungsi itu ikut
+ * menyebut Pos, dan Pos TIDAK berpengaruh di halaman Confidence Fusion (dihapus
+ * 2026-09-18, lihat komentar fusionFilter()). Menyebutnya di sini akan membuat
+ * orang mengira pos ikut menyaring padahal tidak — persis salah yang tidak
+ * kelihatan salah, kelas cacat yang sudah berkali-kali muncul di proyek ini.
+ */
+function labelCakupanSumber() {
+  const f = pageFilters('fusion');
+  const bagian = [];
+  if (f.kares !== 'ALL' && KARESIDENAN[f.kares]) bagian.push(KARESIDENAN[f.kares].label);
+  if (f.cityCode !== 'ALL') {
+    bagian.push(displayCityName(S.cityNames[f.cityCode] || f.cityCode));
+  }
+  if (f.dealerCode !== 'ALL') {
+    bagian.push('Dealer ' + (S.dealerNames[f.dealerCode] || f.dealerCode));
+  }
+  return bagian.length ? bagian.join(' · ') : 'Semua sumber (tanpa saringan)';
 }
 
 /** Baris satu golongan: swatch warna, nama, jumlah. */
@@ -125,8 +162,17 @@ function donut(counts, total) {
  * Kepekatan sel dihitung terhadap nilai TERBESAR seluruh tabel (dikirim server), jadi
  * satu kota besar tidak membuat seluruh baris lain tampak kosong seperti kalau
  * dinormalkan per baris.
+ *
+ * TIDAK memotong ATAU mengurutkan `data.rows` sendiri — keduanya sudah beres di
+ * `gambarMatriks()` sebelum fungsi ini dipanggil (urutkanConfidence()), supaya logika
+ * urut-dan-sorot satu tempat saja, dipakai bersama dengan daftarPeringkat() di bawah.
+ *
+ * @param {Set<string>|null} sorotKota  kode kota yang sedang disaring di halaman
+ *   (lihat kotaSorotSet()) — barisnya diberi highlight, TIDAK disembunyikan yang
+ *   lain. Permintaan tim: dulu server yang menyaring jadi cuma satu baris tersisa;
+ *   sekarang server selalu mengirim SEMUA kota, dan penyaringannya jadi sorotan.
  */
-function matriks(data) {
+function matriks(data, sorotKota) {
   if (!data || !data.rows || !data.rows.length) {
     return '<p class="text-xs text-slate-400 py-4 text-center">Belum ada data.</p>';
   }
@@ -149,26 +195,38 @@ function matriks(data) {
 
     const warna = WARNA_STATUS[r.status] || 'text-slate-400';
     const cr = r.confidenceRatio == null ? '—' : `${(r.confidenceRatio * 100).toFixed(0)}%`;
+    // Baris yang sedang disaring di bilah filter (kota/kares) disorot, BUKAN
+    // disembunyikan — lihat komentar @param sorotKota di atas.
+    const disorot = Boolean(sorotKota && r.cityCode && sorotKota.has(r.cityCode));
+    // fx-sorot dipakai gambarMatriks() sesudah ini untuk auto-scroll ke baris pertama
+    // yang cocok — bukan sekadar nama kelas gaya.
+    const kelasBaris = 'border-b border-slate-50' + (disorot ? ' fx-sorot bg-amber-50' : '');
     // Barisnya jadi kendali silang: klik = saring seluruh halaman ke kota itu.
     // Baris tanpa kode kota tidak bisa diklik sama sekali — tombol yang menerima klik
     // lalu tidak melakukan apa-apa cuma melatih orang berhenti mempercayainya.
     const klik = r.cityCode
       ? ` onclick="filterDariFusi('kota','${esc(r.cityCode)}')" title="Saring seluruh ` +
-        `halaman ke kota ini" class="border-b border-slate-50 cursor-pointer hover:bg-blue-50"`
-      : ' class="border-b border-slate-50"';
+        `halaman ke kota ini" class="${kelasBaris} cursor-pointer hover:bg-blue-50"`
+      : ` class="${kelasBaris}"`;
+    // displayCityName() DI SINI, bukan di server: baris ini juga dipakai klik-untuk-
+    // menyaring (filterDariFusi memakai r.cityCode, bukan namanya), jadi kode kotanya
+    // wajib apa adanya sementara cuma teks yang tampil di layar yang dipangkas.
+    const namaKota = displayCityName(r.cityName) || r.cityCode || '—';
     return `<tr${klik}>` +
       `<td class="px-1 py-0.5 text-[10px] text-slate-700 truncate" style="max-width:130px" ` +
-      `title="${esc(r.cityName || r.cityCode || '')}">${esc(r.cityName || r.cityCode || '—')}</td>` +
+      `title="${esc(namaKota)}">${esc(namaKota)}</td>` +
       sel +
       `<td class="px-1 text-right text-[10px] font-bold mono ${warna}">${esc(cr)}</td></tr>`;
   }).join('');
 
-  return `<div class="overflow-y-auto" style="max-height:230px">` +
-    `<table class="w-full border-collapse"><thead class="sticky top-0 bg-white">` +
+  // TANPA pembungkus overflow-y-auto/max-height sendiri lagi (permintaan tim: "jangan
+  // dibatasi"). #fx-matriks di index.html sudah punya overflow-y-auto — dua scrollbox
+  // bersarang cuma membuat sebagian besar blok terasa terpotong padahal ruangnya ada.
+  return `<table class="w-full border-collapse"><thead class="sticky top-0 bg-white">` +
     `<tr><th class="px-1 py-1 text-left text-[9px] font-bold text-slate-400 uppercase">Kota</th>` +
     kepala +
     `<th class="px-1 py-1 text-right text-[9px] font-bold text-slate-400 uppercase">%</th></tr>` +
-    `</thead><tbody>${baris}</tbody></table></div>`;
+    `</thead><tbody>${baris}</tbody></table>`;
 }
 
 /**
@@ -181,6 +239,12 @@ function matriks(data) {
  *
  * Kotak garis putus-putus membungkus SELURUH diagram: yang di luar ketiga lingkaran
  * adalah "Tak Terverifikasi" — punya jejak, tapi tidak satu pun bisa dijadikan titik.
+ *
+ * DI-FIT ke blok pembungkusnya (permintaan tim: "tanpa scroll"), bukan lagi
+ * `max-height` piksel tetap: `width`/`height` 100% + `preserveAspectRatio` (nilai
+ * bawaan SVG, ditulis eksplisit di sini supaya jelas ini pilihan, bukan kelalaian)
+ * membuat SVG menyusut/membesar mengisi kotak `#fx-venn` apa pun tingginya, tanpa
+ * pernah terpotong atau memicu scrollbar.
  */
 function venn(data) {
   const r = (data && data.regions) || {};
@@ -197,7 +261,8 @@ function venn(data) {
       besar ? 13 : 10}px;font-weight:800">${esc(formatNumber(n))}</text>`
     : '');
 
-  return `<svg viewBox="0 0 300 208" width="100%" style="max-height:208px" class="block">` +
+  return `<svg viewBox="0 0 300 208" width="100%" height="100%" ` +
+    `preserveAspectRatio="xMidYMid meet" class="block">` +
     `<rect x="6" y="6" width="288" height="196" rx="8" fill="none" ` +
     `stroke="${esc(SEGMENTS.unverified.color)}" stroke-width="1.5" stroke-dasharray="5 4"/>` +
     `<text x="14" y="22" style="fill:${esc(SEGMENTS.unverified.color)};font-size:8px;` +
@@ -499,7 +564,10 @@ export function cakupanSumber(data) {
    * DIDAMPINGI keterangannya.
    */
   const namaBaris = (r) => {
-    if (r.name) return r.name;
+    // displayCityName() tidak mengubah apa pun kalau grouping-nya per DEALER — nama
+    // dealer tidak pernah berawalan "Kabupaten", jadi pemanggilannya di sini aman
+    // untuk kedua mode tanpa cabang if terpisah.
+    if (r.name) return perDealer ? r.name : displayCityName(r.name);
     if (perDealer) return r.code ? `Dealer ${r.code}` : 'Dealer tidak dikenal';
     if (r.code === '' || !r.code) return 'Kota tidak diketahui';
     return `Luar cakupan (${r.code})`;
@@ -573,6 +641,16 @@ export function cakupanSumber(data) {
  *
  * Persentase itu DISEMBUNYIKAN waktu filter kota sedang aktif: pada keadaan itu
  * nilainya selalu 100% karena barisnya memang sudah disaring ke kota itu saja.
+ *
+ * TIDAK dipotong 25 lagi sejak permintaan tim mengubah blok Peringkat Kota dan
+ * Peringkat Dealer dari "tampilkan satu, sembunyikan sisanya" jadi "tampilkan
+ * semua, sorot yang cocok" (lihat @param sorotKota/sorotDealer). Memotongnya akan
+ * membuat baris yang seharusnya disorot kadang tidak pernah ikut tergambar sama
+ * sekali kalau posisinya jatuh di luar 25 teratas — persis kebalikan dari tujuan
+ * fitur ini.
+ *
+ * @param {Set<string>|null} [opsi.sorotKota]  kode kota yang sedang disaring
+ * @param {string|null} [opsi.sorotDealer]  kode dealer (turunan nama) yang disaring
  */
 function daftarPeringkat(rows, kunciNama, opsi) {
   if (!rows || !rows.length) {
@@ -580,8 +658,10 @@ function daftarPeringkat(rows, kunciNama, opsi) {
   }
   const denganKota = Boolean(opsi && opsi.denganKota);
   const kotaDisaring = Boolean(opsi && opsi.kotaDisaring);
+  const sorotKota = (opsi && opsi.sorotKota) || null;
+  const sorotDealer = (opsi && opsi.sorotDealer) || null;
 
-  return rows.slice(0, 25).map((r) => {
+  return rows.map((r) => {
     const total = Number(r.total) || 0;
     const rasio = total ? Number(r.cwSales) / total : null;
     const persen = rasio == null ? '—' : `${(rasio * 100).toFixed(0)}%`;
@@ -590,7 +670,7 @@ function daftarPeringkat(rows, kunciNama, opsi) {
 
     const bagian = Number(r.citySharePct);
     const kota = (denganKota && r.cityName)
-      ? `<span class="text-slate-400"> · ${esc(r.cityName)}${
+      ? `<span class="text-slate-400"> · ${esc(displayCityName(r.cityName))}${
         (!kotaDisaring && Number.isFinite(bagian) && bagian < 60) ? ` ${esc(String(bagian))}%` : ''
       }</span>`
       : '';
@@ -603,16 +683,26 @@ function daftarPeringkat(rows, kunciNama, opsi) {
     // bisa diklik lalu mengosongkan halaman tanpa sebab yang terlihat.
     const jenisKlik = opsi && opsi.jenis;
     const kodeKlik = jenisKlik === 'dealer' ? (r.dealerFilterCode || '') : (r.cityCode || '');
-    const KELAS_BARIS = 'flex items-center gap-2 py-1 border-b border-slate-50 last:border-0';
+    // Baris yang sedang disaring di bilah filter disorot, BUKAN disembunyikan — lihat
+    // JSDoc di atas fungsi ini. fx-sorot dipakai gambarMatriks() untuk auto-scroll.
+    const disorot = sorotKota ? Boolean(r.cityCode && sorotKota.has(r.cityCode))
+      : sorotDealer ? r.dealerFilterCode === sorotDealer : false;
+    const KELAS_BARIS = 'flex items-center gap-2 py-1 border-b border-slate-50 last:border-0' +
+      (disorot ? ' fx-sorot bg-amber-50' : '');
     const klik = (jenisKlik && kodeKlik)
       ? ` onclick="filterDariFusi('${esc(jenisKlik)}','${esc(kodeKlik)}')" ` +
         `title="Saring seluruh halaman ke ${jenisKlik === 'dealer' ? 'dealer' : 'kota'} ini" ` +
         `class="${KELAS_BARIS} cursor-pointer hover:bg-blue-50"`
       : ` class="${KELAS_BARIS}"`;
 
+    // "Kabupaten " dipangkas HANYA saat kolom namanya memang nama kota (mode Peringkat
+    // Kota, kunciNama === 'cityName'). Mode dealer memakai kolom yang sama untuk
+    // dealerName; menerapkan displayCityName ke situ tidak salah tapi juga tidak
+    // berarti apa-apa — dijaga eksplisit di sini supaya jelas ini bukan kebetulan.
+    const namaUtama = kunciNama === 'cityName' ? displayCityName(r[kunciNama]) : r[kunciNama];
     return `<div${klik}>` +
       `<span class="text-[11px] text-slate-700 truncate flex-1">${
-        esc(r[kunciNama] || r.cityCode || r.dealerCode || '—')}${kota}</span>` +
+        esc(namaUtama || r.cityCode || r.dealerCode || '—')}${kota}</span>` +
       `<span class="text-[11px] mono text-slate-500">${esc(formatNumber(total))}</span>` +
       `<span class="text-[11px] font-bold mono ${warna} w-10 text-right">${esc(persen)}</span></div>`;
   }).join('');
@@ -726,49 +816,137 @@ function isiSlot(id, html) {
   if (el) el.innerHTML = html;
 }
 
-/** Blok Golongan punya DUA tampilan dalam satu sel; bawaannya Golongan final. */
-let modeGolongan = 'golongan';
+/**
+ * Golongan Final dan Venn PISAH jadi dua blok sendiri sejak 2026-09-18 (permintaan
+ * tim) — sebelumnya satu sel bermode-dua seperti Matriks/Peringkat Kota di bawah.
+ * Karena keduanya sekarang selalu tampil BERSAMAAN (tidak ada tombol mode lagi),
+ * gambarGolongan()/setModeGolongan() diganti gambarGolonganFinal()+gambarVenn(),
+ * dipanggil berdua dari renderFusion().
+ */
 
-/** Angka terakhir yang diterima, supaya ganti mode tidak meminta ulang ke server. */
+/** Angka terakhir yang diterima, supaya kedua blok bisa digambar ulang tanpa
+ * meminta apa pun lagi ke server (mis. waktu jendela di-resize). */
 let fusiTerakhir = null;
 
-/** Gambar ulang HANYA sel Golongan/Venn. */
-function gambarGolongan() {
-  ['golongan', 'venn'].forEach((m) => {
-    const tombol = $(`fx-mode-${m}`);
-    if (tombol) tombol.classList.toggle('fx-mode-aktif', modeGolongan === m);
-  });
+/**
+ * Gambar ulang blok Golongan Final: pie di KIRI, daftar golongan di KANAN
+ * (permintaan tim — dulu ditumpuk atas-bawah dalam satu sel bermode).
+ */
+function gambarGolonganFinal() {
   if (!fusiTerakhir) return;
-
-  const { counts, total, irisan, meta } = fusiTerakhir;
-  isiSlot('fx-golongan', modeGolongan === 'venn'
-    ? venn(irisan)
-    : Object.keys(SEGMENTS).map((k) => barisGolongan(k, counts[k])).join('') +
-      donut(counts, total) +
+  const { counts, total, meta } = fusiTerakhir;
+  const legenda = Object.keys(SEGMENTS).map((k) => barisGolongan(k, counts[k])).join('');
+  isiSlot('fx-golongan-final',
+    `<div class="shrink-0">${donut(counts, total)}</div>` +
+    `<div class="flex-1 min-w-0 min-h-0 overflow-y-auto">` +
+      legenda +
       `<div class="text-[10px] text-slate-400 mt-2 pt-2 border-t border-slate-100">` +
-      `KPI Jarak: ${esc(String(meta.kpiJarakKm ?? '—'))} km</div>`);
+      `KPI Jarak: ${esc(String(meta.kpiJarakKm ?? '—'))} km</div>` +
+    `</div>`);
 }
 
-/** Ganti tampilan sel Golongan antara daftar golongan dan Venn. */
-export function setModeGolongan(mode) {
-  modeGolongan = mode === 'venn' ? 'venn' : 'golongan';
-  gambarGolongan();
+/** Gambar ulang blok Venn — kini blok sendiri, bukan lagi mode dalam sel bersama. */
+function gambarVenn() {
+  if (!fusiTerakhir) return;
+  isiSlot('fx-venn', venn(fusiTerakhir.irisan));
 }
 
 /**
  * Blok Matriks Kota x Golongan dan Peringkat Kota DISATUKAN jadi satu blok dua mode
  * (permintaan tim, tata letak 12x12). Bawaannya matriks.
  *
- * Polanya sengaja disalin dari modeGolongan di atas, bukan diabstraksikan jadi satu
- * fungsi bersama: keduanya cuma tiga baris, dan penyatuannya berarti satu fungsi yang
- * harus tahu dua daftar mode, dua wadah, dan dua cara menggambar. Sama alasannya
+ * Polanya sengaja tidak diabstraksikan jadi satu fungsi bersama dengan blok Dealer
+ * di bawah: keduanya beda bentuk data (satu punya dua mode, satu tidak) dan
+ * menyatukannya berarti satu fungsi yang harus tahu keduanya. Sama alasannya
  * dengan flyout Master/Data di tables.js yang juga sengaja dibiarkan kembar.
  */
 let modeMatriks = 'matriks';
 
-/** Angka peringkat & matriks terakhir, supaya ganti mode tidak meminta ulang ke server. */
+/** Angka peringkat & matriks terakhir, supaya ganti mode ATAU ganti arah urutan
+ * bisa menggambar ulang tanpa meminta apa pun lagi ke server. */
 let peringkatTerakhir = null;
 let matriksTerakhir = null;
+
+/**
+ * Saringan Kota/Kares/Dealer yang AKTIF saat data terakhir diminta — dipakai
+ * menghitung baris mana yang harus disorot di blok Matriks/Peringkat Kota/Dealer.
+ *
+ * BUKAN filter yang dipakai fetchMatriks()/fetchPeringkat() itu sendiri: sejak
+ * permintaan "tampilkan semua, sorot yang cocok" (2026-09-18), kedua fetch itu
+ * SENGAJA hanya mengirim periode — lihat renderFusion(). Nilai ini dipakai
+ * terpisah, murni untuk mencocokkan baris mana yang perlu disorot.
+ */
+let filterAktifTerakhir = null;
+
+/**
+ * Confidence Ratio satu baris, dari BENTUK APA PUN baris itu datang.
+ *
+ * Baris matriks membawa `confidenceRatio` siap pakai; baris peringkat kota/dealer
+ * cuma membawa `cwSales`/`total` mentah (lihat daftarPeringkat()). Satu fungsi
+ * dipakai untuk dua bentuk data itu, bukan dua rumus yang bisa diam-diam menyimpang.
+ *
+ * @returns {number|null} null = belum bisa dihitung (total nol / rasio tidak ada)
+ */
+export function confidenceRatioOf(r) {
+  if (r.confidenceRatio != null) return Number(r.confidenceRatio);
+  const total = Number(r.total) || 0;
+  return total ? Number(r.cwSales) / total : null;
+}
+
+/**
+ * Urutkan salinan `rows` berdasarkan Confidence Ratio. Bawaannya (dan default
+ * halaman) ASCENDING — permintaan tim: yang paling perlu perhatian adalah baris
+ * yang paling RAPUH, bukan yang paling meyakinkan.
+ *
+ * Baris yang confidence-nya TIDAK BISA dihitung (null) selalu jatuh ke UJUNG,
+ * arah mana pun: "tidak diketahui" bukan "terendah" ataupun "tertinggi", jadi
+ * tidak boleh ikut menempati posisi teratas cuma karena kebetulan sortnya ascending.
+ *
+ * @param {'asc'|'desc'} arah
+ */
+export function urutkanConfidence(rows, arah) {
+  const list = (rows || []).slice();
+  list.sort((a, b) => {
+    const ra = confidenceRatioOf(a);
+    const rb = confidenceRatioOf(b);
+    if (ra == null && rb == null) return 0;
+    if (ra == null) return 1;
+    if (rb == null) return -1;
+    return arah === 'desc' ? rb - ra : ra - rb;
+  });
+  return list;
+}
+
+/** Kode kota yang harus disorot di blok Matriks/Peringkat Kota, dari filter AKTIF
+ * (bukan dari filter yang dikirim ke server — lihat filterAktifTerakhir di atas).
+ * Kares diterjemahkan jadi daftar kota; Kota eksplisit menang kalau keduanya ada,
+ * sama seperti fusionFilter() sendiri. null = tidak ada yang perlu disorot. */
+export function kotaSorotSet(f) {
+  if (!f) return null;
+  if (f.kota) return new Set([f.kota]);
+  if (f.kotaBanyak && f.kotaBanyak.length) return new Set(f.kotaBanyak);
+  return null;
+}
+
+/** Teks tombol urutkan: panah mengikuti arah yang SEDANG berlaku, bukan yang akan
+ * terjadi kalau ditekan — supaya tombolnya menjelaskan keadaan, bukan aksi. */
+function perbaruiLabelSort(id, arah) {
+  const tombol = $(id);
+  if (tombol) tombol.textContent = arah === 'desc' ? 'CR ↓' : 'CR ↑';
+}
+
+/** Sorot baris pertama yang cocok (fx-sorot) ke dalam pandangan, di dalam wadah
+ * `id` — auto-scroll TANPA menggulir halaman, cuma kotak gulir blok itu sendiri. */
+function sorotDanGulir(id) {
+  const wadah = $(id);
+  const baris = wadah && wadah.querySelector('.fx-sorot');
+  if (baris) baris.scrollIntoView({ block: 'nearest' });
+}
+
+/** Urutan Confidence Ratio blok Matriks/Peringkat Kota. Satu variabel untuk
+ * KEDUA mode — mode dan urutan itu dua sumbu independen, bukan alasan untuk dua
+ * tombol urutkan. */
+let arahSortMatriks = 'asc';
 
 /** Gambar ulang HANYA blok Matriks/Peringkat Kota. */
 function gambarMatriks() {
@@ -776,23 +954,58 @@ function gambarMatriks() {
     const tombol = $(`fx-mode-${m}`);
     if (tombol) tombol.classList.toggle('fx-mode-aktif', modeMatriks === m);
   });
+  perbaruiLabelSort('fx-sort-matriks', arahSortMatriks);
+  const sorotKota = kotaSorotSet(filterAktifTerakhir);
 
   if (modeMatriks === 'kota') {
-    const kota = (peringkatTerakhir && peringkatTerakhir.cities) || [];
-    isiSlot('fx-matriks', daftarPeringkat(kota, 'cityName', { jenis: 'kota' }));
+    const kota = urutkanConfidence(
+      (peringkatTerakhir && peringkatTerakhir.cities) || [], arahSortMatriks);
+    isiSlot('fx-matriks', daftarPeringkat(kota, 'cityName', { jenis: 'kota', sorotKota }));
     isiSlot('fx-matriks-jumlah', `Peringkat kota · ${esc(String(kota.length))} kota`);
+    sorotDanGulir('fx-matriks');
     return;
   }
 
-  const baris = (matriksTerakhir && matriksTerakhir.rows) ? matriksTerakhir.rows.length : 0;
-  isiSlot('fx-matriks', matriks(matriksTerakhir));
-  isiSlot('fx-matriks-jumlah', `Matriks Kota × Golongan · ${esc(String(baris))} kota`);
+  const rowsUrut = urutkanConfidence(
+    (matriksTerakhir && matriksTerakhir.rows) || [], arahSortMatriks);
+  isiSlot('fx-matriks',
+    matriks(matriksTerakhir ? { ...matriksTerakhir, rows: rowsUrut } : matriksTerakhir, sorotKota));
+  isiSlot('fx-matriks-jumlah', `Matriks Kota × Golongan · ${esc(String(rowsUrut.length))} kota`);
+  sorotDanGulir('fx-matriks');
 }
 
 /** Ganti tampilan blok antara Matriks Kota x Golongan dan Peringkat Kota. */
 export function setModeMatriks(mode) {
   modeMatriks = mode === 'kota' ? 'kota' : 'matriks';
   gambarMatriks();
+}
+
+/** Balik arah urutan Confidence Ratio blok Matriks/Peringkat Kota — TANPA meminta
+ * apa pun ke server, datanya sudah di tangan (matriksTerakhir/peringkatTerakhir). */
+export function toggleSortMatriks() {
+  arahSortMatriks = arahSortMatriks === 'asc' ? 'desc' : 'asc';
+  gambarMatriks();
+}
+
+/** Sama alasannya dengan arahSortMatriks di atas, tapi Peringkat Dealer daftar yang
+ * BERBEDA — dua daftar, dua kemungkinan urutan yang berbeda pula. */
+let arahSortDealer = 'asc';
+
+/** Gambar ulang HANYA blok Peringkat Dealer. */
+function gambarDealer() {
+  perbaruiLabelSort('fx-sort-dealer', arahSortDealer);
+  const dealers = urutkanConfidence(
+    (peringkatTerakhir && peringkatTerakhir.dealers) || [], arahSortDealer);
+  const sorotDealer = filterAktifTerakhir ? filterAktifTerakhir.dealer : null;
+  isiSlot('fx-dealer', daftarPeringkat(dealers, 'dealerName',
+    { denganKota: true, jenis: 'dealer', sorotDealer }));
+  sorotDanGulir('fx-dealer');
+}
+
+/** Balik arah urutan Confidence Ratio blok Peringkat Dealer. */
+export function toggleSortDealer() {
+  arahSortDealer = arahSortDealer === 'asc' ? 'desc' : 'asc';
+  gambarDealer();
 }
 
 /**
@@ -837,6 +1050,14 @@ export async function renderFusion() {
   isiSlot('fx-kpi-pelanggan',
     '<p class="text-xs text-slate-400 p-2">Memuat angka golongan…</p>');
 
+  // Matriks dan Peringkat (kota+dealer) diminta dengan PERIODE SAJA, bukan `f` utuh —
+  // permintaan tim 2026-09-18: dulu memilih Kares/Kota/Dealer membuat KETIGA blok ini
+  // cuma menyisakan SATU baris. Sekarang server selalu mengirim baris LENGKAP, dan
+  // yang sedang disaring disorot di layar (lihat gambarMatriks()/gambarDealer(),
+  // kotaSorotSet()) — bukan disembunyikan lagi. Segmentasi/Venn/Cakupan/Peta TETAP
+  // memakai `f` utuh: ketiganya memang representasi hasil TERSARING.
+  const fSemua = { periode: f.periode };
+
   let hasil;
   let peringkat;
   let matrix;
@@ -844,7 +1065,7 @@ export async function renderFusion() {
   let cakupan;
   try {
     [hasil, peringkat, matrix, irisan, cakupan] = await Promise.all([
-      fetchSegmentation(f), fetchPeringkat(f), fetchMatriks(f), fetchIrisan(f),
+      fetchSegmentation(f), fetchPeringkat(fSemua), fetchMatriks(fSemua), fetchIrisan(f),
       fetchCakupanSumber(f),
     ]);
   } catch (error) {
@@ -877,17 +1098,18 @@ export async function renderFusion() {
       `dihitung dari Data KTP, Data Servis, dan Data Pengiriman yang disatukan lewat ` +
       `Nomor Mesin. Impor Data KTP dulu lewat rute ` +
       `<span class="mono">/api/v1/import/ktp</span>.</p></div>`);
-    ['fx-kpi-pelanggan', 'fx-kpi-cw', 'fx-kpi-ratio', 'fx-golongan', 'fx-matriks',
-      'fx-matriks-jumlah', 'fx-dealer'].forEach((id) => isiSlot(id, ''));
+    ['fx-kpi-pelanggan', 'fx-kpi-cw', 'fx-kpi-ratio', 'fx-kpi-cakupan', 'fx-golongan-final',
+      'fx-venn', 'fx-matriks', 'fx-matriks-jumlah', 'fx-dealer'].forEach((id) => isiSlot(id, ''));
     return;
   }
 
   const rasio = meta.confidenceRatio;
   const warnaRasio = WARNA_STATUS[meta.status] || 'text-slate-400';
 
-  // Tiga KPI kini TIGA sel grid terpisah (kolom 1-3, 4-5, 6-7), bukan satu kolom
-  // #fx-summary yang menumpuk ketiganya. kartuKpi() sudah menghasilkan kartu utuh
-  // sendiri, jadi tiap sel cukup diisi satu kartu apa adanya.
+  // EMPAT KPI kini EMPAT sel grid terpisah dalam wadah 2x2 (index.html), bukan tiga —
+  // "Cakupan Sumber" ditambahkan 2026-09-18 (permintaan tim). kartuKpi()/kartuKpiTeks()
+  // sudah menghasilkan kartu utuh sendiri, jadi tiap sel cukup diisi satu kartu apa
+  // adanya.
   isiSlot('fx-catatan', catatanAbaikan(f));
   isiSlot('fx-kpi-pelanggan', kartuKpi('Pelanggan terfilter', formatNumber(total),
     `periode ${hasil.period || '—'}`, 'text-blue-500'));
@@ -897,20 +1119,19 @@ export async function renderFusion() {
   isiSlot('fx-kpi-ratio', kartuKpi('Confidence Ratio',
     rasio == null ? '—' : `${(rasio * 100).toFixed(1)}%`,
     meta.status || 'belum ada data', warnaRasio));
+  isiSlot('fx-kpi-cakupan',
+    kartuKpiTeks('Cakupan Sumber', labelCakupanSumber(), 'total filter aktif'));
 
-  gambarGolongan();
+  gambarGolonganFinal();
+  gambarVenn();
 
-  // Matriks dan Peringkat Kota sekarang SATU blok dua mode. Angkanya disimpan dulu,
-  // baru digambar — dengan begitu menekan tombol mode memanggil gambarMatriks() lagi
-  // tanpa menyentuh jaringan sama sekali, persis seperti blok Golongan/Venn.
-  // #fx-kota sudah tidak ada lagi di markup; merujuknya akan membuat page.test.js
-  // merah dengan "modul merujuk id yang tidak ada di markup".
+  // filterAktifTerakhir WAJIB disetel SEBELUM gambarMatriks()/gambarDealer():
+  // keduanya membaca variabel ini untuk menentukan baris mana yang disorot.
+  filterAktifTerakhir = f;
   peringkatTerakhir = peringkat;
   matriksTerakhir = matrix;
   gambarMatriks();
-
-  isiSlot('fx-dealer',
-    daftarPeringkat(peringkat.dealers, 'dealerName', { denganKota: true, jenis: 'dealer' }));
+  gambarDealer();
 
   isiSlot('fx-cakupan-per',
     `per ${esc(cakupan && cakupan.groupBy === 'dealer' ? 'dealer' : 'kota')}`);

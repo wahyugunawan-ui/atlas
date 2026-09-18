@@ -115,13 +115,17 @@ export function setPeriod(which, value) {
  *    (`config.js`). Dilaporkan lewat `abaikan` supaya halaman bisa mengatakannya,
  *    bukan diam-diam menampilkan angka se-provinsi seolah itu angka yang disaring.
  *
- * Pos DIPAHAMI sejak 2026-09-17: server menerjemahkannya jadi daftar kelurahan lewat
- * tabel `coverage` (lihat POS_FILTER di repository.js), jadi ia tidak lagi masuk
- * `abaikan`.
+ * Pos DIHAPUS dari halaman ini sejak 2026-09-18 — permintaan tim. Sempat dipahami
+ * sejak 2026-09-17 (server menerjemahkannya jadi daftar kelurahan lewat tabel
+ * `coverage`, lihat POS_FILTER di repository.js), tapi satu pos hanya melayani
+ * sebagian kecil kelurahan satu kota — menyaring penggolongan sampai sesempit itu
+ * jarang berarti apa pun, dan bilah filter Kota/Dealer/Kares sudah cukup untuk
+ * kebutuhan halaman ini. `filters.outletCode` TIDAK disentuh (dropdown Pos tetap
+ * berfungsi penuh di halaman lain); di sini nilainya cuma tidak pernah dibaca.
  *
  * @returns {{periode: string|null, kota: string|null, dealer: string|null,
- *   pos: string|null, abaikan: string[]}} `null` berarti "tanpa saringan"; periode
- *   null = periode terbaru yang ada di server.
+ *   abaikan: string[]}} `null` berarti "tanpa saringan"; periode null = periode
+ *   terbaru yang ada di server.
  */
 export function fusionFilter(f) {
   const filters = f || pageFilters('fusion');
@@ -159,7 +163,6 @@ export function fusionFilter(f) {
     kota,
     kotaBanyak,
     dealer: pakai(filters.dealerCode),
-    pos: pakai(filters.outletCode),
     abaikan,
   };
 }
