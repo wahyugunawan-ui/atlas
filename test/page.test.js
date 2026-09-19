@@ -135,6 +135,76 @@ function test() {
   assert.deepStrictEqual(clashes, [],
     `nama bentrok antara import dan deklarasi:\n  ${clashes.join('\n  ')}`);
 
+  // 2b. KEBALIKANNYA: nama yang DIPAKAI tapi tidak pernah di-import.
+  //
+  // Langkah 2 memeriksa "import menunjuk ekspor yang ada". Yang TIDAK diperiksa
+  // siapa pun sampai 2026-09-18 adalah arah sebaliknya, dan justru itu yang menggigit:
+  // switchTab() di tables.js memanggil hentikanLiveFusion() tanpa pernah mengimpornya
+  // dari fusion.js. Akibatnya SETIAP pindah ke halaman non-Fusion melempar
+  // ReferenceError tepat sebelum tiga baris terakhir fungsinya — dan tiga baris itulah
+  // yang mengisi halaman Lokasi Service dan Lokasi Delivery. Kedua halaman itu kosong
+  // BERBULAN-BULAN: judulnya tetap digambar (loop di awal switchTab), datanya tidak
+  // pernah diminta, dan tidak ada satu pun tes yang merah.
+  //
+  // Yang diperiksa sengaja SEMPIT supaya tidak perlu parser JavaScript sungguhan:
+  // hanya nama yang DIEKSPOR modul lain. Nama itu pasti bukan variabel lokal yang
+  // kebetulan sama, dan kalau dipanggil tanpa di-import, satu-satunya kemungkinan
+  // adalah ReferenceError saat dijalankan.
+  const lupaImport = [];
+  for (const name of files) {
+    // KOMENTAR DIBUANG DULU. Proyek ini komentarnya padat dan sering menyebut fungsi
+    // modul lain sebagai rujukan ("lihat renderAll() di app.js"). Tanpa langkah ini
+    // penjaganya menuduh 20-an rujukan semacam itu sebagai panggilan sungguhan, dan
+    // penjaga yang berisik selalu berakhir dimatikan orang.
+    //
+    // Atribut markup (`onclick="namaFungsi(...)"`) juga dibuang. Itu BUKAN panggilan
+    // JavaScript dari modul ini — namanya diselesaikan lewat window saat diklik, dan
+    // pendaftarannya sudah dijaga terpisah oleh pemeriksaan HANDLERS di bawah.
+    // Menuntutnya di-import justru salah: render.js memang tidak boleh meng-import
+    // tables.js (lingkaran modul), dan itulah alasan pola window dipakai.
+    const code = source[name]
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/(^|[^:])\/\/.*$/gm, '$1')
+      .replace(/\bon[a-z]+="[^"]*"/g, ' ');
+
+    // Milik modul ini sendiri: DEKLARASI saja, di tingkat mana pun.
+    //
+    // Versi pertama penjaga ini juga menambahkan `/([A-Za-z_$][\w$]*)\s*(?:=>|\()/`
+    // dengan maksud menangkap parameter fungsi — dan itu membuat penjaganya SIA-SIA
+    // total: pola `nama(` ikut mencocoki setiap PEMANGGILAN, jadi tiap nama yang
+    // dipanggil otomatis dianggap milik sendiri lalu dilewati. Ketahuan waktu uji
+    // mutasi: mengembalikan bug aslinya (hentikanLiveFusion dihapus dari import)
+    // tetap hijau. Penjaga yang tidak bisa merah tidak menjaga apa pun.
+    const milikSendiri = new Set(
+      [...code.matchAll(/(?:function|const|let|var|class)\s+([A-Za-z_$][\w$]*)/g)]
+        .map((m) => m[1]));
+    for (const imported of importsOf(code)) {
+      for (const symbol of imported.names) milikSendiri.add(symbol);
+    }
+
+    // Nama yang diekspor modul LAIN.
+    const dariModulLain = new Map();
+    for (const lain of files) {
+      if (lain === name) continue;
+      for (const ekspor of exported[lain]) {
+        if (!dariModulLain.has(ekspor)) dariModulLain.set(ekspor, lain);
+      }
+    }
+
+    // Dipanggil sebagai fungsi: `nama(`. Yang didahului titik (`obj.nama(`) dilewati —
+    // itu properti, bukan pengenal bebas.
+    for (const m of code.matchAll(/(^|[^.\w$])([A-Za-z_$][\w$]*)\s*\(/g)) {
+      const dipakai = m[2];
+      if (milikSendiri.has(dipakai)) continue;
+      if (!dariModulLain.has(dipakai)) continue;
+      lupaImport.push(`${name}: memanggil '${dipakai}()' tapi tidak meng-import-nya ` +
+        `(diekspor ${dariModulLain.get(dipakai)})`);
+    }
+  }
+  assert.deepStrictEqual([...new Set(lupaImport)], [],
+    `nama dipakai tapi tidak di-import — ReferenceError saat dijalankan:\n  ` +
+    `${[...new Set(lupaImport)].join('\n  ')}`);
+
   // 3. handler harus terdaftar di window lewat HANDLERS di app.js.
   //
   // Dicari di DUA tempat, dan yang kedua justru yang lebih sering salah: markup

@@ -15,7 +15,16 @@ import { syncFilterBar } from './filter-bar.js';
 import {
   activeRows, clearScope, dealerBreakdown, pageFilters, scopeValue, setScope,
 } from './filters.js';
-import { renderDeliveryTable, renderFusion, renderServiceTable } from './fusion.js';
+// hentikanLiveFusion IKUT di-import. Sampai 2026-09-18 tidak — switchTab()
+// memanggilnya tanpa pernah mengimpornya, jadi SETIAP pindah ke halaman non-Fusion
+// melempar ReferenceError tepat sebelum tiga baris render di ujung fungsinya. Itulah
+// sebabnya "Lokasi Service" dan "Lokasi Delivery" selalu kosong berbulan-bulan:
+// halamannya tampil (judulnya digambar loop di awal switchTab), tapi pengisinya tidak
+// pernah dijalankan. Halaman lain selamat cuma karena kebetulan digambar lebih dulu,
+// di atas baris yang melempar.
+import {
+  hentikanLiveFusion, renderDeliveryTable, renderFusion, renderServiceTable,
+} from './fusion.js';
 import { selectOutlet } from './outlets.js';
 import { dealerCardHtml } from './render.js';
 import { fitToScope, kembalikanPeta, pinjamPetaKeFusion } from './map.js';
