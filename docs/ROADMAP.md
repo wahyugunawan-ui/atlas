@@ -211,6 +211,23 @@ cuma perluasan ke Sulawesi ke timur.
     filter sudah dipakai bersama sejak 2026-09-17. Namanya saja yang diganti.
   - Pengiriman belum masuk checklist Periode Tersimpan — sengaja, sampai ada ping
     pertama (tanpa itu setiap bulan terbaca "3 dari 4").
+- **Utang dari sesi 2026-09-20:**
+  - **CLI `npm run import` masih memakai template PENJUALAN yang lama.** Supaya
+    benar-benar satu template di mana-mana, ia perlu diarahkan ke
+    `runSourceImport('ktp')`.
+  - Sesudah itu `runImport()`/`writeCustomers()`/`DISTRICT_ALIASES` di
+    `importer.js` jadi kode mati dan bisa dibuang — tapi itu berarti memindahkan
+    sebagian besar `test/import.test.js` (1.021 baris, 17 pemanggilan). Yang
+    dijaganya (idempotensi, rollback, jejak audit, pencocokan alias, perlindungan
+    kurasi manusia) berlaku SAMA untuk impor KTP, jadi itu pemindahan yang berharga
+    dan pantas dikerjakan tersendiri, bukan disisipkan di ujung sesi.
+  - Tabel `customers` sekarang benar-benar mati: tidak ada lagi yang menulisnya
+    (impor penjualan web sudah tidak ada) dan tidak ada lagi yang membacanya
+    (kedua pintu sudah pindah ke `customer_ktp`). Sengaja belum dibuang — tim
+    memilih "jangan hapus dulu" pada pertanyaan 2026-09-19.
+  - **Halaman Import berubah paling banyak dan belum dilihat di browser.** Itu justru
+    halaman yang dipakai memasukkan data; perlu dibuka sebelum mengunggah berkas
+    sungguhan.
 - **Utang dari sesi 2026-09-19:**
   - **Dua pintu ke "data konsumen" menunjuk DUA TABEL BERBEDA.**
     `browseCustomers()` (halaman Data Konsumen) sudah membaca `customer_ktp`,
@@ -255,6 +272,41 @@ cuma perluasan ke Sulawesi ke timur.
 ---
 
 ## Selesai
+
+### Satu berkas masuk per bulan: penjualan diturunkan dari impor Data KTP (2026-09-20)
+
+Dua commit, `3311e16` dan `a9d0ec1`, 49 → **50/50 berkas tes**.
+
+Sampai hari ini ada DUA impor bulanan untuk kejadian yang sama. Tim menunjuk hal
+yang benar: template Data KTP adalah versi **lengkap** dari template penjualan.
+
+**Diverifikasi pada data sungguhan:** ke-78 kode unik di `customer_ktp.dealer_code`
+IDENTIK dengan 78 kode di `sales.outlet_code` dan `outlets.outlet_code` — set yang
+persis sama. Kolom wilayahnya juga sama (kel/kec/kodekota), ditambah nomor mesin yang
+tidak pernah dipunyai template penjualan.
+
+- **Impor Data KTP sekarang menurunkan dan menulis `sales`** — agregat per
+  (kelurahan, pos), transaksi sendiri di database utama, idempoten per periode.
+  Kode pos yang belum terdaftar **diperiksa sebelum apa pun ditulis**, dan gagal
+  dengan pesan yang menyebut kodenya serta menunjuk Master Pos Dealer — bukan galat
+  FOREIGN KEY mentah dengan baris PII yang sudah terlanjur masuk.
+- **`customersInVillage()` pindah ke `customer_ktp`**, melunasi utang "dua pintu ke
+  data konsumen menunjuk dua tabel berbeda" dari 2026-09-19.
+- **Impor penjualan dipensiunkan dari web**: rute `POST /import`, `uploadImport()`,
+  dan wizard empat tahap di halaman Import dibongkar. Tahap 1 (pemilih bulan) TETAP —
+  alur unggah Data KTP membacanya. Pemberitahuan PII dipindah, bukan dibuang.
+- **`test/source-import-sales.test.js` baru**: `runSourceImport()` sebelumnya tidak
+  punya satu tes pun, padahal sekarang seluruh Sales Analytics bergantung padanya.
+
+**Angka Agustus akan bergeser** begitu berkas KTP diimpor ulang: 19.051 → 19.582 unit,
+dan sebarannya per pos bergeser ±1.919. Itu bukan cacat — berkas penjualan dan berkas
+KTP yang saat ini termuat memang bukan ekspor dari kumpulan baris yang sama. Ke depan
+hanya ada satu berkas, jadi pertanyaan itu hilang dengan sendirinya.
+
+**Pelajaran dari sesi ini, dicatat karena berulang:** dua kali penjaga yang saya tulis
+ternyata tidak bisa merah sama sekali, dan dua kali itu hanya ketahuan lewat uji
+mutasi — penjaga import yang polanya ikut mencocoki pemanggilan, dan batas 200 baris
+yang diuji pada data enam baris. Uji mutasi bukan formalitas di proyek ini.
 
 ### Bug halaman kosong berbulan-bulan, grid Fusion direvisi, Data Konsumen pindah ke data KTP (2026-09-19)
 

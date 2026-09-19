@@ -4295,3 +4295,45 @@ Yang pertama karena proyek ini sering menyebut fungsi modul lain sebagai rujukan
 komentar; yang kedua karena nama di markup diselesaikan lewat `window` saat diklik
 dan memang TIDAK boleh di-import (akan membuat lingkaran modul) — pendaftarannya
 sudah dijaga pemeriksaan HANDLERS terpisah.
+
+## [2026-09-20] Template Data KTP menggantikan template penjualan: satu berkas masuk per bulan
+
+**Konteks:** Dua impor bulanan untuk kejadian yang sama — impor penjualan (menulis
+`sales`) dan impor Data KTP (menulis `customer_ktp`). Tim menunjuk bahwa template KTP
+adalah versi lengkap dari template penjualan, dan meminta fokus pada TEMPLATE-nya,
+bukan pada isi berkas yang kebetulan sedang termuat.
+
+**Buktinya, diperiksa pada data sungguhan sebelum satu baris kode ditulis:** ke-78 kode
+unik di `customer_ktp.dealer_code` identik dengan 78 kode di `sales.outlet_code` dan
+`outlets.outlet_code`. Kolom wilayah keduanya sama (kel/kec/kodekota). Template KTP
+juga membawa nomor mesin, nomor rangka, dan tanggal mohon — yang tidak ada di template
+penjualan. Yang HANYA ada di template penjualan: nama dan alamat POS (kolom 8-9).
+
+**Keputusan:** Impor Data KTP menurunkan dan menulis `sales`
+(`GROUP BY village_code, dealer_code`), dan impor penjualan dipensiunkan dari web.
+
+**Alasan:** `sales` cuma butuh empat kolom — (period, village_code, outlet_code,
+quantity). Semuanya ada di baris KTP yang sudah diselesaikan. Meminta orang mengunggah
+dua berkas untuk kejadian yang sama adalah biaya tanpa imbalan, dan berkas kedua itu
+bahkan lebih miskin.
+
+**Alternatif yang ditolak:** (a) Jalan berdampingan dulu lalu bandingkan sebulan — tim
+memilih langsung ganti. (b) Membaca balik `customer_ktp` untuk menghitung agregatnya —
+ditolak, barisnya sudah ada di memori dan kedua tabel di database berbeda, jadi
+membaca balik menambah perjalanan tanpa menambah kebenaran. (c) Membiarkan impor
+bulanan tetap membuat pos baru otomatis — ditolak, master pos pindah ke Master Pos
+Dealer sepenuhnya; itu yang menutup sumber pos ganda dari tebakan `resolveGroups()`.
+
+**Konsekuensi:**
+- `sales.outlet_code` ber-FOREIGN KEY ke `outlets`, jadi kode pos yang belum terdaftar
+  WAJIB diperiksa sebelum penulisan. Tanpa itu, satu kode baru menggagalkan impor lewat
+  pesan Postgres yang tidak berarti bagi pengguna non-IT — dan baris PII sudah terlanjur
+  masuk, jadi keadaannya setengah jadi.
+- Angka Agustus bergeser (19.051 → 19.582 unit, sebaran per pos ±1.919) karena kedua
+  berkas yang saat ini termuat bukan ekspor dari kumpulan baris yang sama. Ke depan
+  hanya ada satu berkas.
+- Tahap 1 wizard (pemilih bulan) TIDAK ikut dibongkar: alur unggah Data KTP membacanya.
+- `backend/core/aggregate.js` TETAP — `scripts/import-dealer-pos-rings.js` masih
+  memakai `COLUMN` darinya.
+- CLI `npm run import` masih memakai template lama; dicatat sebagai utang terbuka di
+  ROADMAP, bukan dibiarkan tanpa disebut.
