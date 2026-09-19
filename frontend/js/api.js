@@ -286,20 +286,19 @@ export function resetOutlets() {
  * memperlakukan parameter yang tidak ada sebagai "tanpa saringan", dan mengirim
  * 'ALL' sebagai teks akan dicari apa adanya.
  *
- * @param {Object} filters {periodFrom, periodTo, province, city, village, outlet,
- *   outlets, query, offset}
+ * @param {Object} filters {periodFrom, periodTo, province, city, village, dealer,
+ *   query, offset}
  */
 export function browseCustomers(filters) {
   const query = new URLSearchParams();
-  ['periodFrom', 'periodTo', 'province', 'city', 'village', 'outlet'].forEach((key) => {
+  // 'dealer' LANGSUNG, bukan lagi daftar 'outlets'. Halaman ini membaca customer_ktp
+  // sejak 2026-09-18, dan tabel itu menyimpan dealer_code sendiri — terjemahan
+  // "satu dealer -> daftar pos miliknya" yang dulu terpaksa dilakukan di sini tidak
+  // diperlukan lagi. Pos sendiri tidak ada di data KTP, jadi tidak ikut dikirim.
+  ['periodFrom', 'periodTo', 'province', 'city', 'village', 'dealer'].forEach((key) => {
     const value = filters[key];
     if (value && value !== 'ALL') query.set(key, value);
   });
-  // Dealer diterjemahkan jadi daftar kode pos miliknya oleh pemanggil: tabel konsumen
-  // tidak menyimpan kode dealer, dan tabel outlets ada di database yang berbeda.
-  if (filters.outlets && filters.outlets.length) {
-    query.set('outlets', filters.outlets.join(','));
-  }
   if (filters.query) query.set('q', filters.query);
   if (filters.offset) query.set('offset', filters.offset);
   return request(`${API}customers/browse?${query}`);

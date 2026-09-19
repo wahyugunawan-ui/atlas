@@ -363,8 +363,18 @@ function build(config) {
     const province = String(q.province || '');
     const village = String(q.village || '');
     const city = String(q.city || '');
-    const outlet = String(q.outlet || '');
     const search = String(q.q || '').trim().slice(0, 80);
+
+    // DEALER, bukan lagi daftar POS. Halaman ini membaca `customer_ktp` sejak
+    // 2026-09-18 (dulu `customers`), dan tabel itu menyimpan dealer_code langsung —
+    // jadi terjemahan "satu dealer -> daftar pos miliknya" yang dulu terpaksa
+    // dilakukan halaman tidak diperlukan lagi. Kosakata kodenya numerik lama, sama
+    // seperti customer_fusion, jadi lewat legacyDealerCode() dulu.
+    const dealerMinta = String(q.dealer || '').trim();
+    if (dealerMinta && !DEALER.test(dealerMinta) && !OUTLET.test(dealerMinta)) {
+      return res.status(400).json({ error: 'Kode dealer tidak sah.' });
+    }
+    const dealerCode = dealerMinta ? await repo.legacyDealerCode(dealerMinta) : null;
 
     const result = await repo.browseCustomers({
       periodFrom: PERIOD.test(periodFrom) ? periodFrom : null,
@@ -375,15 +385,7 @@ function build(config) {
       province: PROVINCE.test(province) ? province : null,
       village: VILLAGE.test(village) ? village : null,
       city: CITY.test(city) ? city : null,
-      outlet: OUTLET.test(outlet) ? outlet : null,
-      // Daftar pos dikirim halaman waktu yang dipilih adalah DEALER: satu dealer punya
-      // beberapa pos, dan tabel customers tidak menyimpan kode dealer — itu milik
-      // tabel outlets di database yang lain, jadi tidak bisa di-JOIN dari sini.
-      outlets: Array.isArray(q.outlets)
-        ? q.outlets.filter((c) => OUTLET.test(String(c))).slice(0, 200)
-        : (typeof q.outlets === 'string'
-          ? q.outlets.split(',').filter((c) => OUTLET.test(c)).slice(0, 200)
-          : null),
+      dealerCode,
       query: search || null,
       offset: Number(q.offset) || 0,
     });

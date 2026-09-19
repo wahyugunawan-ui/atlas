@@ -289,16 +289,29 @@ function escapeLike(text) {
 }
 
 /**
- * Telusuri konsumen dengan penyaring, untuk halaman Data Konsumen.
+ * Telusuri konsumen dengan penyaring, untuk halaman "Data Konsumen · berdasarkan KTP".
+ *
+ * SUMBERNYA `customer_ktp`, BUKAN `customers`. Sampai 2026-09-18 fungsi ini membaca
+ * `customers` — tabel PII turunan impor PENJUALAN — padahal halamannya bernama
+ * "berdasarkan KTP" dan tim membacanya sebagai data KTP. Dua tabel itu memang mirip
+ * isinya (19.051 vs 19.598 baris pada Agustus 2026) tapi bukan hal yang sama, dan
+ * halaman yang menyebut satu sumber sambil menampilkan sumber lain adalah kesalahan
+ * yang tidak mungkin dilihat siapa pun dari layar.
+ *
+ * Yang IKUT berubah karena pindah tabel, dan bukan kebetulan:
+ *   - Nomor mesin jadi tersedia (`customers` tidak menyimpannya). Itu kunci ke
+ *     Telusur Nomor Mesin, jadi barisnya sekarang bisa ditelusuri lebih lanjut.
+ *   - Penyaring POS hilang, penyaring DEALER muncul. `customer_ktp` menyimpan
+ *     `dealer_code` langsung; `customers` dulu cuma punya `outlet_code`, dan itulah
+ *     sebabnya halaman lama harus menerjemahkan dealer jadi daftar pos.
+ *   - Kota disaring lewat kolom `city_code` sendiri, bukan awalan kode kelurahan.
+ *     Lebih tepat: baris yang alamatnya gagal dicocokkan (village_code NULL) tetap
+ *     terhitung di kotanya, dan baris seperti itu justru yang paling perlu dilihat.
  *
  * Berbeda dari customersInVillage() yang mewajibkan satu kelurahan: di sini
  * penyaringnya bebas, tapi hasilnya selalu dipotong BROWSE_LIMIT dan jumlah
  * sebenarnya dilaporkan terpisah supaya halaman bisa bilang "menampilkan 500 dari
- * 18.512" — bukan diam-diam memotong.
- *
- * Penyaring kota memakai awalan kode: kode kelurahan BPS bertitik selalu memuat kode
- * kotanya di depan (`34.04` -> `34.04.01.2001`), jadi tidak perlu menggabung tabel
- * villages yang ada di database lain.
+ * 19.598" — bukan diam-diam memotong.
  *
  * @return {{rows: Array, total: number, limit: number}|null}
  *   null berarti database konsumen tidak ada — bukan error.
@@ -320,24 +333,20 @@ async function browseCustomers(filters) {
   // provinsi di paling depan ('33' -> '33.74.01.1001'), jadi awalannya cukup. Titiknya
   // mutan EKUIVALEN persis seperti pada penyaring kota di bawah — kode provinsi selalu
   // dua digit, jadi '33%' tidak mungkin menarik provinsi lain. Tetap ditulis.
+  // Provinsi lewat awalan `city_code` ('34' -> '34.04'), bukan awalan village_code:
+  // village_code boleh NULL di customer_ktp (alamat yang gagal dicocokkan), dan baris
+  // seperti itu tidak boleh hilang dari penyaring PROVINSI cuma karena kelurahannya
+  // belum ketemu. Kode BPS lebar-tetap, jadi '34.%' tidak mungkin menarik provinsi lain.
   if (f.province) {
-    where.push("village_code LIKE ? ESCAPE '\\'");
+    where.push("city_code LIKE ? ESCAPE '\\'");
     params.push(escapeLike(f.province) + '.%');
   }
   if (f.village) { where.push('village_code = ?'); params.push(f.village); }
-  else if (f.city) {
-    // Titik setelah kode kota tidak menentukan perilaku selama kode BPS lebar-tetap
-    // (NN.NN.NN.NNNN) — '34.04%' tidak mungkin menarik kota lain. Tetap ditulis supaya
-    // tetap benar kalau formatnya berubah. Uji mutasi mencatatnya sebagai mutan
-    // EKUIVALEN, bukan celah tes: tidak ada data yang bisa membedakan keduanya.
-    where.push("village_code LIKE ? ESCAPE '\\'");
-    params.push(escapeLike(f.city) + '.%');
-  }
-  if (f.outlet) { where.push('outlet_code = ?'); params.push(f.outlet); }
-  if (f.outlets && f.outlets.length) {
-    where.push('outlet_code = ANY(?)');
-    params.push(f.outlets);
-  }
+  else if (f.city) { where.push('city_code = ?'); params.push(f.city); }
+  // Dealer langsung, bukan lagi daftar pos. Kodenya kosakata NUMERIK LAMA di tabel ini
+  // (sama seperti customer_fusion) — penerjemahan dari kode turunan nama dilakukan
+  // rutenya lewat legacyDealerCode(), bukan di sini.
+  if (f.dealerCode) { where.push('dealer_code = ?'); params.push(f.dealerCode); }
   if (f.query) {
     where.push("(name ILIKE ? ESCAPE '\\' OR address ILIKE ? ESCAPE '\\')");
     const like = '%' + escapeLike(f.query) + '%';
@@ -346,7 +355,7 @@ async function browseCustomers(filters) {
 
   const clause = where.length ? 'WHERE ' + where.join(' AND ') : '';
   const total = (await store.one(db,
-    `SELECT COUNT(*) AS n FROM customers ${clause}`, params)).n;
+    `SELECT COUNT(*) AS n FROM customer_ktp ${clause}`, params)).n;
 
   // Offset dijepit ke dalam jangkauan. Halaman bisa saja meminta offset yang sudah
   // lewat ujung — misalnya sesudah penyaring dipersempit — dan lebih baik menampilkan
@@ -360,15 +369,38 @@ async function browseCustomers(filters) {
   const offset = Math.max(0, Math.min(
     Math.floor(Number(f.offset) || 0), lastPage));
 
-  // `id` di ujung ORDER BY bukan hiasan. Tanpa pemecah seri, dua konsumen bernama sama
-  // urutannya tidak dijamin, dan urutan yang berubah antar halaman membuat satu baris
-  // muncul dua kali di halaman 2 sementara baris lain tidak pernah terlihat sama
-  // sekali. `id` unik, jadi urutannya jadi pasti.
+  // `row_no` di ujung ORDER BY bukan hiasan. Tanpa pemecah seri, dua konsumen bernama
+  // sama urutannya tidak dijamin, dan urutan yang berubah antar halaman membuat satu
+  // baris muncul dua kali di halaman 2 sementara baris lain tidak pernah terlihat sama
+  // sekali. (period, row_no) adalah PRIMARY KEY customer_ktp, jadi pasti unik —
+  // pengganti `id` yang dipakai waktu fungsi ini masih membaca tabel `customers`.
   const rows = await store.all(db, `
-    SELECT id, name, address, village_code AS "village", outlet_code AS "outlet", period
-    FROM customers ${clause}
-    ORDER BY period DESC, name, id
+    SELECT engine_no AS "engineNo", name, address,
+           village_code AS "village", village_text AS "villageText",
+           district_text AS "districtText", city_code AS "cityCode",
+           dealer_code AS "dealer", resolve_status AS "resolveStatus", period
+    FROM customer_ktp ${clause}
+    ORDER BY period DESC, name, row_no
     LIMIT ? OFFSET ?`, params.concat([BROWSE_LIMIT, offset]));
+
+  // Kode dealer diterjemahkan dari kosakata NUMERIK LAMA (yang tersimpan di
+  // customer_ktp) ke kode TURUNAN NAMA yang dipakai seluruh layar — S.dealerNames dan
+  // dealerColor() berkunci kode turunan nama, dan halaman tidak punya peta legacy sama
+  // sekali. Tanpa terjemahan ini kolom Dealer menampilkan "7348" dan titiknya abu-abu.
+  //
+  // Query KEDUA ke database utama, BUKAN join: `dealers` ada di `astra` sedangkan
+  // customer_ktp di `astra_customers`, dan aturan proyek memang memisahkan keduanya.
+  // Sekali per halaman (maksimal BROWSE_LIMIT baris), bukan sekali per baris.
+  const legacy = [...new Set(rows.map((r) => r.dealer).filter(Boolean))];
+  if (legacy.length) {
+    const peta = new Map((await store.all(store.db(),
+      `SELECT legacy_code AS "legacyCode", dealer_code AS "dealerCode"
+       FROM dealers WHERE legacy_code = ANY(?)`, [legacy]))
+      .map((d) => [d.legacyCode, d.dealerCode]));
+    // Dealer yang tidak ada di master dibiarkan memakai kodenya sendiri — sama seperti
+    // COALESCE di fusionVillagePoints(). Mengosongkannya akan menyembunyikan barisnya.
+    rows.forEach((r) => { r.dealer = peta.get(r.dealer) || r.dealer; });
+  }
 
   return { rows, total, limit: BROWSE_LIMIT, offset };
 }

@@ -457,23 +457,46 @@ async function test() {
 
     // --- halaman Data Konsumen: penyaring bebas, tapi hasilnya TETAP dipotong ---
     //
-    // browseCustomers() adalah pintu KEDUA ke tabel yang sama. customersInVillage()
-    // dijaga oleh kewajiban menyebut kelurahan; yang ini tidak punya kewajiban itu,
-    // jadi batasnya harus dari LIMIT — dan itu yang diuji di sini. Tanpa tes ini,
+    // SUMBERNYA customer_ktp sejak 2026-09-18, bukan lagi customers. Halamannya
+    // bernama "berdasarkan KTP" dan tim membacanya begitu, tapi fungsinya membaca
+    // tabel PII turunan impor PENJUALAN — dua hal yang mirip isinya tapi bukan hal
+    // yang sama. Barisnya di sini ditulis langsung ke customer_ktp supaya yang diuji
+    // memang tabel yang sekarang benar-benar dibaca halaman itu.
+    //
+    // browseCustomers() adalah pintu KEDUA ke data PII. customersInVillage() dijaga
+    // oleh kewajiban menyebut kelurahan; yang ini tidak punya kewajiban itu, jadi
+    // batasnya harus dari LIMIT — dan itu yang diuji di sini. Tanpa tes ini,
     // menghapus LIMIT dari kueri tidak membuat satu tes pun merah, dan satu permintaan
     // bisa mengembalikan seluruh basis data konsumen.
+    const customersDb = store.customers();
+
+    // row_no wajib unik per periode (PRIMARY KEY customer_ktp), jadi satu penghitung
+    // berjalan dipakai seluruh penulisan di bawah.
+    let nomorKtp = 0;
+    const tulisKtpMassal = async (baris) => {
+      for (let i = 0; i < baris.length; i += 200) {
+        const chunk = store.bulkValues(baris.slice(i, i + 200));
+        await store.run(customersDb, `
+          INSERT INTO customer_ktp
+            (period, row_no, engine_no, name, address, village_code, city_code,
+             dealer_code, resolve_status)
+          VALUES ${chunk.text}`, chunk.params);
+      }
+    };
+
+    // Tiga baris "dikenal" untuk menguji pencarian nama, di KOTA YANG BERBEDA dari
+    // baris massal di bawah supaya penyaring kota benar-benar terbukti memisahkan.
+    await tulisKtpMassal([0, 1, 2].map((i) => [
+      '2026-08', ++nomorKtp, `KNOWN-${i}`, `Budi Santoso ${i}`, `Jl. Kenal ${i}`,
+      '33.01.01.2001', '33.01', '7348', 'ok',
+    ]));
+
     const banyak = [];
     for (let i = 0; i < repo.BROWSE_LIMIT + 120; i++) {
-      banyak.push([`bulk-${i}`, '2026-08', '34.04.06.2003', 'O01',
-        `Nama Massal ${i}`, `Jl. Massal ${i}`]);
+      banyak.push(['2026-08', ++nomorKtp, `bulk-${i}`, `Nama Massal ${i}`,
+        `Jl. Massal ${i}`, '34.04.06.2003', '34.04', '7348', 'ok']);
     }
-    const customersDb = store.customers();
-    for (let i = 0; i < banyak.length; i += 200) {
-      const chunk = store.bulkValues(banyak.slice(i, i + 200));
-      await store.run(customersDb, `
-        INSERT INTO customers (id, period, village_code, outlet_code, name, address)
-        VALUES ${chunk.text}`, chunk.params);
-    }
+    await tulisKtpMassal(banyak);
 
     const semua = await repo.browseCustomers({});
     assert.strictEqual(semua.rows.length, repo.BROWSE_LIMIT,
@@ -481,6 +504,37 @@ async function test() {
     assert.ok(semua.total > repo.BROWSE_LIMIT,
       'jumlah sebenarnya harus dilaporkan, bukan cuma yang tampil');
     assert.strictEqual(semua.total, banyak.length + 3, 'jumlah totalnya salah hitung');
+
+    // Nomor mesin WAJIB ikut. Itu satu-satunya yang baru didapat dari pindah ke
+    // customer_ktp, dan tanpa itu barisnya tidak bisa ditelusuri lebih lanjut lewat
+    // Telusur Nomor Mesin. Tabel customers yang lama memang tidak menyimpannya.
+    assert.ok(semua.rows.every((r) => r.engineNo),
+      'nomor mesin hilang dari hasil — itu justru alasan pindah ke customer_ktp');
+    assert.ok(!('id' in semua.rows[0]),
+      'kolom id tabel customers masih terbawa — sumbernya belum benar-benar pindah');
+
+    // KODE DEALER DITERJEMAHKAN dari kosakata numerik lama ('7348', yang tersimpan di
+    // customer_ktp) ke kode turunan nama yang dipakai seluruh layar. S.dealerNames dan
+    // dealerColor() berkunci kode turunan nama dan halaman tidak punya peta legacy sama
+    // sekali — tanpa terjemahan ini kolom Dealer menampilkan "7348" dan titiknya abu-abu,
+    // tanpa satu pun galat.
+    await store.run(store.db(),
+      `INSERT INTO dealers (dealer_code, dealer_name, legacy_code)
+       VALUES ('DEALERUJIKTP', 'Dealer Uji KTP', '7348')
+       ON CONFLICT (dealer_code) DO NOTHING`);
+    const denganDealer = await repo.browseCustomers({ query: 'Budi' });
+    assert.strictEqual(denganDealer.rows[0].dealer, 'DEALERUJIKTP',
+      'kode dealer tidak diterjemahkan dari kode numerik lama — layar akan menampilkan ' +
+      'angka mentah dan titiknya kehilangan warna dealer');
+
+    // Dealer yang TIDAK ada di master tetap memakai kodenya sendiri, bukan dikosongkan:
+    // mengosongkannya menyembunyikan barisnya dari orang yang justru perlu tahu ada
+    // baris yang dealernya belum terdaftar.
+    await tulisKtpMassal([['2026-08', ++nomorKtp, 'TANPA-DEALER-1', 'Tanpa Dealer Master',
+      'Jl. Tanpa Dealer', '34.04.06.2003', '34.04', '9999', 'ok']]);
+    const takDikenal = await repo.browseCustomers({ query: 'Tanpa Dealer Master' });
+    assert.strictEqual(takDikenal.rows[0].dealer, '9999',
+      'dealer yang tidak ada di master seharusnya tetap membawa kodenya sendiri');
 
     // --- menelusuri halaman: tiap baris tepat sekali, tidak kembar, tidak terlewat ---
     //
@@ -497,15 +551,10 @@ async function test() {
     // satu tes pun merah — sudah dicoba.
     const kembar = [];
     for (let i = 0; i < repo.BROWSE_LIMIT + 200; i++) {
-      kembar.push([`sama-${i}`, '2026-08', '34.04.06.2003', 'O01',
-        'NAMA KEMBAR', `Jl. Kembar ${i}`]);
+      kembar.push(['2026-08', ++nomorKtp, `sama-${i}`, 'NAMA KEMBAR',
+        `Jl. Kembar ${i}`, '34.04.06.2003', '34.04', '7348', 'ok']);
     }
-    for (let i = 0; i < kembar.length; i += 200) {
-      const chunk = store.bulkValues(kembar.slice(i, i + 200));
-      await store.run(customersDb, `
-        INSERT INTO customers (id, period, village_code, outlet_code, name, address)
-        VALUES ${chunk.text}`, chunk.params);
-    }
+    await tulisKtpMassal(kembar);
 
     const terlihat = new Set();
     let halaman = 0;
@@ -515,9 +564,9 @@ async function test() {
       const page = await repo.browseCustomers({ offset });
       jumlahSeluruhnya = page.total;
       page.rows.forEach((r) => {
-        assert.ok(!terlihat.has(r.id),
-          `baris ${r.id} muncul di dua halaman — urutannya tidak pasti antar permintaan`);
-        terlihat.add(r.id);
+        assert.ok(!terlihat.has(r.engineNo),
+          `baris ${r.engineNo} muncul di dua halaman — urutannya tidak pasti antar permintaan`);
+        terlihat.add(r.engineNo);
       });
       assert.strictEqual(page.offset, offset, 'server mengembalikan offset yang berbeda');
       halaman++;
@@ -543,12 +592,23 @@ async function test() {
     assert.ok(lewat.rows.length > 1,
       'melompat lewat ujung mendarat di satu baris sendirian, bukan halaman terakhir');
 
-    // Penyaring kota memakai awalan kode kelurahan. 34.04.06.2003 ada di kota 34.04;
-    // 33.01.01.2001 tidak — kalau awalannya salah dipasang, keduanya ikut terbawa.
+    // Penyaring kota memakai kolom city_code SENDIRI sekarang, bukan awalan kode
+    // kelurahan seperti waktu sumbernya masih tabel customers. Lebih tepat: baris yang
+    // alamatnya gagal dicocokkan (village_code NULL) tetap terhitung di kotanya.
     const perKota = await repo.browseCustomers({ city: '33.01' });
-    assert.ok(perKota.total > 0, 'penyaring kota tidak menemukan apa pun');
-    assert.strictEqual(perKota.rows.every((r) => r.village.startsWith('33.01.')), true,
-      'penyaring kota membawa kelurahan dari kota lain');
+    assert.strictEqual(perKota.total, 3, 'penyaring kota tidak memisahkan dengan benar');
+    assert.strictEqual(perKota.rows.every((r) => r.cityCode === '33.01'), true,
+      'penyaring kota membawa baris dari kota lain');
+
+    // Baris tanpa kelurahan (alamat gagal dicocokkan) HARUS tetap ikut penyaring kota.
+    // Inilah yang dulu tidak mungkin: penyaring lama memakai awalan village_code, jadi
+    // baris seperti ini hilang diam-diam — padahal justru baris itu yang perlu dilihat.
+    await tulisKtpMassal([['2026-08', ++nomorKtp, 'NOVILLAGE-1', 'Tanpa Kelurahan',
+      'Alamat tidak dikenal', null, '33.01', '7348', 'unmatched']]);
+    const kotaDenganNull = await repo.browseCustomers({ city: '33.01' });
+    assert.strictEqual(kotaDenganNull.total, 4,
+      'baris yang kelurahannya gagal dicocokkan hilang dari penyaring kota — padahal ' +
+      'baris itulah yang paling perlu dilihat orang');
 
     // Pencarian mencari apa adanya. Tanda persen yang diketik pengguna TIDAK boleh
     // jadi wildcard yang mencocokkan seluruh tabel.
@@ -572,16 +632,28 @@ async function test() {
 
     const hanyaAgustus = (await repo.browseCustomers({})).total;
 
+    // customer_ktp, bukan customers — sumber halaman ini pindah 2026-09-18.
     const lain = [];
     for (let i = 0; i < 4; i++) {
-      lain.push([`juli-${i}`, '2026-07', '34.04.06.2003', 'O01',
-        `Nama Juli ${i}`, `Jl. Juli ${i}`]);
+      lain.push(['2026-07', ++nomorKtp, `juli-${i}`, `Nama Juli ${i}`,
+        `Jl. Juli ${i}`, '34.04.06.2003', '34.04', '7348', 'ok']);
     }
     for (let i = 0; i < 2; i++) {
-      lain.push([`sept-${i}`, '2026-09', '34.04.06.2003', 'O01',
-        `Nama September ${i}`, `Jl. September ${i}`]);
+      lain.push(['2026-09', ++nomorKtp, `sept-${i}`, `Nama September ${i}`,
+        `Jl. September ${i}`, '34.04.06.2003', '34.04', '7348', 'ok']);
     }
-    const chunkLain = store.bulkValues(lain);
+    await tulisKtpMassal(lain);
+
+    // Baris yang SAMA juga ditulis ke tabel `customers` yang lama, dan itu BUKAN
+    // kelalaian: per 2026-09-18 browseCustomers() sudah membaca customer_ktp
+    // sementara customersInVillage() (yang melayani /api/customers?village=, dipakai
+    // panel kelurahan di peta) MASIH membaca customers. Dua pintu ke "data konsumen"
+    // menunjuk dua tabel berbeda — inkonsistensi yang dicatat apa adanya di
+    // docs/ROADMAP.md dan menunggu keputusan tim soal menghapus jalur penjualan
+    // seluruhnya. Tes di bawah menguji KEDUA pintu, jadi keduanya harus terisi.
+    const lamaLain = lain.map(([period, , engine, nama, alamat, desa]) =>
+      [`${engine}`, period, desa, 'O01', nama, alamat]);
+    const chunkLain = store.bulkValues(lamaLain);
     await store.run(store.customers(), `
       INSERT INTO customers (id, period, village_code, outlet_code, name, address)
       VALUES ${chunkLain.text}`, chunkLain.params);
@@ -611,8 +683,14 @@ async function test() {
     // Provinsi penyaring MANDIRI: dia hidup berdampingan dengan kota, tidak menggantikannya.
     const perProvinsi = await repo.browseCustomers({ province: '33' });
     assert.ok(perProvinsi.total > 0, 'penyaring provinsi tidak menemukan apa pun');
-    assert.strictEqual(perProvinsi.rows.every((r) => r.village.startsWith('33.')), true,
-      'penyaring provinsi membawa kelurahan dari provinsi lain');
+    // cityCode, BUKAN village: penyaring provinsi memakai awalan city_code sejak
+    // sumbernya pindah ke customer_ktp, justru supaya baris yang kelurahannya gagal
+    // dicocokkan (village_code NULL) tetap terhitung di provinsinya.
+    assert.strictEqual(perProvinsi.rows.every((r) => r.cityCode.startsWith('33.')), true,
+      'penyaring provinsi membawa baris dari provinsi lain');
+    assert.ok(perProvinsi.rows.some((r) => r.village === null),
+      'baris tanpa kelurahan hilang dari penyaring provinsi — itu kemunduran, bukan ' +
+      'perbaikan: baris itu justru yang perlu ditemukan orang');
     assert.strictEqual((await repo.browseCustomers({ province: '34' })).total,
       (await repo.browseCustomers({})).total - perProvinsi.total,
       'provinsi 33 dan 34 tidak menghabiskan seluruh tabel — awalannya salah dipasang');

@@ -10,7 +10,9 @@ import {
   CUSTOMER_PANEL_LIMIT, KARESIDENAN, PROVINCE_NAMES, SHOW_ENGINE_NUMBER, SHOW_HOUSE_PHOTO,
   TABLE_ROW_LIMIT,
 } from './config.js';
-import { $, esc, formatNumber, formatPercent, monthLabel, sumBy, toast } from './dom.js';
+import {
+  $, displayCityName, esc, formatNumber, formatPercent, monthLabel, sumBy, toast,
+} from './dom.js';
 import { syncFilterBar } from './filter-bar.js';
 import {
   activeRows, clearScope, dealerBreakdown, pageFilters, scopeValue, setScope,
@@ -1433,7 +1435,7 @@ export async function renderCustomerTable(keepOffset) {
   if (!body) return;
 
   if (!S.hasCustomers) {
-    body.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400 text-sm">' +
+    body.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400 text-sm">' +
       'Server ini tidak menyimpan data konsumen.</td></tr>';
     note.textContent = 'Impor dengan pilihan "simpan data konsumen" dicentang supaya ' +
       'nama dan alamat ikut tersimpan.';
@@ -1447,14 +1449,12 @@ export async function renderCustomerTable(keepOffset) {
     periodFrom: f.from,
     periodTo: f.to,
     city: f.cityCode,
-    outlet: f.outletCode !== 'ALL' ? f.outletCode : null,
     query: ($('mkon-search').value || '').trim(),
-    // Tabel konsumen tidak menyimpan kode dealer — itu milik tabel outlets di database
-    // yang berbeda, jadi tidak bisa di-JOIN. Dealer diterjemahkan di sini jadi daftar
-    // kode pos miliknya. Server sudah meng-AND-kan city/outlet/outlets kalau lebih
-    // dari satu terisi (browseCustomers()), jadi ketiganya boleh dikirim bersamaan.
-    outlets: f.dealerCode !== 'ALL'
-      ? S.outlets.filter((o) => o.dealerCode === f.dealerCode).map((o) => o.code) : null,
+    // DEALER langsung. Halaman ini membaca customer_ktp sejak 2026-09-18, dan tabel
+    // itu punya kolom dealer_code sendiri — jadi terjemahan "dealer -> daftar pos
+    // miliknya" yang dulu terpaksa dilakukan di sini sudah tidak perlu. Penyaring POS
+    // juga hilang: data KTP memang tidak mencatat pos mana yang melayani.
+    dealer: f.dealerCode !== 'ALL' ? f.dealerCode : null,
     offset: customerOffset,
   };
 
@@ -1471,24 +1471,33 @@ export async function renderCustomerTable(keepOffset) {
     customerPageSize = limit;
     customerOffset = offset;
 
+    // Kolomnya berubah 2026-09-18 bersama pindahnya sumber ke customer_ktp: Nomor
+    // Mesin MASUK (tabel penjualan lama tidak menyimpannya, dan itu kunci ke Telusur
+    // Nomor Mesin), "Pos Dealer" jadi "Dealer" (data KTP tidak mencatat pos).
     body.innerHTML = rows.length ? rows.map((c) => {
       const village = S.villageByCode[c.village] || {};
-      const outlet = S.outletByCode[c.outlet] || {};
+      // villageText/districtText = tulisan APA ADANYA dari Excel. Dipakai sebagai
+      // cadangan waktu alamatnya gagal dicocokkan ke kode kelurahan — barisnya tetap
+      // memberi tahu sesuatu, bukan cuma tanda hubung.
+      const namaDesa = village.name || c.villageText || '—';
+      const namaKota = village.cityName || S.cityNames[c.cityCode] || '—';
       return `<tr class="hover:bg-slate-50">` +
-        `<td class="px-3 py-2 font-semibold text-slate-800">${esc(c.name)}</td>` +
-        `<td class="px-3 py-2 text-slate-600">${esc(c.address)}</td>` +
-        `<td class="px-3 py-2 text-slate-600">${esc(village.name || c.village)}` +
-        `<div class="mono text-[10px] text-slate-400">${esc(c.village)}</div></td>` +
-        `<td class="px-3 py-2 text-slate-500 text-xs">${esc(village.cityName || '—')}</td>` +
+        `<td class="px-3 py-2 font-semibold text-slate-800">${esc(c.name || '—')}</td>` +
+        `<td class="px-3 py-2 mono text-xs text-slate-600 whitespace-nowrap">${
+          esc(c.engineNo || '—')}</td>` +
+        `<td class="px-3 py-2 text-slate-600">${esc(c.address || '—')}</td>` +
+        `<td class="px-3 py-2 text-slate-600">${esc(displayCityName(namaDesa))}` +
+        `<div class="mono text-[10px] text-slate-400">${esc(c.village || 'kode belum cocok')}</div></td>` +
+        `<td class="px-3 py-2 text-slate-500 text-xs">${esc(displayCityName(namaKota))}</td>` +
         `<td class="px-3 py-2"><div class="flex items-center gap-2">` +
-        `<span class="w-2 h-2 rounded-full shrink-0" style="background:${esc(dealerColor(S.registry, outlet.dealerCode))}"></span>` +
-        `<div class="min-w-0"><div class="text-slate-700 truncate">${esc(outlet.name || c.outlet)}</div>` +
-        `<div class="text-[10px] text-slate-400 truncate">${esc(S.dealerNames[outlet.dealerCode] || '—')}</div>` +
-        `</div></div></td>` +
+        `<span class="w-2 h-2 rounded-full shrink-0" style="background:${
+          esc(dealerColor(S.registry, c.dealer))}"></span>` +
+        `<div class="min-w-0 text-slate-700 truncate">${
+          esc(S.dealerNames[c.dealer] || c.dealer || '—')}</div></div></td>` +
         `<td class="px-3 py-2 mono text-xs text-slate-500 whitespace-nowrap">${esc(c.period)}</td>` +
         `</tr>`;
     }).join('')
-      : '<tr><td colspan="6" class="text-center py-8 text-slate-400 text-sm">' +
+      : '<tr><td colspan="7" class="text-center py-8 text-slate-400 text-sm">' +
         'Tidak ada konsumen yang cocok dengan penyaring ini.</td></tr>';
 
     // Jumlah sebenarnya SELALU disebut, bukan cuma yang tampil. Tabel yang diam-diam
