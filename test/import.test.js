@@ -446,10 +446,15 @@ async function test() {
     assert.strictEqual(withPii.customers, 3);
     assert.strictEqual(repo.hasCustomers(), true);
 
-    const inVillage = await repo.customersInVillage('34.04.06.2003',
-      { from: '2026-08', to: '2026-08' });
-    assert.strictEqual(inVillage.length, 2);
-    assert.strictEqual(inVillage[0].name, 'Budi Santoso');
+    // Diperiksa LANGSUNG ke tabel `customers`, bukan lewat customersInVillage().
+    // Sejak 2026-09-19 fungsi itu membaca customer_ktp, jadi memakainya di sini akan
+    // menguji pintu yang berbeda dari yang baru saja ditulis impor penjualan —
+    // hijau atau merahnya tidak akan berarti apa-apa.
+    const tersimpan = await store.all(store.customers(),
+      `SELECT name FROM customers WHERE village_code = '34.04.06.2003' AND period = '2026-08'`);
+    assert.strictEqual(tersimpan.length, 2,
+      'impor penjualan dengan "simpan data konsumen" tidak menulis barisnya');
+    assert.strictEqual(tersimpan[0].name, 'Budi Santoso');
 
     // Agregatnya TETAP bersih meski konsumen ikut disimpan.
     assert.ok(!JSON.stringify(await repo.summary()).includes('Budi'),
@@ -535,6 +540,23 @@ async function test() {
     const takDikenal = await repo.browseCustomers({ query: 'Tanpa Dealer Master' });
     assert.strictEqual(takDikenal.rows[0].dealer, '9999',
       'dealer yang tidak ada di master seharusnya tetap membawa kodenya sendiri');
+
+    // --- customersInVillage(): pintu KEDUA, harus membaca tabel yang SAMA ------
+    //
+    // Fungsi ini melayani /api/customers?village= yang dipakai panel kelurahan di
+    // peta. Sampai 2026-09-19 ia membaca `customers` sementara browseCustomers()
+    // sudah pindah ke customer_ktp — dua pintu ke "data konsumen" yang bisa menjawab
+    // pertanyaan yang sama dengan angka berbeda. Dijaga di sini supaya tidak bisa
+    // menyimpang lagi diam-diam.
+    const diDesa = await repo.customersInVillage('33.01.01.2001',
+      { from: '2026-08', to: '2026-08' });
+    assert.strictEqual(diDesa.length, 3,
+      'customersInVillage tidak membaca customer_ktp — panel kelurahan di peta akan ' +
+      'kosong untuk tiap bulan baru, tanpa satu pun galat');
+    assert.ok(diDesa.every((r) => r.engineNo),
+      'nomor mesin tidak ikut — panel kelurahan kehilangan kunci ke Telusur Nomor Mesin');
+    assert.strictEqual(diDesa[0].outlet, 'DEALERUJIKTP',
+      'kode dealer di customersInVillage tidak diterjemahkan ke kosakata turunan nama');
 
     // --- menelusuri halaman: tiap baris tepat sekali, tidak kembar, tidak terlewat ---
     //

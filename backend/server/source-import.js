@@ -28,6 +28,16 @@ const { recalculate } = require('./fusion-store');
 /** Sama dengan importer penjualan: 500 baris per INSERT, jauh di bawah batas 65.535 parameter. */
 const BATCH = 500;
 
+/**
+ * Pemisah kunci internal waktu mengelompokkan baris per (kelurahan, pos).
+ *
+ * NUL dipilih karena tidak mungkin muncul di kode wilayah maupun kode pos, jadi
+ * kuncinya tidak bisa tabrakan. Dibuat lewat fromCharCode supaya tidak ada byte
+ * kontrol di berkas sumber ini — alasan dan cara yang sama persis dengan SEPARATOR
+ * di backend/core/aggregate.js.
+ */
+const PEMISAH = String.fromCharCode(0);
+
 /** Berapa nama tak cocok yang dilaporkan balik ke layar. Sisanya cuma dihitung. */
 const LAPOR_MAX = 30;
 
@@ -172,6 +182,65 @@ async function runSourceImport(options) {
       }
     });
 
+    // --- turunkan baris penjualan dari Data KTP (sejak 2026-09-19) ---
+    //
+    // KENAPA DI SINI. Sampai hari ini ada DUA impor bulanan untuk kejadian yang sama:
+    // impor penjualan (menulis `sales`) dan impor ini. Template KTP ternyata versi
+    // LENGKAP dari template penjualan — kolom wilayahnya sama (kel/kec/kodekota),
+    // kode posnya sama (78 kode unik, terbukti identik dengan sales.outlet_code dan
+    // outlets.outlet_code), ditambah nomor mesin yang tidak pernah dipunyai template
+    // penjualan. Jadi satu berkas cukup, dan impor penjualan dipensiunkan.
+    //
+    // `sales` cuma butuh empat kolom: (period, village_code, outlet_code, quantity) —
+    // agregat per kelurahan+pos. Dihitung dari baris yang SUDAH diselesaikan di atas,
+    // bukan dibaca ulang dari customer_ktp: keduanya di database berbeda (`sales` di
+    // astra, customer_ktp di astra_customers) jadi tidak ada join yang mungkin, dan
+    // membaca balik cuma menambah perjalanan tanpa menambah kebenaran.
+    //
+    // Polanya meniru fusion-store.js, yang sudah lebih dulu menulis rollup non-PII ke
+    // database utama dari perhitungan yang berjalan atas data PII.
+    let barisJual = [];
+    if (options.source === 'ktp') {
+      const per = new Map();
+      rows.forEach((r) => {
+        // Baris tanpa kelurahan TIDAK bisa masuk `sales` (kolomnya NOT NULL). Itu
+        // bukan alasan membuangnya diam-diam: jumlahnya sudah ikut terhitung di
+        // `hitung.unmatched` dan dilaporkan balik ke layar bersama namanya.
+        if (!r.villageCode || !r.dealerCode) return;
+        const kunci = r.villageCode + PEMISAH + r.dealerCode;
+        per.set(kunci, (per.get(kunci) || 0) + 1);
+      });
+      barisJual = [...per].map(([kunci, n]) => {
+        const [desa, pos] = kunci.split(PEMISAH);
+        return [options.period, desa, pos, n];
+      });
+
+      // POS YANG BELUM TERDAFTAR DIPERIKSA DI SINI, SEBELUM apa pun ditulis.
+      //
+      // sales.outlet_code punya FOREIGN KEY ke outlets(outlet_code). Tanpa penjagaan
+      // ini, satu kode pos baru membuat seluruh impor ditolak database dengan pesan
+      // Postgres yang tidak berarti apa-apa bagi pengguna non-IT — dan barisnya sudah
+      // terlanjur masuk tabel PII, jadi keadaannya setengah jadi. Diperiksa duluan:
+      // gagal sebelum menulis apa pun, dengan pesan yang menyebut kodenya.
+      //
+      // Sejak master pos dirawat lewat halaman Master Pos Dealer saja (keputusan tim
+      // 2026-09-19), impor bulanan memang TIDAK BOLEH lagi diam-diam membuat pos baru.
+      const posDipakai = [...new Set(barisJual.map((b) => b[2]))];
+      if (posDipakai.length) {
+        const dikenal = new Set((await store.all(db,
+          'SELECT outlet_code AS kode FROM outlets WHERE outlet_code = ANY(?)',
+          [posDipakai])).map((o) => o.kode));
+        const asing = posDipakai.filter((k) => !dikenal.has(k));
+        if (asing.length) {
+          throw new Error(
+            `${asing.length} kode pos di berkas ini belum terdaftar: ` +
+            `${asing.slice(0, 15).join(', ')}${asing.length > 15 ? ', ...' : ''}. ` +
+            'Tambahkan dulu di halaman Master > Master Pos Dealer, lalu impor ulang. ' +
+            'Tidak ada data yang tersimpan dari percobaan ini.');
+        }
+      }
+    }
+
     // --- tulis ke database PII, idempoten per periode ---
     const pii = await store.ensureCustomers(options.config);
     const values = rows.map((r) => spec.toValues(r, options.period));
@@ -188,6 +257,23 @@ async function runSourceImport(options) {
       }
     });
 
+    // Baris penjualan ditulis SESUDAH baris PII, dalam transaksinya sendiri di
+    // database utama. Idempoten per periode, sama seperti di atas: hapus bulan itu
+    // lalu tulis ulang, jadi mengimpor berkas yang sama dua kali tidak menggandakan
+    // apa pun. Kode pos yang dipakai sudah dipastikan terdaftar sebelum baris pertama
+    // ditulis, jadi FOREIGN KEY di sini tidak mungkin menolak.
+    if (options.source === 'ktp') {
+      await store.transaction(db, async (conn) => {
+        await conn.query('DELETE FROM sales WHERE period = ?', [options.period]);
+        for (let i = 0; i < barisJual.length; i += BATCH) {
+          const bulk = store.bulkValues(barisJual.slice(i, i + BATCH));
+          await conn.query(
+            `INSERT INTO sales (period, village_code, outlet_code, quantity)
+             VALUES ${bulk.text}`, bulk.params);
+        }
+      });
+    }
+
     // Batch penggolongan langsung menyusul impor — jalur A di docs/FUSION.md 2.2.
     //
     // Kegagalannya TIDAK membatalkan impor: barisnya sudah masuk dan sudah benar, dan
@@ -201,8 +287,14 @@ async function runSourceImport(options) {
     }
 
     const terpakai = hitung.ok + hitung.alias + hitung.fuzzy;
+    // Baris penjualan yang diturunkan ikut disebut. Sejak impor ini juga yang mengisi
+    // Sales Analytics, orang harus bisa melihat angkanya berubah dari satu unggahan —
+    // bukan menebak apakah halaman itu ikut terbarui.
+    const jual = options.source === 'ktp'
+      ? `, ${barisJual.length} baris penjualan (kelurahan x pos) diperbarui`
+      : '';
     const pesan = `${terpakai} baris bertitik, ${hitung.unmatched} nama belum cocok, ` +
-      `${hitung.duplicate} nomor mesin ganda, ${hitung.no_engine} tanpa nomor mesin`;
+      `${hitung.duplicate} nomor mesin ganda, ${hitung.no_engine} tanpa nomor mesin${jual}`;
 
     await store.run(db, `
       UPDATE imports SET finished_at = ?, rows_read = ?, rows_used = ?,
@@ -220,6 +312,11 @@ async function runSourceImport(options) {
         .slice(0, LAPOR_MAX)
         .map(([name, count]) => ({ name, count })),
       unmatchedNames: belumCocok.size,
+      // Berapa baris (kelurahan x pos) penjualan diperbarui dari unggahan ini. Ikut
+      // dikembalikan supaya layar bisa MENGATAKANNYA — sejak impor ini juga yang
+      // mengisi Sales Analytics, orang tidak boleh harus menebak apakah halaman itu
+      // ikut terbarui. 0 untuk sumber selain 'ktp'.
+      salesRows: barisJual.length,
     };
   } catch (error) {
     await store.run(db, `

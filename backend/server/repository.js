@@ -268,9 +268,29 @@ async function customersInVillage(villageCode, opsi) {
   if (o.from) { where.push('period >= ?'); params.push(o.from); }
   if (o.to) { where.push('period <= ?'); params.push(o.to); }
 
-  return store.all(db, `SELECT id, name, address, outlet_code AS outlet, period
-                        FROM customers WHERE ${where.join(' AND ')}
-                        ORDER BY period DESC, name LIMIT ?`, params.concat([max]));
+  // SUMBERNYA customer_ktp sejak 2026-09-19, sama seperti browseCustomers() di bawah.
+  // Sebelumnya fungsi ini membaca `customers` sementara browseCustomers() sudah pindah
+  // — dua pintu ke "data konsumen" menunjuk dua tabel berbeda, dan angkanya bisa
+  // berbeda untuk pertanyaan yang sama. Sejak impor Data KTP yang mengisi penjualan,
+  // `customers` tidak pernah bertambah lagi, jadi membiarkannya di sini berarti panel
+  // kelurahan di peta kosong untuk tiap bulan baru — tanpa satu pun galat.
+  const rows = await store.all(db, `
+    SELECT engine_no AS "engineNo", name, address, dealer_code AS outlet, period
+    FROM customer_ktp WHERE ${where.join(' AND ')}
+    ORDER BY period DESC, name, row_no LIMIT ?`, params.concat([max]));
+
+  // Kode dealer diterjemahkan ke kosakata turunan nama, alasan dan caranya sama persis
+  // dengan browseCustomers(): layar berkunci kode turunan nama, dan query kedua ke
+  // database utama karena kedua tabel ada di database berbeda.
+  const legacy = [...new Set(rows.map((r) => r.outlet).filter(Boolean))];
+  if (legacy.length) {
+    const peta = new Map((await store.all(store.db(),
+      `SELECT legacy_code AS "legacyCode", dealer_code AS "dealerCode"
+       FROM dealers WHERE legacy_code = ANY(?)`, [legacy]))
+      .map((d) => [d.legacyCode, d.dealerCode]));
+    rows.forEach((r) => { r.outlet = peta.get(r.outlet) || r.outlet; });
+  }
+  return rows;
 }
 
 /**
