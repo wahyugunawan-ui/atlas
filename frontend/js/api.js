@@ -366,47 +366,16 @@ export function deleteDealer(code) {
 }
 
 /**
- * Unggah berkas bulanan.
- *
- * Memakai XMLHttpRequest, bukan fetch, semata karena butuh progress unggahan —
- * fetch belum punya cara melaporkannya. Berkasnya ±2,5 MB dan pengunggahnya
- * menunggu; bar yang bergerak itu yang membedakan "sedang jalan" dari "menggantung".
- */
-export function uploadImport({ file, period, onProgress }) {
-  return new Promise((resolve, reject) => {
-    const form = new FormData();
-    form.append('period', period);
-    form.append('file', file);
-
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', API + 'import');
-
-    xhr.upload.addEventListener('progress', (e) => {
-      if (onProgress && e.lengthComputable) onProgress(e.loaded / e.total);
-    });
-
-    xhr.addEventListener('load', () => {
-      let body = {};
-      try { body = JSON.parse(xhr.responseText); } catch { /* bukan JSON */ }
-      if (xhr.status === 401) { location.replace('/login'); return; }
-      if (xhr.status >= 200 && xhr.status < 300) resolve(body);
-      else reject(new Error(body.error || `Server menjawab ${xhr.status}.`));
-    });
-    xhr.addEventListener('error', () =>
-      reject(new Error('Sambungan terputus saat mengunggah.')));
-
-    xhr.send(form);
-  });
-}
-
-/**
  * Unggah Data KTP atau Data Servis.
  *
- * Bentuknya SAMA PERSIS dengan uploadImport() di atas — multipart `period` + `file`,
- * XMLHttpRequest demi progress — karena `importSumber` di server memang memakai
- * parser multipart yang sama. Dipisah jadi fungsi sendiri, bukan parameter tambahan
- * di uploadImport(), supaya rutenya tidak pernah bisa tertukar: yang satu menulis
- * data penjualan, yang satu lagi data penyatuan tiga sumber.
+ * SATU-SATUNYA jalan unggah data bulanan sejak 2026-09-20. Sebelumnya ada
+ * uploadImport() untuk berkas penjualan; dipensiunkan karena template Data KTP
+ * memuat semua kolom yang dibutuhkannya ditambah nomor mesin, jadi angka penjualan
+ * sekarang diturunkan dari impor ini.
+ *
+ * XMLHttpRequest, bukan fetch, semata karena butuh progress unggahan — fetch belum
+ * punya cara melaporkannya. Berkasnya beberapa MB dan pengunggahnya menunggu; bar
+ * yang bergerak itu yang membedakan "sedang jalan" dari "menggantung".
  *
  * `source` dibatasi dua nilai. Menyusun URL dari teks bebas berarti satu salah ketik
  * menghasilkan permintaan ke rute yang tidak ada, dan pesannya akan membingungkan.

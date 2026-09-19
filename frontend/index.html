@@ -800,18 +800,12 @@
 
     <div id="imp-bagian-proses" class="xl:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 p-6 scroll-mt-4">
 
-      <div class="flex items-center gap-3 mb-6 text-xs font-bold">
-        <div class="flex items-center gap-2"><span id="step-1" class="step-dot now">1</span><span class="text-slate-700">Periode</span></div>
-        <div class="flex-1 h-px bg-slate-200"></div>
-        <div class="flex items-center gap-2"><span id="step-2" class="step-dot todo">2</span><span class="text-slate-400">Berkas</span></div>
-        <div class="flex-1 h-px bg-slate-200"></div>
-        <div class="flex items-center gap-2"><span id="step-3" class="step-dot todo">3</span><span class="text-slate-400">Proses</span></div>
-        <div class="flex-1 h-px bg-slate-200"></div>
-        <div class="flex items-center gap-2"><span id="step-4" class="step-dot todo">4</span><span class="text-slate-400">Tinjau</span></div>
-      </div>
-
-      <!-- langkah 1: periode dipilih SEBELUM berkas diunggah, supaya tidak ada yang
-           masuk ke bulan yang salah -->
+      <!-- Pemilih bulan untuk SELURUH halaman ini. Dulu "langkah 1" dari wizard
+           impor penjualan empat tahap; wizard itu dipensiunkan 2026-09-20 karena
+           template Data KTP sudah memuat semua yang dibutuhkannya (lihat
+           docs/DECISIONS.md). Pemilihnya TETAP di sini dan TETAP ber-id imp-bulan/
+           imp-tahun: alur unggah di bawah membacanya, dan bulan dipilih SEBELUM
+           berkas diunggah supaya tidak ada yang masuk ke bulan yang salah. -->
       <div id="imp-1">
         <div class="text-sm font-bold text-slate-700 mb-1">Data ini untuk bulan apa?</div>
         <p class="text-xs text-slate-500 mb-4">Dipilih dulu sebelum berkasnya diunggah.</p>
@@ -823,98 +817,20 @@
           <i class="ph-fill ph-warning shrink-0 text-base"></i>
           <span id="imp-warning-text"></span>
         </div>
-        <button onclick="importStep(2)" class="mt-5 px-5 py-2.5 rounded-xl text-white text-sm font-bold btn-primary">Lanjut</button>
       </div>
 
       <!-- langkah 2 -->
-      <div id="imp-2" class="hidden">
-        <div class="text-sm font-bold text-slate-700 mb-1">Unggah berkas <span id="imp-label-2" class="mono text-slate-400"></span></div>
-        <p class="text-xs text-slate-500 mb-4">Berkas .xlsx atau .csv dari Astra, apa adanya.</p>
+      <!-- SATU-SATUNYA jalan masuk data bulanan sejak 2026-09-20. Sebelumnya ini
+           "alur terpisah" di bawah wizard impor penjualan; wizard itu dipensiunkan
+           karena template Data KTP memuat semua kolom yang dibutuhkannya (kelurahan,
+           kecamatan, kode kota, kode pos) DITAMBAH nomor mesin — jadi satu berkas
+           cukup, dan Data KTP-lah yang sekarang mengisi angka penjualan.
 
-        <input id="imp-input" type="file" accept=".xlsx,.xlsm,.csv,.txt" class="hidden" onchange="fileChosen(this)">
-        <div id="dropzone" class="dropzone rounded-2xl p-10 text-center cursor-pointer"
-             onclick="pickFile()" ondragover="dragOver(event)" ondragleave="dragLeave()" ondrop="dropFile(event)">
-          <i class="ph ph-file-xls text-5xl text-slate-300"></i>
-          <div class="text-sm font-bold text-slate-600 mt-3">Seret berkas ke sini, atau klik untuk memilih</div>
-          <div class="text-xs text-slate-400 mt-1">.xlsx atau .csv &middot; maksimal 25 MB</div>
-        </div>
-
-        <div id="imp-file" class="hidden mt-4 flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
-          <i class="ph-fill ph-file-xls text-2xl text-emerald-600"></i>
-          <div class="flex-1 min-w-0">
-            <div id="imp-file-name" class="text-sm font-bold text-slate-700 truncate"></div>
-            <div id="imp-file-size" class="text-xs text-slate-400"></div>
-          </div>
-          <button onclick="runUpload()" class="px-4 py-2 rounded-xl text-white text-xs font-bold shrink-0 btn-primary">Proses</button>
-        </div>
-
-        <!-- Dulu di sini ada centang untuk memilih. Dibuang 2026-08-18 atas keputusan
-             pemilik proyek: tim selalu memerlukan nama dan alamat, jadi pilihannya
-             cuma menyediakan peluang lupa.
-
-             Yang TIDAK ikut dibuang: pemberitahuannya. Orang yang mengunggah berhak
-             tahu bahwa data pribadi ikut tersimpan, walaupun dia tidak bisa menolaknya
-             di sini. Jalan untuk tidak menyimpan masih ada lewat baris perintah. -->
-        <div class="mt-4 flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-          <i class="ph-fill ph-info text-slate-400 mt-0.5"></i>
-          <span><b>Nama dan alamat konsumen ikut tersimpan</b> supaya bisa dilihat per
-          kelurahan. Tersimpan di database terpisah dan tiap aksesnya dicatat.</span>
-        </div>
-
-        <button onclick="importStep(1)" class="mt-4 text-xs font-bold text-slate-400 hover:text-slate-700">&larr; kembali</button>
-      </div>
-
-      <!-- langkah 3 -->
-      <div id="imp-3" class="hidden">
-        <div class="text-sm font-bold text-slate-700 mb-4" id="imp-proc-title">Mengunggah berkas...</div>
-        <div class="h-2 bg-slate-100 rounded-full overflow-hidden">
-          <div id="imp-bar" class="h-full rounded-full transition-all duration-200" style="width:0%;background:var(--astra-navy)"></div>
-        </div>
-        <div id="imp-proc-step" class="text-xs text-slate-500 mt-2"></div>
-
-        <div id="imp-result" class="hidden mt-6 rise-in">
-          <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
-            <div class="bg-slate-50 rounded-xl p-3"><div class="text-[10px] uppercase font-bold text-slate-400">Baris dibaca</div><div id="imp-stat-read" class="text-xl font-extrabold mono text-slate-800">0</div></div>
-            <div class="bg-emerald-50 rounded-xl p-3"><div class="text-[10px] uppercase font-bold text-emerald-600">Masuk</div><div id="imp-stat-used" class="text-xl font-extrabold mono text-emerald-700">0</div></div>
-            <div class="bg-emerald-50 rounded-xl p-3"><div class="text-[10px] uppercase font-bold text-emerald-600">Persentase</div><div id="imp-stat-percent" class="text-xl font-extrabold mono text-emerald-700">0%</div></div>
-            <div class="bg-amber-50 rounded-xl p-3"><div class="text-[10px] uppercase font-bold text-amber-600">Tidak cocok</div><div id="imp-stat-unmatched" class="text-xl font-extrabold mono text-amber-700">0</div></div>
-            <div class="bg-blue-50 rounded-xl p-3"><div class="text-[10px] uppercase font-bold text-blue-600">Pos baru</div><div id="imp-stat-new" class="text-xl font-extrabold mono text-blue-700">0</div></div>
-          </div>
-
-          <div id="imp-unmatched-box" class="border border-slate-200 rounded-xl overflow-hidden mb-2">
-            <div class="px-4 py-2.5 bg-amber-50 border-b border-amber-200 text-xs font-bold text-amber-900">
-              <i class="ph-fill ph-warning"></i> <span id="imp-unmatched-title"></span>
-            </div>
-            <div class="divide-y divide-slate-100 text-xs max-h-40 overflow-y-auto" id="imp-unmatched"></div>
-          </div>
-          <div id="imp-new-outlets"></div>
-
-          <button onclick="reviewImport()" class="mt-4 px-5 py-2.5 rounded-xl text-white text-sm font-bold btn-primary">Tinjau hasil</button>
-        </div>
-      </div>
-
-      <!-- langkah 4 -->
-      <div id="imp-4" class="hidden">
-        <div class="text-sm font-bold text-slate-700 mb-1">Hasil impor <span id="imp-label-4" class="mono"></span></div>
-        <div id="imp-review" class="mt-3"></div>
-        <div class="flex items-center gap-3 mt-5">
-          <button onclick="finishImport()" class="px-5 py-2.5 rounded-xl text-white text-sm font-bold" style="background:#10b981"><i class="ph-fill ph-check"></i> Selesai</button>
-          <button onclick="importStep(1)" class="text-xs font-bold text-slate-400 hover:text-slate-700">impor berkas lain</button>
-        </div>
-      </div>
-
-      <!-- Data KTP & Servis — alur TERPISAH dari wizard 4 tahap di atas, dan itu
-           disengaja. Panel hasil tahap 3 khusus penjualan ("Tidak cocok", "Pos
-           baru"); impor KTP/Servis mengembalikan bentuk yang berbeda, jadi
-           memakai panel yang sama akan menampilkan field penjualan dengan nilai
-           kosong — terlihat resmi dan salah.
-
-           Bulannya diambil dari pemilih di tahap 1 (nilainya tetap ada walau
-           tahapnya tersembunyi), jadi periodenya ditulis di sini supaya tidak ada
-           yang mengunggah ke bulan yang tidak dia lihat. -->
+           Periodenya ditulis ulang di sini supaya tidak ada yang mengunggah ke bulan
+           yang tidak sedang dia lihat. -->
       <div class="mt-6 pt-5 border-t border-slate-100">
-        <div class="text-sm font-bold text-slate-700 mb-1">Data KTP &amp; Data Servis</div>
-        <p class="text-xs text-slate-500 mb-3">Dua berkas ini yang dipakai halaman Confidence Fusion. Bulan yang dituju: <b id="impx-periode" class="mono">—</b></p>
+        <div class="text-sm font-bold text-slate-700 mb-1">Unggah data bulanan</div>
+        <p class="text-xs text-slate-500 mb-3">Data KTP mengisi Sales Analytics, peta, dan Confidence Fusion sekaligus. Bulan yang dituju: <b id="impx-periode" class="mono">—</b></p>
 
         <input id="impx-ktp-input" type="file" accept=".xlsx,.xlsm,.csv,.txt" class="hidden" onchange="unggahSumber('ktp', this)">
         <input id="impx-servis-input" type="file" accept=".xlsx,.xlsm,.csv,.txt" class="hidden" onchange="unggahSumber('servis', this)">
@@ -922,6 +838,18 @@
         <div class="flex flex-wrap gap-2">
           <button onclick="pilihSumber('ktp')" class="px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50"><i class="ph ph-identification-card mr-1"></i>Unggah Data KTP</button>
           <button onclick="pilihSumber('servis')" class="px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50"><i class="ph ph-wrench mr-1"></i>Unggah Data Servis</button>
+        </div>
+
+        <!-- Pemberitahuan PII. Dulu menempel di tahap 2 wizard penjualan; ikut pindah
+             ke sini waktu wizard itu dipensiunkan 2026-09-20 — BUKAN ikut terbuang.
+             Orang yang mengunggah berhak tahu bahwa data pribadi ikut tersimpan,
+             walaupun dia tidak bisa menolaknya di sini (keputusan pemilik proyek
+             2026-08-18: tim selalu memerlukannya, jadi pilihannya cuma menyediakan
+             peluang lupa). Jalan untuk tidak menyimpan masih ada lewat baris perintah. -->
+        <div class="mt-4 flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          <i class="ph-fill ph-info text-slate-400 mt-0.5"></i>
+          <span><b>Nama dan alamat konsumen ikut tersimpan</b> supaya bisa dilihat per
+          kelurahan. Tersimpan di database terpisah dan tiap aksesnya dicatat.</span>
         </div>
 
         <div id="impx-status" class="hidden mt-3 text-xs text-slate-500"></div>

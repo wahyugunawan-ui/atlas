@@ -61,9 +61,7 @@ import {
 } from './fusion.js';
 import {
   askDeletePeriod, closeDeletePeriod, confirmDeletePeriod, deletePeriodTyped,
-  dragLeave, dragOver, dropFile, fileChosen, finishImport, importPeriodChanged,
-  importStep, pickFile, refreshImportTab, reimportPeriod, reimportSumber, reviewImport,
-  runUpload,
+  importPeriodChanged, refreshImportTab, reimportPeriod, reimportSumber,
   togglePeriodeDetail, pilihSumber, unggahSumber, hapusSumber,
   setupImportTab,
 } from './import.js';
@@ -108,9 +106,11 @@ const HANDLERS = {
   openDealerEditor, closeDealerEditor, saveDealerEditor, deleteDealerConfirm,
   openMatchNames, closeMatchNames, confirmMatch, undoMatch,
   applyPosImport, closePosImport, openPosImport, posImportFileChosen,
-  // impor
-  importStep, importPeriodChanged, pickFile, fileChosen, dropFile, dragOver, dragLeave,
-  runUpload, reviewImport, finishImport, reimportPeriod, reimportSumber, refreshImportTab,
+  // impor. Wizard penjualan empat tahap dipensiunkan 2026-09-20 — importStep,
+  // pickFile, fileChosen, dropFile, dragOver, dragLeave, runUpload, reviewImport,
+  // dan finishImport ikut hilang bersamanya. Satu berkas Data KTP sekarang mengisi
+  // penjualan, peta, dan Confidence Fusion sekaligus.
+  importPeriodChanged, reimportPeriod, reimportSumber, refreshImportTab,
   togglePeriodeDetail, pilihSumber, unggahSumber, hapusSumber,
   askDeletePeriod, closeDeletePeriod, deletePeriodTyped, confirmDeletePeriod,
   // dipanggil antar modul lewat window supaya tidak ada lingkaran import

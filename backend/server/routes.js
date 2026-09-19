@@ -8,7 +8,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const repo = require('./repository');
-const { runImport, isRunning } = require('./importer');
+const { isRunning } = require('./importer');
 const { runSourceImport, savePing } = require('./source-import');
 const {
   recalculate, readSettings, statusRatio, statusRetention,
@@ -645,61 +645,19 @@ function build(config) {
    * dijaga: batas ukuran, dan nama berkas dari pengguna TIDAK PERNAH dipakai sebagai
    * nama berkas di disk.
    */
-  api.post('/import', express.raw({ type: 'multipart/form-data', limit: MAX_UPLOAD }),
-    async (req, res) => {
-      if (isRunning()) {
-        return res.status(409).json({
-          error: 'Sedang ada impor yang berjalan. Tunggu sampai selesai, lalu coba lagi.',
-        });
-      }
+  /* ------------------------------------------------------------------------
+     RUTE POST /import (impor PENJUALAN) DIPENSIUNKAN 2026-09-20
+     ------------------------------------------------------------------------
+     Template Data KTP memuat semua kolom yang dibutuhkan penjualan — kelurahan,
+     kecamatan, kode kota, dan kode pos (78 kode, terbukti set yang identik dengan
+     sales.outlet_code) — DITAMBAH nomor mesin yang tidak pernah dipunyai template
+     penjualan. Jadi satu berkas cukup, dan angka penjualan sekarang diturunkan dari
+     impor Data KTP di bawah (lihat runSourceImport() di source-import.js).
 
-      let parsed;
-      try {
-        parsed = parseMultipart(req.body, req.headers['content-type']);
-      } catch (error) {
-        return res.status(400).json({ error: error.message });
-      }
-
-      const period = String(parsed.fields.period || '');
-      if (!PERIOD.test(period)) {
-        return res.status(400).json({ error: 'Pilih bulan dan tahun dulu.' });
-      }
-      if (!parsed.file) {
-        return res.status(400).json({ error: 'Tidak ada berkas yang terkirim.' });
-      }
-
-      const original = String(parsed.file.filename || 'unggahan');
-      const ext = path.extname(original).toLowerCase();
-      if (!['.xlsx', '.xlsm', '.csv', '.txt'].includes(ext)) {
-        return res.status(400).json({
-          error: `Format ${ext || 'itu'} tidak bisa dibaca. Kirim .xlsx atau .csv.`,
-        });
-      }
-
-      // Nama di disk dibuat server, bukan diambil dari pengguna. Nama seperti
-      // "..\..\.env" tidak akan pernah punya kesempatan.
-      const dir = path.join(config.dataDir, 'uploads');
-      fs.mkdirSync(dir, { recursive: true });
-      pruneUploads(dir);
-      const safe = path.join(dir,
-        `${period}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`);
-      fs.writeFileSync(safe, parsed.file.data);
-
-      try {
-        const result = await runImport({
-          file: safe,
-          period,
-          fileName: path.basename(original),
-          ip: req.ip,
-          withCustomers: simpanKonsumen(parsed.fields.withCustomers),
-          config,
-        });
-        res.json(result);
-      } catch (error) {
-        const status = error.code === 'SEDANG_BERJALAN' ? 409 : 400;
-        res.status(status).json({ error: error.message });
-      }
-    });
+     Master pos TIDAK lagi dirawat impor bulanan: itu pindah ke halaman Master Pos
+     Dealer sepenuhnya (keputusan tim 2026-09-19), yang sekaligus menutup sumber pos
+     ganda yang selama ini lahir dari tebakan resolveGroups() tiap impor.
+     ------------------------------------------------------------------------ */
 
   /* ------------------------------------------------------------------------
      IMPOR DATA KTP & DATA SERVIS (docs/FUSION.md Tahap C)
