@@ -4236,3 +4236,62 @@ jelek, kelas penempatan yang hilang membuat halaman tidak terbaca. Titik di-esca
 CSS (`gap-1.5` → `.gap-1\.5`, `xl:col-span-2` → `.xl\:col-span-2`), dan pencocokan
 yang lupa itu memberi false negative — saya sendiri tertipu persis di situ waktu
 mendiagnosis, jadi jebakannya ditulis di komentar berkasnya.
+
+## [2026-09-19] Halaman Data Konsumen membaca `customer_ktp`, bukan `customers`
+
+**Konteks:** Tim bertanya apakah halaman "Data Konsumen · berdasarkan KTP" merujuk
+data penjualan atau data KTP. Jawabannya: **data penjualan**. `browseCustomers()`
+membaca tabel `customers` — PII turunan impor PENJUALAN — sejak halaman itu dibuat.
+Namanya menyebut KTP, isinya bukan. Keduanya mirip (19.051 vs 19.598 baris pada
+Agustus 2026) sehingga tidak ada yang curiga dari layar.
+
+**Keputusan:** Sumbernya dipindah ke `customer_ktp`.
+
+**Konsekuensi yang IKUT berubah, semuanya wajar dari pindah tabel:**
+- Nomor mesin jadi tersedia dan dapat kolom sendiri — `customers` tidak pernah
+  menyimpannya. Itu kunci ke Telusur Nomor Mesin, jadi barisnya kini bisa ditelusuri.
+- Penyaring Pos hilang, penyaring Dealer muncul. `customer_ktp` punya `dealer_code`
+  langsung; halaman lama terpaksa menerjemahkan satu dealer jadi daftar pos miliknya.
+  Data KTP memang tidak mencatat pos mana yang melayani.
+- Kota dan provinsi disaring lewat `city_code` sendiri, bukan awalan kode kelurahan.
+  Ini perbaikan: baris yang alamatnya gagal dicocokkan (`village_code` NULL) tetap
+  terhitung di kotanya — dan baris seperti itu justru yang paling perlu dilihat.
+- Kode dealer diterjemahkan legacy → turunan nama lewat query KEDUA ke database
+  utama, bukan join: kedua tabel ada di database berbeda dan aturan proyek memang
+  memisahkannya. Sekali per halaman, bukan per baris.
+
+**Alternatif yang ditolak:** (a) Menampilkan kode numerik apa adanya di kolom Dealer
+— ditolak, layar memakai kode turunan nama di mana-mana dan titiknya akan kehilangan
+warna. (b) Menyatukan `customersInVillage()` sekalian — ditolak untuk sesi ini:
+fungsi itu melayani panel kelurahan di peta, dan menyatukannya bagian dari keputusan
+lebih besar soal menghapus jalur penjualan yang masih menunggu tim.
+
+**Konsekuensi yang belum selesai:** dua pintu ke "data konsumen" kini menunjuk dua
+tabel berbeda. Dicatat di ROADMAP sebagai utang terbuka, dan tesnya mengisi kedua
+tabel berdampingan supaya keadaan itu tidak berubah diam-diam.
+
+## [2026-09-19] Penjaga "nama dipakai tapi tidak di-import"
+
+**Konteks:** Halaman Lokasi Service dan Lokasi Delivery kosong berbulan-bulan.
+Sebabnya satu impor yang hilang: `switchTab()` memanggil `hentikanLiveFusion()`
+tanpa mengimpornya, jadi tiap pindah ke halaman non-Fusion melempar ReferenceError
+tepat sebelum baris yang menggambar isi halaman. Judulnya tetap tampil, isinya tidak
+pernah diminta, dan 47 berkas tes tetap hijau.
+
+**Keputusan:** `page.test.js` langkah 2b menandai tiap pemanggilan `nama()` yang
+diekspor modul LAIN tapi tidak di-import dan tidak dideklarasikan di berkas itu.
+
+**Alasan:** Langkah 2 yang sudah ada memeriksa "import menunjuk ekspor yang benar-benar
+ada". Arah sebaliknya tidak diperiksa siapa pun, dan justru itu yang menggigit —
+ReferenceError di tengah fungsi tidak menggagalkan apa pun yang bisa dilihat tes.
+
+**Alternatif yang ditolak:** Memakai parser JavaScript sungguhan — ditolak,
+ketergantungan baru untuk masalah yang bisa diselesaikan dengan aturan sempit:
+hanya nama yang diekspor modul lain, dan nama seperti itu pasti bukan variabel lokal
+yang kebetulan sama.
+
+**Konsekuensi:** Komentar dan atribut `onclick="..."` dibuang sebelum pemindaian.
+Yang pertama karena proyek ini sering menyebut fungsi modul lain sebagai rujukan di
+komentar; yang kedua karena nama di markup diselesaikan lewat `window` saat diklik
+dan memang TIDAK boleh di-import (akan membuat lingkaran modul) — pendaftarannya
+sudah dijaga pemeriksaan HANDLERS terpisah.

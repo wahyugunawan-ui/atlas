@@ -211,6 +211,25 @@ cuma perluasan ke Sulawesi ke timur.
     filter sudah dipakai bersama sejak 2026-09-17. Namanya saja yang diganti.
   - Pengiriman belum masuk checklist Periode Tersimpan — sengaja, sampai ada ping
     pertama (tanpa itu setiap bulan terbaca "3 dari 4").
+- **Utang dari sesi 2026-09-19:**
+  - **Dua pintu ke "data konsumen" menunjuk DUA TABEL BERBEDA.**
+    `browseCustomers()` (halaman Data Konsumen) sudah membaca `customer_ktp`,
+    tapi `customersInVillage()` — yang melayani `/api/customers?village=` dan
+    dipakai panel kelurahan di peta — MASIH membaca `customers`. Sengaja belum
+    disatukan: itu bagian dari keputusan lebih besar soal menghapus jalur data
+    penjualan seluruhnya, yang masih menunggu tim. Tesnya mengisi kedua tabel dan
+    mengujinya berdampingan supaya keadaan ini tidak bisa berubah diam-diam.
+  - **Tim meminta seluruh data & mekanisme PENJUALAN dihapus** (titik, impor, dsb)
+    dengan alasan sudah digantikan data KTP. BELUM dikerjakan, dan sengaja ditanya
+    balik dulu: tabel `sales` (10.019 baris) menopang SELURUH halaman Sales
+    Analytics, titik penjualan di peta, registry warna dealer, treemap, dan
+    perhitungan jangkauan. Menghapusnya berarti membuang halaman utama aplikasi,
+    bukan sekadar membersihkan jalur impor yang tidak terpakai.
+  - Klik titik untuk melihat data pelanggan berlaku pada titik KTP/Servis/
+    Pengiriman, **tidak** pada titik penjualan (`jual-titik`). Titik penjualan
+    memang tidak bisa mendukungnya: tabel `sales` teragregasi per kelurahan+pos
+    dan tidak menyimpan nomor mesin sama sekali.
+  - Semua perubahan 2026-09-19 belum dilihat di browser.
 - **Utang dari sesi 2026-09-18, sesudah putaran kedua sore itu:**
   - ~~Hover titik cuma agregat~~ **SUDAH, dengan bentuk yang berbeda.** Tim
     menegaskan ulang permintaannya dan menentukan pemicunya sendiri (klik atau diam
@@ -236,6 +255,42 @@ cuma perluasan ke Sulawesi ke timur.
 ---
 
 ## Selesai
+
+### Bug halaman kosong berbulan-bulan, grid Fusion direvisi, Data Konsumen pindah ke data KTP (2026-09-19)
+
+Empat commit, `6f63766` sampai `ebf523a`, tetap **49/49 berkas tes**.
+
+- **Lokasi Service dan Lokasi Delivery yang kosong berbulan-bulan: SATU IMPOR YANG
+  HILANG.** `switchTab()` memanggil `hentikanLiveFusion()` tanpa pernah
+  mengimpornya dari fusion.js, jadi setiap pindah ke halaman NON-Fusion melempar
+  ReferenceError tepat sebelum tiga baris render di ujung fungsinya. Judul halaman
+  tetap tampil (digambar loop di awal), isinya tidak pernah diminta. Halaman lain
+  selamat cuma karena kebetulan digambar di ATAS baris yang melempar.
+  Dibuktikan tiga langkah, bukan ditebak: backend diperiksa langsung (186.471 baris
+  `service_visit`, query yang persis sama dengan yang dikirim halaman mengembalikan
+  100 baris), `renderServiceTable()` dijalankan sendirian di Node (menulis 84.366
+  karakter tabel), lalu `switchTab('servis')` utuh (melempar).
+  **Penjaga baru** di page.test.js: nama yang DIPAKAI tapi tidak di-import. Langkah
+  yang sudah ada cuma memeriksa arah sebaliknya.
+- **Grid Fusion direvisi lagi**: Golongan Final dan Venn BERDAMPINGAN (3+3 kolom,
+  selebar satu blok pita kiri) dan lebih tinggi; Matriks menyempit 4→3 kolom dengan
+  kolom nama kota 130px→96px; pita kiri dan peta dapat ruangnya.
+- **Matriks ikut saringan kota/karesidenan**, mengecualikannya dari aturan
+  "tampilkan semua, sorot yang cocok" — Matriks bukan daftar berperingkat, jadi
+  tidak ada konteks peringkat yang hilang saat dipersempit.
+- **Simbol pos/dealer menyusut tajam saat peta ditarik keluar.** Kurva lama cuma
+  menyusut 30% dan simbolnya menumpuk. Acuan baru dari tim: 1.0 = ukuran pada
+  tampilan skala 2 km.
+- **Halaman "Data Konsumen · berdasarkan KTP" akhirnya benar-benar membaca
+  `customer_ktp`** (dulu `customers`, tabel PII turunan impor PENJUALAN). Nomor
+  mesin jadi ada sebagai kolom, penyaring Pos hilang berganti Dealer, dan kota
+  disaring lewat `city_code` sendiri sehingga baris yang alamatnya gagal dicocokkan
+  tidak lagi hilang diam-diam.
+
+**Dua mutasi sempat selamat** dan keduanya kelemahan tes saya, bukan mutasi tidak
+sah: penjaga import versi pertama tidak bisa merah sama sekali (polanya ikut
+mencocoki pemanggilan), dan terjemahan kode dealer tidak dijaga apa pun. Keduanya
+diperbaiki lalu seluruh mutasi merah.
 
 ### Halaman hancur karena CSS basi, plus POS/kota luar cakupan dan info pelanggan per titik (2026-09-18, putaran kedua)
 
