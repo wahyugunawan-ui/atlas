@@ -229,8 +229,12 @@ function matriks(data, sorotKota) {
     // luar Jateng+DIY tidak punya nama di tabel wilayah dan dulu tampil sebagai kode
     // telanjang — sekarang "Luar cakupan (31.74)".
     const namaKota = labelKota(r.cityName, r.cityCode);
+    // 96px, turun dari 130px: kolom nama kota dulu melebar sampai memaksa seluruh blok
+    // ikut lebar, dan ruang itu diambil dari peta. Nama terpanjang di cakupan
+    // ("Kota Yogyakarta", "Banjarnegara") masih muat; yang lebih panjang terpotong
+    // rapi dan tetap terbaca penuh lewat title.
     return `<tr${klik}>` +
-      `<td class="px-1 py-0.5 text-[10px] text-slate-700 truncate" style="max-width:130px" ` +
+      `<td class="px-1 py-0.5 text-[10px] text-slate-700 truncate" style="max-width:96px" ` +
       `title="${esc(namaKota)}">${esc(namaKota)}</td>` +
       sel +
       `<td class="px-1 text-right text-[10px] font-bold mono ${warna}">${esc(cr)}</td></tr>`;
@@ -1214,12 +1218,23 @@ export async function renderFusion() {
   isiSlot('fx-kpi-pelanggan',
     '<p class="text-xs text-slate-400 p-2">Memuat angka golongan…</p>');
 
-  // Matriks dan Peringkat (kota+dealer) diminta dengan PERIODE SAJA, bukan `f` utuh —
-  // permintaan tim 2026-09-18: dulu memilih Kares/Kota/Dealer membuat KETIGA blok ini
-  // cuma menyisakan SATU baris. Sekarang server selalu mengirim baris LENGKAP, dan
-  // yang sedang disaring disorot di layar (lihat gambarMatriks()/gambarDealer(),
-  // kotaSorotSet()) — bukan disembunyikan lagi.
+  // PERINGKAT (kota + dealer) diminta dengan PERIODE SAJA. Permintaan tim
+  // 2026-09-18: dulu memilih Kares/Kota/Dealer membuat blok-blok ini cuma menyisakan
+  // SATU baris, kehilangan seluruh konteks peringkatnya. Sekarang server selalu
+  // mengirim baris LENGKAP dan yang sedang disaring DISOROT (gambarDealer(),
+  // kotaSorotSet()) — melihat satu dealer sekaligus posisinya dibanding yang lain.
   const fSemua = { periode: f.periode };
+
+  // MATRIKS DIKECUALIKAN dari aturan di atas (permintaan tim 2026-09-18 sore, setelah
+  // melihat hasilnya): ia IKUT saringan kota/karesidenan. Alasannya beda dengan
+  // Peringkat — Matriks bukan daftar berperingkat, jadi tidak ada "posisi dibanding
+  // yang lain" yang hilang kalau barisnya dipersempit. Yang tersisa cuma 49 baris
+  // yang harus digulir untuk mencari 6 kota Kedu yang sedang dilihat.
+  //
+  // Dealer SENGAJA tidak ikut: matriksnya per KOTA, dan menyaring dealer akan
+  // mengubah arti angkanya (jadi "kota ini menurut dealer itu") tanpa satu pun
+  // keterangan di layar. Judul bloknya sudah menyebut jumlah kotanya.
+  const fMatriks = { periode: f.periode, kota: f.kota, kotaBanyak: f.kotaBanyak };
 
   // Pos TIDAK dipakai kelima panel halaman ini (permintaan tim 2026-09-18) — satu
   // pos cuma melayani sebagian kecil kelurahan satu kota, dan Kota/Dealer/Kares
@@ -1237,7 +1252,7 @@ export async function renderFusion() {
   let cakupan;
   try {
     [hasil, peringkat, matrix, irisan, cakupan] = await Promise.all([
-      fetchSegmentation(fPanel), fetchPeringkat(fSemua), fetchMatriks(fSemua),
+      fetchSegmentation(fPanel), fetchPeringkat(fSemua), fetchMatriks(fMatriks),
       fetchIrisan(fPanel), fetchCakupanSumber(fPanel),
     ]);
   } catch (error) {

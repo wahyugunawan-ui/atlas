@@ -1138,14 +1138,14 @@
          bawah), dan 4 kartu berdampingan di 5 kolom akan terlalu sempit untuk teks
          seperti "24.567 terkoreksi keyakinan". Grid bersarang ini SATU sel di grid
          luar (kolom 1-5, baris 1-2); di dalamnya bebas dari batas 12 kolom. -->
-    <div class="col-start-1 col-span-5 row-start-1 row-span-2 min-h-0 grid grid-cols-2 grid-rows-2 gap-1.5">
+    <div class="col-start-1 col-span-6 row-start-1 row-span-2 min-h-0 grid grid-cols-2 grid-rows-2 gap-1.5">
       <div id="fx-kpi-pelanggan" class="min-h-0 flex"></div>
       <div id="fx-kpi-cw" class="min-h-0 flex"></div>
       <div id="fx-kpi-ratio" class="min-h-0 flex"></div>
       <div id="fx-kpi-cakupan" class="min-h-0 flex"></div>
     </div>
 
-    <div class="col-start-1 col-span-5 row-start-3 row-span-4 min-h-0 bg-white rounded-xl border border-slate-200 p-2 flex flex-col">
+    <div class="col-start-1 col-span-6 row-start-3 row-span-5 min-h-0 bg-white rounded-xl border border-slate-200 p-2 flex flex-col">
       <!-- Elemen #map DIPINDAHKAN ke sini saat tab Fusion aktif, lalu dikembalikan ke
            #map-shell saat keluar. Satu instance peta, bukan dua: S.map global dan
            hampir semua kode peta bergantung padanya. Panel Opsi Peta tidak ikut
@@ -1153,19 +1153,21 @@
       <div id="fx-peta-host" class="flex-1 min-h-0 rounded-lg overflow-hidden bg-slate-50"></div>
     </div>
 
-    <!-- Golongan Final — dulu setengah dari blok bermode-dua dengan Venn. Sekarang
-         blok sendiri: pie di KIRI, daftar golongan (legenda) di KANAN — permintaan
-         tim, bukan lagi ditumpuk atas-bawah. flex-row, bukan flex-col. -->
-    <div class="col-start-1 col-span-5 row-start-7 row-span-3 min-h-0 bg-white rounded-xl border border-slate-200 p-3 flex flex-col">
+    <!-- Golongan Final dan Venn BERDAMPINGAN (permintaan tim 2026-09-18 sore), bukan
+         lagi bertumpuk atas-bawah. Keduanya berbagi lebar pita kiri: 3 + 3 = 6 kolom,
+         persis selebar satu blok di atasnya. Keduanya juga jadi lebih TINGGI (5 baris,
+         dulu 3 masing-masing) — pie dan diagram Venn sama-sama bentuk bulat, dan
+         tinggi itulah yang menentukan ukurannya, bukan lebar. -->
+    <div class="col-start-1 col-span-3 row-start-8 row-span-5 min-h-0 bg-white rounded-xl border border-slate-200 p-3 flex flex-col overflow-hidden">
       <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1 shrink-0">Golongan final</div>
+      <!-- pie di KIRI, legenda di KANAN — permintaan tim, bukan ditumpuk. -->
       <div id="fx-golongan-final" class="flex-1 min-h-0 flex items-center gap-2"></div>
     </div>
 
-    <!-- Venn — blok sendiri, DI-FIT: SVG-nya memakai height 100% + preserveAspectRatio
-         (lihat venn() di fusion.js), bukan lagi max-height piksel tetap, supaya
-         mengisi persis tinggi blok ini tanpa gulir ke arah mana pun. -->
-    <div class="col-start-1 col-span-5 row-start-10 row-span-3 min-h-0 bg-white rounded-xl border border-slate-200 p-3 flex flex-col overflow-hidden">
+    <div class="col-start-4 col-span-3 row-start-8 row-span-5 min-h-0 bg-white rounded-xl border border-slate-200 p-3 flex flex-col overflow-hidden">
       <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1 shrink-0">Venn irisan sumber</div>
+      <!-- SVG-nya height 100% + preserveAspectRatio (venn() di fusion.js), bukan
+           max-height piksel tetap, supaya mengisi persis tinggi blok tanpa gulir. -->
       <div id="fx-venn" class="flex-1 min-h-0 flex items-center justify-center overflow-hidden"></div>
     </div>
 
@@ -1176,7 +1178,7 @@
          fusion.js. Diperlebar 3 kol -> 4 kol (permintaan tim). Tambahan tombol
          urutkan: lihat toggleSortMatriks() di fusion.js — berlaku untuk MODE yang
          sedang aktif (Matriks ATAU Kota), default confidence terendah dulu. -->
-    <div class="col-start-6 col-span-4 row-start-1 row-span-12 min-h-0 bg-white rounded-xl border border-slate-200 p-3 flex flex-col">
+    <div class="col-start-7 col-span-3 row-start-1 row-span-12 min-h-0 bg-white rounded-xl border border-slate-200 p-3 flex flex-col">
       <div class="flex items-center gap-1 mb-1 shrink-0">
         <span id="fx-matriks-jumlah" class="text-[10px] text-slate-400 mr-auto"></span>
         <button id="fx-sort-matriks" onclick="toggleSortMatriks()" title="Urutkan berdasarkan Confidence Ratio" class="fx-mode">CR &uarr;</button>

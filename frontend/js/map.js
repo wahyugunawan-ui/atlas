@@ -58,7 +58,18 @@ let basemapLayerIds = [];
  * @returns {number} faktor skala CSS, mis. 0.7 di zoom rendah, 1.55 di zoom tinggi
  */
 export function skalaMarkerZoom(zoom) {
-  const TITIK = [[6, 0.7], [10, 1], [14, 1.55]];
+  // Kurva DIPERTAJAM 2026-09-18 sore. Versi pertama ([[6,0.7],[10,1],[14,1.55]]) cuma
+  // menyusut 30% di zoom terjauh, dan keluhannya tepat: waktu peta ditarik keluar,
+  // simbol pos/dealer tetap sebesar itu lalu saling menumpuk sampai wilayahnya
+  // tertutup sendiri.
+  //
+  // Acuannya sekarang ditetapkan tim: ukuran NORMAL (1.0) adalah ukuran sekarang pada
+  // tampilan skala 2 km, yaitu sekitar zoom 13. Dari situ ke luar menyusut tajam —
+  // 5 km (z12) tinggal ~0.72, 10 km (z11) ~0.52, 20 km (z10) 0.4 — dan berhenti di
+  // 0.25 supaya di tampilan se-provinsi titiknya masih terlihat, bukan hilang.
+  // Ke dalam sengaja cuma sampai 1.25: di zoom sedekat itu yang perlu dibaca peta
+  // dan ringnya, bukan simbolnya.
+  const TITIK = [[7, 0.25], [10, 0.4], [12, 0.72], [13, 1], [15, 1.25]];
   const z = Number(zoom);
   if (!Number.isFinite(z) || z <= TITIK[0][0]) return TITIK[0][1];
   if (z >= TITIK[TITIK.length - 1][0]) return TITIK[TITIK.length - 1][1];

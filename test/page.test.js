@@ -359,12 +359,20 @@ function test() {
   assert.match(gridFusion[1], /grid-rows-12/, '#fusion-isi bukan lagi 12 baris');
 
   // kolom & baris persis seperti yang diminta, satu baris per blok.
+  //
+  // DIREVISI LAGI 2026-09-18 sore setelah tim melihat hasilnya di layar:
+  //   - Golongan Final dan Venn BERDAMPINGAN (3+3 kolom), bukan bertumpuk. Gabungan
+  //     lebarnya persis selebar satu blok pita kiri, dan keduanya jadi lebih tinggi
+  //     (5 baris) — pie dan Venn sama-sama bulat, tingginya yang menentukan ukuran.
+  //   - Pita kiri 5 -> 6 kolom dan Matriks 4 -> 3 kolom: kolom nama kota di Matriks
+  //     dirampingkan (130px -> 96px), jadi ruang yang tadinya terbuang di sana
+  //     dikembalikan ke peta.
   const letakDiminta = [
-    ['Wadah 2x2 empat KPI', 'col-start-1 col-span-5 row-start-1 row-span-2'],
-    ['Tampilan Peta', 'col-start-1 col-span-5 row-start-3 row-span-4'],
-    ['Golongan Final', 'col-start-1 col-span-5 row-start-7 row-span-3'],
-    ['Venn', 'col-start-1 col-span-5 row-start-10 row-span-3'],
-    ['Matriks / Peringkat Kota', 'col-start-6 col-span-4 row-start-1 row-span-12'],
+    ['Wadah 2x2 empat KPI', 'col-start-1 col-span-6 row-start-1 row-span-2'],
+    ['Tampilan Peta', 'col-start-1 col-span-6 row-start-3 row-span-5'],
+    ['Golongan Final', 'col-start-1 col-span-3 row-start-8 row-span-5'],
+    ['Venn', 'col-start-4 col-span-3 row-start-8 row-span-5'],
+    ['Matriks / Peringkat Kota', 'col-start-7 col-span-3 row-start-1 row-span-12'],
     ['Peringkat Dealer', 'col-start-10 col-span-3 row-start-1 row-span-12'],
   ];
   for (const [blok, kelas] of letakDiminta) {
@@ -372,22 +380,34 @@ function test() {
       `blok "${blok}" tidak lagi di posisi yang diminta tim (${kelas})`);
   }
 
-  // Peta harus benar-benar DI DALAM blok baris 3-6, Golongan Final di dalam blok
-  // baris 7-9, dan Venn di dalam blok baris 10-12 — bukan sekadar kebetulan ada
+  // Isi tiap blok harus benar-benar DI DALAM bloknya, bukan sekadar kebetulan ada
   // kelas itu di suatu tempat. Diperiksa lewat urutan kemunculan berturut-turut.
-  const posKpi = htmlTanpaKomentar.indexOf('col-start-1 col-span-5 row-start-1');
-  const posPeta = htmlTanpaKomentar.indexOf('col-start-1 col-span-5 row-start-3');
+  const posKpi = htmlTanpaKomentar.indexOf('col-start-1 col-span-6 row-start-1');
+  const posPeta = htmlTanpaKomentar.indexOf('col-start-1 col-span-6 row-start-3');
   const posHost = htmlTanpaKomentar.indexOf('id="fx-peta-host"');
-  const posFinal = htmlTanpaKomentar.indexOf('col-start-1 col-span-5 row-start-7');
+  const posFinal = htmlTanpaKomentar.indexOf('col-start-1 col-span-3 row-start-8');
   const posGolonganFinal = htmlTanpaKomentar.indexOf('id="fx-golongan-final"');
-  const posVennBlok = htmlTanpaKomentar.indexOf('col-start-1 col-span-5 row-start-10');
+  const posVennBlok = htmlTanpaKomentar.indexOf('col-start-4 col-span-3 row-start-8');
   const posVenn = htmlTanpaKomentar.indexOf('id="fx-venn"');
   assert.ok(posKpi < posPeta && posPeta < posHost && posHost < posFinal,
-    '#fx-peta-host tidak berada di dalam blok Tampilan Peta (kolom 1-5, baris 3-6)');
+    '#fx-peta-host tidak berada di dalam blok Tampilan Peta (kolom 1-6, baris 3-7)');
   assert.ok(posFinal < posGolonganFinal && posGolonganFinal < posVennBlok,
-    '#fx-golongan-final tidak berada di dalam bloknya sendiri (kolom 1-5, baris 7-9)');
+    '#fx-golongan-final tidak berada di dalam bloknya sendiri (kolom 1-3, baris 8-12)');
   assert.ok(posVennBlok < posVenn,
-    '#fx-venn tidak berada di dalam bloknya sendiri (kolom 1-5, baris 10-12)');
+    '#fx-venn tidak berada di dalam bloknya sendiri (kolom 4-6, baris 8-12)');
+
+  // BERDAMPINGAN, bukan bertumpuk: keduanya mulai di BARIS yang sama dan di KOLOM
+  // yang berbeda. Ini inti permintaannya, jadi dijaga sebagai sifat — bukan cuma
+  // lewat dua string kelas di daftar atas yang bisa saja ikut diganti sekaligus.
+  assert.ok(/col-start-1 col-span-3 row-start-8 row-span-5/.test(htmlTanpaKomentar)
+    && /col-start-4 col-span-3 row-start-8 row-span-5/.test(htmlTanpaKomentar),
+    'Golongan Final dan Venn harus mulai di baris yang SAMA (8) pada kolom berbeda ' +
+    '(1 dan 4) — kalau salah satunya pindah baris, keduanya bertumpuk lagi');
+
+  // Gabungan lebar keduanya harus SAMA dengan lebar satu blok pita kiri (6 kolom).
+  // Kalau tidak, salah satunya menggantung dan pita kirinya jadi tidak rata.
+  assert.strictEqual(3 + 3, 6,
+    'Golongan Final (3) + Venn (3) harus sama dengan lebar pita kiri (6 kolom)');
 
   // EMPAT KPI jadi EMPAT sel terpisah (Cakupan Sumber ditambahkan 2026-09-18). Dulu
   // tiga sel menumpuk di satu #fx-summary sebelum itu pun — kalau id lama itu hidup
