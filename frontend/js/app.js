@@ -160,7 +160,7 @@ export function renderAll() {
   // nilainya tidak pernah dibaca satu baris pun sesudahnya — kode mati yang terbaca
   // seperti sedang menjaga sesuatu.
   const visual = refreshMapVisual();
-  if (visual) renderLegend(visual.perVillage, visual.breaks);
+  if (visual) renderLegend(visual.perVillage, visual.breaks, visual.satuan);
 
   renderTopSummary(rows);
   renderTreemap(rows);

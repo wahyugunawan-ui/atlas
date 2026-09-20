@@ -471,9 +471,9 @@ terpotong.
 | Kode (DB) | Nama resmi | Label UI | Bobot | Kondisi (KTP selalu ada) |
 |---|---|---|---|---|
 | `loyal_verified` | Warlok Loyal Verified | Warlok | 1,00 | Servis berdekatan **dan** Kirim berdekatan |
-| `service_near` | Warlok ke Bengkel dekat | Setia Bengkel | 0,80 | Servis berdekatan; Kirim jauh/tidak ada |
-| `delivery_near` | Warlok kirim dekat | Pembeli Terverifikasi | 0,75 | Kirim berdekatan; Servis jauh/tidak ada |
-| `registered_only` | Warga asli | Warga Terdaftar | 0,55 | Tidak ada Servis maupun Kirim |
+| `service_near` | Warlok bengkel dekat | Warlok bengkel dekat | 0,80 | Servis berdekatan; Kirim jauh/tidak ada |
+| `delivery_near` | Warlok kirim dekat | Warlok kirim dekat | 0,75 | Kirim berdekatan; Servis jauh/tidak ada |
+| `registered_only` | Warga asli | Warga asli | 0,55 | Tidak ada Servis maupun Kirim |
 | `nomad` | Migran / Nomaden | Migran / Nomaden | 0,20 | Servis dan/atau Kirim ada dan tergeocode, tapi melebihi KPI Jarak |
 | `unverified` | Tak Terverifikasi | Tak Terverifikasi | 0,05 | Servis dan/atau Kirim ada, tapi gagal dikonversi ke koordinat |
 
@@ -614,7 +614,7 @@ sudah dikoreksi keyakinan. Contoh satu kota dengan 5.299 pelanggan:
 | Golongan | n | bobot | sumbangan |
 |---|---:|---:|---:|
 | Warlok Loyal Verified | 661 | 1,00 | 661,0 |
-| Warlok ke Bengkel dekat | 1.584 | 0,80 | 1.267,2 |
+| Warlok bengkel dekat | 1.584 | 0,80 | 1.267,2 |
 | Warlok kirim dekat | 984 | 0,75 | 738,0 |
 | Warga asli | 1.441 | 0,55 | 792,6 |
 | Migran / Nomaden | 427 | 0,20 | 85,4 |
@@ -1013,7 +1013,7 @@ dicentang.
 | Golongan | Warna |
 |---|---|
 | Warlok Loyal Verified | `#3B82F6` |
-| Warlok ke Bengkel dekat | `#EC4899` |
+| Warlok bengkel dekat | `#EC4899` |
 | Warlok kirim dekat | `#A855F7` |
 | Warga asli | `#94A3B8` |
 | Migran / Nomaden | `#F59E0B` |
@@ -1063,7 +1063,7 @@ sebagai polanya. Isinya:
   dibanding ambang yang berlaku:
 
   > "Servis berjarak 22 km dari KTP (KPI Jarak: 50 km) → berdekatan.
-  > Kirim tidak ditemukan. → **Warlok ke Bengkel dekat** (bobot 0,80)."
+  > Kirim tidak ditemukan. → **Warlok bengkel dekat** (bobot 0,80)."
 
 - **Peta mini** berisi titik KTP, Servis, Kirim, lingkaran radius KPI,
   dan garis penghubung (3.1).

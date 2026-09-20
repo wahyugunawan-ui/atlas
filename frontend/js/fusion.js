@@ -27,7 +27,7 @@ import {
 import {
   fitToScope, gambarTelusurDiPeta, hapusTelusurDiPeta, refreshMapVisual,
 } from './map.js';
-import { $, displayCityName, esc, formatNumber, labelKota } from './dom.js';
+import { $, displayCityName, esc, formatNumber, formatPercent, labelKota } from './dom.js';
 import { ALLOWED_CITY_CODES, KARESIDENAN } from './config.js';
 import { fusionFilter, kotaBerikutnya, pageFilters, persenSumber, setScope } from './filters.js';
 import { S } from './state.js';
@@ -209,7 +209,7 @@ function matriks(data, sorotKota) {
     }).join('');
 
     const warna = WARNA_STATUS[r.status] || 'text-slate-400';
-    const cr = r.confidenceRatio == null ? '—' : `${(r.confidenceRatio * 100).toFixed(0)}%`;
+    const cr = r.confidenceRatio == null ? '—' : formatPercent(r.confidenceRatio * 100, 1);
     // Baris yang sedang disaring di bilah filter (kota/kares) disorot, BUKAN
     // disembunyikan — lihat komentar @param sorotKota di atas.
     const disorot = Boolean(sorotKota && r.cityCode && sorotKota.has(r.cityCode));
@@ -830,7 +830,10 @@ function daftarPeringkat(rows, kunciNama, opsi) {
   return rows.map((r) => {
     const total = Number(r.total) || 0;
     const rasio = total ? Number(r.cwSales) / total : null;
-    const persen = rasio == null ? '—' : `${(rasio * 100).toFixed(0)}%`;
+    // formatPercent(n, 1) dari dom.js: satu angka di belakang koma dan pemisah koma
+    // (locale id-ID) — permintaan tim 2026-09-20, dan dipakai ulang supaya format
+    // persen di halaman ini tidak jadi salinan kedua dari yang sudah ada.
+    const persen = rasio == null ? '—' : formatPercent(rasio * 100, 1);
     const warna = rasio == null ? 'text-slate-400'
       : (rasio >= 0.65 ? 'text-emerald-600' : (rasio < 0.50 ? 'text-red-600' : 'text-amber-600'));
 
@@ -868,11 +871,17 @@ function daftarPeringkat(rows, kunciNama, opsi) {
     const namaUtama = kunciNama === 'cityName'
       ? labelKota(r[kunciNama], r.cityCode)
       : r[kunciNama];
+    // Jumlah pelanggan DIBUANG di mode dealer (permintaan tim 2026-09-20): blok
+    // Peringkat Dealer cukup menjawab "dealer mana yang datanya paling rapuh", dan
+    // angka jumlah di sebelahnya cuma bersaing dengan CR untuk perhatian. Mode kota
+    // tetap menampilkannya — di sana jumlahnya yang memberi arti pada peringkatnya.
+    const kolomJumlah = jenisKlik === 'dealer' ? ''
+      : `<span class="text-[11px] mono text-slate-500">${esc(formatNumber(total))}</span>`;
     return `<div${klik}>` +
       `<span class="text-[11px] text-slate-700 truncate flex-1">${
         esc(namaUtama || r.cityCode || r.dealerCode || '—')}${kota}</span>` +
-      `<span class="text-[11px] mono text-slate-500">${esc(formatNumber(total))}</span>` +
-      `<span class="text-[11px] font-bold mono ${warna} w-10 text-right">${esc(persen)}</span></div>`;
+      kolomJumlah +
+      `<span class="text-[11px] font-bold mono ${warna} w-14 text-right">${esc(persen)}</span></div>`;
   }).join('');
 }
 

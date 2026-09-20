@@ -13,7 +13,7 @@ import {
   cincinPerDesa, ikonKotak, pembangkitAcak, sebarDiPoligon, titikPerDesa,
 } from './fusion-points.js';
 import { fiturTelusur } from './fusion-alasan.js';
-import { contributionsForRows, fixedContributionClass } from './sales-stats.js';
+import { contributionsForRows, fixedContributionClass, unitsForRows } from './sales-stats.js';
 // outlets.js TIDAK meng-import berkas ini (ia cuma memakai colors, dom, filters, dan
 // state), jadi impor ini tidak membuat lingkaran modul. Lihat catatan serupa di
 // outlets.js yang memakai window.openDealerDetail justru untuk menghindari lingkaran
@@ -1039,6 +1039,22 @@ export function syncGroupControls() {
   if (ringBox) ringBox.classList.toggle('nonaktif', !dealerAktif);
   if (coverBox) coverBox.classList.toggle('nonaktif', !posAktif);
 
+  // Bagiannya ikut MEMBUKA/MENUTUP sendiri, bukan cuma redup (permintaan tim
+  // 2026-09-20): filter Dealer membuka Ring Dealer dan menutup Coverage POS, filter
+  // Pos kebalikannya. Dulu keduanya selalu terbuka dan yang tidak relevan cuma
+  // diredupkan — panel Opsi Peta jadi panjang oleh bagian yang sedang tidak bisa
+  // dipakai, dan yang relevan terdorong ke bawah lipatan.
+  //
+  // Tanpa scope apa pun (dua-duanya 'ALL'), keduanya DIBIARKAN apa adanya — orang
+  // yang sengaja membuka satu bagian untuk membacanya tidak boleh ditutup paksa oleh
+  // penggambaran ulang yang tidak ia minta.
+  const ringGrup = $('grup-ring-dealer');
+  const coverGrup = $('grup-coverage-pos');
+  if (dealerAktif || posAktif) {
+    if (ringGrup) ringGrup.open = dealerAktif;
+    if (coverGrup) coverGrup.open = posAktif;
+  }
+
   if (S.ringView.mode === 'dealer-ring' && !dealerAktif) S.ringView = { mode: null, value: null };
   if (S.ringView.mode === 'pos-coverage' && !posAktif) S.ringView = { mode: null, value: null };
   paintGroupView();
@@ -1059,10 +1075,28 @@ export function syncGroupControls() {
  *   tidak bergantung siapa lagi yang sedang difilter.
  */
 export function paintChoropleth(rows) {
-  const kontribusi = contributionsForRows(rows, S.villageByCode);
+  // MODE RELATIF DENGAN FILTER DEALER/POS memakai unit MUTLAK, bukan kontribusi %
+  // terhadap kota (perbaikan 2026-09-20, dilaporkan tim). Kontribusi % membagi dengan
+  // total kota DARI BARIS YANG SUDAH TERSARING: satu dealer dengan 1 unit di kota yang
+  // — bagi dealer itu — juga cuma 1 unit menghasilkan 100%, jadi kelurahan dengan
+  // penjualan PALING SEDIKIT justru tampil paling gelap. Difilter per kota hasilnya
+  // benar karena penyebutnya sama untuk semua kelurahan yang tampil.
+  //
+  // Tanpa filter dealer/pos, kontribusi % TETAP dipakai — itu keputusan sengaja
+  // 2026-08-30 supaya kelurahan kecil yang dominan di kotanya tidak tenggelam.
+  //
+  // Mode 'fixed' TIDAK ikut: intervalnya memang didefinisikan atas kontribusi %
+  // (KONTRIBUSI_TETAP), dan artinya justru "sama di mana pun" — mengubah satuannya
+  // menurut filter akan menghancurkan satu-satunya sifat yang membuatnya berguna.
+  const fixed = S.heatmapMode === 'fixed';
+  const pakaiUnit = !fixed
+    && (scopeValue('dealer') !== 'ALL' || scopeValue('pos') !== 'ALL');
+
+  const kontribusi = pakaiUnit
+    ? unitsForRows(rows, S.villageByCode)
+    : contributionsForRows(rows, S.villageByCode);
   const perVillage = Object.fromEntries(kontribusi);
   const breaks = percentileBreaks([...kontribusi.values()]);
-  const fixed = S.heatmapMode === 'fixed';
 
   S.geo.features.forEach((f) => {
     const value = kontribusi.get(f.properties.kode);
@@ -1079,7 +1113,10 @@ export function paintChoropleth(rows) {
     S.map.setFeatureState({ source: 'kel', id: f.properties.kode }, { warna });
   });
 
-  return { perVillage, breaks };
+  // `satuan` ikut dikembalikan supaya legenda MENYEBUT apa yang sedang diukur. Tanpa
+  // itu, angka yang sama ("12") berarti "12% kontribusi" di satu keadaan dan "12 unit"
+  // di keadaan lain, di kotak legenda yang bentuknya persis sama.
+  return { perVillage, breaks, satuan: pakaiUnit ? 'unit' : 'persen' };
 }
 
 /**

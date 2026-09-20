@@ -60,14 +60,14 @@ function legendTitle() {
  *   TETAP (sales-stats.js KONTRIBUSI_TETAP), sama di mana pun dan kapan pun — beda
  *   mesin dari relative, jadi rendernya terpisah, bukan cuma ganti label.
  */
-export function renderLegend(perVillage, breaks) {
+export function renderLegend(perVillage, breaks, satuan) {
   if ($('legend-title')) $('legend-title').textContent = legendTitle();
 
   const values = Object.values(perVillage).filter((v) => v > 0);
-  const kosong = `<div class="flex items-center gap-2 text-[11px] text-slate-500">` +
-    `<span class="w-3.5 h-3.5 rounded shrink-0" style="background:${COLOR_EMPTY}"></span>` +
-    `<span class="flex-1">No Sales</span>` +
-    `<span class="mono text-slate-400">${esc(formatNumber(S.villages.length - values.length))}</span></div>`;
+  // Baris "No Sales" beserta hitungannya DIBUANG 2026-09-20 (permintaan tim). Kelurahan
+  // tanpa penjualan tetap terlihat di peta lewat warnanya sendiri (COLOR_EMPTY); yang
+  // hilang cuma satu baris legenda yang selalu jadi angka terbesar di kotak itu dan
+  // menarik perhatian dari lima kelas yang justru mau dibandingkan.
 
   if (S.heatmapMode === 'fixed') {
     const counts = new Array(KONTRIBUSI_LABEL.length).fill(0);
@@ -75,20 +75,27 @@ export function renderLegend(perVillage, breaks) {
       const cls = fixedContributionClass(v);
       if (cls >= 0) counts[Math.min(cls, KONTRIBUSI_LABEL.length - 1)]++;
     });
-    $('legend').innerHTML = kosong +
+    // Hitungan desa per kelompok DIBUANG 2026-09-20 (permintaan tim). `counts` tetap
+    // dihitung karena masih dipakai meredupkan kelompok yang memang kosong — kelompok
+    // kosong yang tampil sepekat kelompok berisi itu menyesatkan.
+    $('legend').innerHTML =
       RAMP.map((color, i) =>
         `<div class="flex items-center gap-2 text-[11px] ${counts[i] ? 'text-slate-600' : 'text-slate-300'}" ` +
         `title="Interval tetap, sama di mana pun dan kapan pun dipakai — tidak bergantung wilayah lain yang sedang tampil.">` +
         `<span class="w-3.5 h-3.5 rounded shrink-0" style="background:${color}"></span>` +
         `<span class="flex-1 font-semibold ${MAP_TIER_TEXT_COLOR[i]}">${esc(MAP_TIER_LABEL[i])}</span>` +
-        `<span class="flex-1">: ${esc(KONTRIBUSI_LABEL[i])}</span>` +
-        `<span class="mono ${counts[i] ? 'text-slate-400' : 'text-slate-300'}">${esc(formatNumber(counts[i]))}</span></div>`).join('') +
+        `<span class="flex-1">: ${esc(KONTRIBUSI_LABEL[i])}</span></div>`).join('') +
       `<p class="text-[10px] text-slate-400 pt-1.5 leading-snug">` +
       `Interval Kontribusi Penjualan TETAP — sama di mana pun dan kapan pun, tidak bergantung wilayah lain yang sedang tampil.</p>`;
     return;
   }
 
-  const ranges = classRanges(values, breaks, (n) => formatPercent(n));
+  // Satuannya ikut menentukan cara angkanya ditulis: unit mutlak jadi bilangan biasa,
+  // kontribusi jadi persen. Dioper dari paintChoropleth(), bukan ditebak dari
+  // S.heatmapMode — peta dan legenda harus membaca keputusan yang SAMA.
+  const perUnit = satuan === 'unit';
+  const ranges = classRanges(values, breaks,
+    (n) => (perUnit ? formatNumber(Math.round(n)) : formatPercent(n)));
   const used = ranges.filter((r) => !r.empty).length;
   // Batas persentil tetap (0-20% / 21-40% / ... / 81-100%) walau kelas yang TERPAKAI
   // bisa kurang dari lima kalau sebarannya sempit — lihat catatan "used < RAMP.length"
@@ -97,7 +104,7 @@ export function renderLegend(perVillage, breaks) {
     '41–60% dari titik yang ada', '61–80% dari titik yang ada',
     '81–100% dari titik yang ada'];
 
-  $('legend').innerHTML = kosong +
+  $('legend').innerHTML =
     RAMP.map((color, i) =>
       `<div class="flex items-center gap-2 text-[11px] ${ranges[i].empty ? 'text-slate-300' : 'text-slate-600'}" ` +
       `title="${esc(TIER_INFO[i])}">` +
@@ -108,7 +115,12 @@ export function renderLegend(perVillage, breaks) {
     `<p class="text-[10px] text-slate-400 pt-1.5 leading-snug">` +
     (used < RAMP.length && values.length
       ? `Sebarannya terlalu sempit untuk lima kelas — ${used} kelas terpakai. ` : '') +
-    `Kelas dihitung dari sebaran Kontribusi Penjualan yang sedang tampil, jadi ikut berubah waktu filternya diganti.</p>`;
+    (perUnit
+      ? 'Kelas dihitung dari JUMLAH UNIT per kelurahan pada dealer/pos yang sedang ' +
+        'disaring — bukan kontribusi terhadap kota, yang di lingkup sesempit itu ' +
+        'membuat kelurahan bervolume kecil justru tampil paling gelap.'
+      : 'Kelas dihitung dari sebaran Kontribusi Penjualan yang sedang tampil, jadi ikut berubah waktu filternya diganti.') +
+    '</p>';
 }
 
 /** Legenda dealer. Nama SELALU menempel di sebelah warnanya. */

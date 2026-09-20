@@ -27,7 +27,11 @@ test('kalimatnya sesuai contoh spesifikasi', async () => {
   const { bagian, kesimpulan } = kalimatAlasan(CONTOH);
   assert.match(bagian[0], /Servis berjarak 22,0 km dari KTP \(KPI Jarak: 50,0 km\) → berdekatan\./);
   assert.match(bagian[1], /Kirim tidak ditemukan\./);
-  assert.strictEqual(kesimpulan, 'Warlok ke Bengkel dekat (bobot 0,80)');
+  // Nama golongan diseragamkan 2026-09-20: 'short' disamakan dengan 'label', dan
+  // 'Warlok ke Bengkel dekat' dipersingkat jadi 'Warlok bengkel dekat' (permintaan
+  // tim). Yang diperbarui EKSPEKTASINYA, bukan tesnya dilonggarkan — kalimat alasan
+  // memang harus menyebut nama golongan yang sama dengan yang tampil di layar.
+  assert.strictEqual(kesimpulan, 'Warlok bengkel dekat (bobot 0,80)');
 });
 
 test('ambang yang dipakai adalah yang TERSIMPAN di baris itu', async () => {

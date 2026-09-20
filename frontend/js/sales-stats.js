@@ -86,6 +86,32 @@ export function contributionsForRows(rows, villageByCode) {
   return result;
 }
 
+/**
+ * Unit MUTLAK per kelurahan dari baris yang sedang tampil.
+ *
+ * Pasangan contributionsForRows() di atas, dan dipakai waktu penyebut "% terhadap
+ * kota" justru merusak artinya: saat filter DEALER aktif, satu dealer yang punya 1
+ * unit di kota yang totalnya (bagi dealer itu) juga 1 unit menghasilkan kontribusi
+ * 100% — jadi kelurahan dengan penjualan paling sedikit tampil paling gelap. Persis
+ * yang dilaporkan tim 2026-09-20.
+ *
+ * Saat tidak ada filter dealer/pos, kontribusi % tetap yang dipakai: penyebutnya
+ * berbeda antar kota, dan itu memang disengaja sejak 2026-08-30 supaya kelurahan
+ * kecil yang dominan di kotanya sendiri tidak tenggelam di bawah kelurahan bervolume
+ * besar dari kota lain.
+ *
+ * @return {Map<string, number>} kode kelurahan -> jumlah unit. Kelurahan yang tidak
+ *   dikenal di villageByCode TIDAK ikut — sama seperti groupByCity().
+ */
+export function unitsForRows(rows, villageByCode) {
+  const hasil = new Map();
+  (rows || []).forEach((row) => {
+    if (!villageByCode[row.village]) return;
+    hasil.set(row.village, (hasil.get(row.village) || 0) + row.units);
+  });
+  return hasil;
+}
+
 /** Label posisi relatif untuk satu nilai, atau `null` kalau tidak ada penjualan. */
 export function relativePosition(value, breaks) {
   const kelas = classOf(value, breaks);

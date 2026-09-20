@@ -478,10 +478,22 @@
          ujung bilah, jadi menyisipkan di depannya akan menggeser tata letak SEMUA
          halaman begitu blok ini disembunyikan. switchTab() (tables.js) yang
          menyembunyikannya di luar halaman Fusion. -->
+    <!-- Kendali yang menumpang di bilah filter. Sejak 2026-09-20 isinya tiga, dan
+         masing-masing punya jangkauan halaman sendiri (diatur switchTab(), tables.js):
+           - Telusur Nomor Mesin : halaman Peta DAN Confidence Fusion
+           - LIVE                : halaman Peta DAN Confidence Fusion
+           - Cakupan Sumber      : Confidence Fusion saja
+         Telusur pindah ke sini dari kepala halaman Fusion (permintaan tim) dan
+         TOMBOLNYA dibuang — Enter sudah cukup, dan tombol di bilah yang sudah padat
+         cuma memakan lebar yang dibutuhkan pil filter. -->
     <div id="fx-kendali" class="hidden shrink-0 flex items-center gap-1">
+      <input id="telusur-mesin" type="text" placeholder="Telusur Nomor Mesin…"
+        onkeydown="if(event.key==='Enter') bukaTelusurMesin()"
+        title="Ketik nomor mesin lalu tekan Enter"
+        class="px-2 py-1 rounded-lg border border-slate-200 text-[11px] mono w-40">
       <button id="fx-live" onclick="toggleLiveFusion()" title="Putar filter Kota otomatis untuk layar wallboard"
               class="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph-fill ph-play"></i>LIVE</button>
-      <button onclick="toggleCakupanPanel()" class="px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50">Cakupan Sumber</button>
+      <button id="fx-cakupan-btn" onclick="toggleCakupanPanel()" class="px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50">Cakupan Sumber</button>
     </div>
     <button onclick="resetFilters()" title="Kembali ke seluruh penjualan" class="shrink-0 text-slate-400 hover:text-slate-700 px-2"><i class="ph ph-arrow-counter-clockwise text-lg"></i></button>
   </div>
@@ -651,7 +663,7 @@
            2026-08-31 pagi. Sejak sore itu juga, ring pindah ke DEALER (kecamatan) dan
            pos mendapat coverage baru (kecamatan, 1-8) — dua grup terpisah, aktif
            bergantian menurut scope (lihat syncGroupControls() di map.js). -->
-      <details class="mt-2 pt-2 border-t border-slate-200" open>
+      <details id="grup-ring-dealer" class="mt-2 pt-2 border-t border-slate-200" open>
         <summary class="text-[10px] font-bold text-slate-400 uppercase mb-1 cursor-pointer select-none">Tampilan Ring Dealer</summary>
         <div class="flex bg-slate-100 rounded-lg p-0.5 text-[11px] font-bold mt-1" id="pilihan-ring-dealer">
           <button onclick="setRingViewDealer('lokasi')" id="rv-lokasi" class="flex-1 px-2 py-1.5 rounded-md text-slate-500">Lokasi</button>
@@ -662,7 +674,7 @@
         <p class="text-[10px] text-slate-400 mt-1 leading-snug">Menyorot kecamatan ring milik dealer yang sedang dipilih. Aktif hanya saat scope Dealer dipilih.</p>
       </details>
 
-      <details class="mt-2 pt-2 border-t border-slate-200" open>
+      <details id="grup-coverage-pos" class="mt-2 pt-2 border-t border-slate-200" open>
         <summary class="text-[10px] font-bold text-slate-400 uppercase mb-1 cursor-pointer select-none">Tampilan Coverage POS</summary>
         <div class="flex flex-wrap gap-0.5 bg-slate-100 rounded-lg p-0.5 text-[10px] font-bold mt-1" id="pilihan-coverage-pos">
           <button onclick="setCoverageViewPos('lokasi')" id="cv-lokasi" class="px-2 py-1.5 rounded-md text-slate-500">Lokasi</button>
@@ -1008,26 +1020,6 @@
 </section>
 
 <section id="tab-fusion" class="hidden p-3 md:p-4 h-full flex flex-col gap-2 relative overflow-hidden">
-  <div class="flex items-baseline gap-2">
-    <span class="text-[9px] font-bold uppercase tracking-[0.2em] text-blue-500">ATLAS</span>
-    <span class="text-sm font-extrabold text-slate-800">Confidence Fusion Dashboard</span>
-    <span class="text-[10px] text-slate-400">Controlling Quality of Data</span>
-    <!-- Pintu masuk telusur. Di markup STATIS, bukan di HTML yang digambar ulang:
-         kotak yang ikut dibangun ulang kehilangan fokus dan posisi kursor tiap
-         ketikan. Klik-dari-peta belum mungkin — lapisan titik sengaja tidak membawa
-         nomor mesin (lihat fusion-points.js), justru supaya tidak ada PII di sana. -->
-    <div class="ml-auto flex items-center gap-1">
-      <input id="telusur-mesin" type="text" placeholder="Telusur Nomor Mesin…"
-        onkeydown="if(event.key==='Enter') bukaTelusurMesin()"
-        class="px-2 py-1 rounded-lg border border-slate-200 text-[11px] mono w-44">
-      <!-- LIVE dan "Cakupan Sumber" TIDAK lagi di sini. Sejak 2026-09-17 keduanya
-           menumpang di bilah filter global, di sebelah ikon Proporsi Penjualan
-           (permintaan tim) — lihat #fx-kendali di dekat #filter-bar. Yang tertinggal
-           di kepala halaman cuma telusur, karena ia milik halaman ini seutuhnya. -->
-      <button onclick="bukaTelusurMesin()" class="px-2 py-1 rounded-lg text-[11px] font-bold text-white" style="background:var(--astra-navy)">Telusur</button>
-    </div>
-  </div>
-
   <!-- Catatan saringan yang diabaikan. DI LUAR grid: ia muncul-hilang mengikuti
        filter, dan sel grid yang kadang kosong kadang terisi akan menggeser seluruh
        tata letak 12x12 di bawahnya. -->

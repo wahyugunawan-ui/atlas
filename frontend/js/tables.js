@@ -1568,8 +1568,16 @@ export function switchTab(name) {
   // cuma berarti di halaman Confidence Fusion. WAJIB disembunyikan di halaman lain:
   // tombol LIVE yang muncul di Master Pos Dealer akan memutar filter Kota tiap 3,5
   // detik di halaman yang bahkan tidak memegang petanya.
+  // Telusur Nomor Mesin dan LIVE berlaku di DUA halaman yang memegang peta —
+  // Sales Analytics dan Confidence Fusion (permintaan tim 2026-09-20: LIVE ditambahkan
+  // ke Sales Analytics, telusur dipindah ke bilah filter). "Cakupan Sumber" TIDAK ikut:
+  // panelnya menggambar angka penyatuan tiga sumber yang cuma ada artinya di Fusion.
   const kendaliFusion = $('fx-kendali');
-  if (kendaliFusion) kendaliFusion.classList.toggle('hidden', name !== 'fusion');
+  if (kendaliFusion) {
+    kendaliFusion.classList.toggle('hidden', name !== 'fusion' && name !== 'peta');
+  }
+  const tombolCakupan = $('fx-cakupan-btn');
+  if (tombolCakupan) tombolCakupan.classList.toggle('hidden', name !== 'fusion');
 
   if (name === 'peta' && S.map) setTimeout(() => S.map.resize(), 60);
   if (name === 'pos') renderOutletTable();

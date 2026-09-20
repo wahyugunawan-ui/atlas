@@ -27,10 +27,10 @@ const { distanceMeters } = require('./geo');
  * deploy ulang.
  */
 const SEGMENTS = {
-  loyal_verified: { label: 'Warlok Loyal Verified', short: 'Warlok', weight: 1.00 },
-  service_near: { label: 'Warlok ke Bengkel dekat', short: 'Setia Bengkel', weight: 0.80 },
-  delivery_near: { label: 'Warlok kirim dekat', short: 'Pembeli Terverifikasi', weight: 0.75 },
-  registered_only: { label: 'Warga asli', short: 'Warga Terdaftar', weight: 0.55 },
+  loyal_verified: { label: 'Warlok Loyal Verified', short: 'Warlok Loyal Verified', weight: 1.00 },
+  service_near: { label: 'Warlok bengkel dekat', short: 'Warlok bengkel dekat', weight: 0.80 },
+  delivery_near: { label: 'Warlok kirim dekat', short: 'Warlok kirim dekat', weight: 0.75 },
+  registered_only: { label: 'Warga asli', short: 'Warga asli', weight: 0.55 },
   nomad: { label: 'Migran / Nomaden', short: 'Migran / Nomaden', weight: 0.20 },
   unverified: { label: 'Tak Terverifikasi', short: 'Tak Terverifikasi', weight: 0.05 },
 };
