@@ -215,7 +215,7 @@ function matriks(data, sorotKota) {
     const disorot = Boolean(sorotKota && r.cityCode && sorotKota.has(r.cityCode));
     // fx-sorot dipakai gambarMatriks() sesudah ini untuk auto-scroll ke baris pertama
     // yang cocok — bukan sekadar nama kelas gaya.
-    const kelasBaris = 'border-b border-slate-50' + (disorot ? ' fx-sorot bg-amber-50' : '');
+    const kelasBaris = 'border-b border-slate-50' + (disorot ? ' fx-sorot' : '');
     // Barisnya jadi kendali silang: klik = saring seluruh halaman ke kota itu.
     // Baris tanpa kode kota tidak bisa diklik sama sekali — tombol yang menerima klik
     // lalu tidak melakukan apa-apa cuma melatih orang berhenti mempercayainya.
@@ -706,11 +706,13 @@ export function cakupanSumber(data) {
   }
 
   const sumber = (data && data.sumber) || {};
+  // Dipadatkan 2026-09-20: bar 7px->5px dan jarak antar bar dihapus. Tiap baris
+  // memuat tiga bar, jadi tinggi yang dihemat di sini berlipat tiga.
   const bar = (kunci, nilai, pembagi) => {
     const p = persenSumber(nilai, pembagi);
-    return `<div class="flex items-center gap-1.5 mt-0.5">` +
+    return `<div class="flex items-center gap-1.5">` +
       `<span class="text-[9px] text-slate-400 w-12 shrink-0">${esc(SUMBER[kunci].label)}</span>` +
-      `<div class="h-[7px] rounded-sm bg-slate-100 overflow-hidden flex-1">` +
+      `<div class="h-[5px] rounded-sm bg-slate-100 overflow-hidden flex-1">` +
         `<div class="h-full rounded-sm" style="width:${p || 0}%;background:${
           SUMBER[kunci].color}"></div></div>` +
       `<span class="text-[9px] mono text-slate-500 w-14 text-right">${
@@ -756,7 +758,10 @@ export function cakupanSumber(data) {
       `dengan “${esc(cariCakupanTeks)}”.</p>`;
   }
 
-  const daftar = cocok.slice(0, 25).map((r) => {
+  // Batas 25 DIBUANG (permintaan tim: tampilkan semuanya). Dengan 49 kota panelnya
+  // memang masih bisa digulir, tapi yang tidak tampil sekarang cuma yang ada di bawah
+  // lipatan — bukan yang diam-diam dipotong dan tidak pernah bisa dilihat.
+  const daftar = cocok.map((r) => {
     const n = Number(r.total) || 0;
     // city_code '' = kota yang tidak diketahui (source_overlap memakainya sebagai
     // sentinel, kolomnya NOT NULL). Dikatakan apa adanya, bukan dibuang diam-diam.
@@ -764,17 +769,18 @@ export function cakupanSumber(data) {
     // KTP memakai totalnya sendiri: tiap baris di sini menurut definisi punya KTP,
     // jadi nilainya = pembaginya, dan barnya selalu penuh.
     const nilai = { ktp: n, servis: r.servis, kirim: r.kirim };
-    return `<div class="py-1 border-b border-slate-50 last:border-0">` +
+    return `<div class="py-0.5 border-b border-slate-50 last:border-0">` +
       `<div class="flex items-center gap-2">` +
         `<span class="text-[11px] text-slate-700 truncate flex-1">${esc(nama)}</span>` +
         `<span class="text-[11px] mono text-slate-500">${esc(formatNumber(n))}</span>` +
       `</div>` + aktif.map((k) => bar(k, nilai[k], n)).join('') + `</div>`;
   }).join('');
 
-  const sisa = cocok.length > 25
-    ? `<p class="text-[10px] text-slate-400 mt-1">Menampilkan 25 teratas dari ${
-      esc(String(cocok.length))}.</p>`
-    : '';
+  // Dulu di sini ada "Menampilkan 25 teratas dari N". Batasnya dibuang 2026-09-20
+  // (permintaan tim), jadi pesannya ikut hilang — keterangan pemotongan yang muncul
+  // di daftar yang TIDAK dipotong lebih menyesatkan daripada tidak ada keterangan
+  // sama sekali. Jumlah barisnya sendiri tetap disebut di kepala panel.
+  const sisa = '';
 
   // Kirim kosong sama sekali itu keadaan yang BENAR sekarang (belum ada produsen ping),
   // bukan cacat gambar. Deretan bar kosong di tiap baris akan terbaca sebagai "dealer
@@ -857,7 +863,7 @@ function daftarPeringkat(rows, kunciNama, opsi) {
     const disorot = sorotKota ? Boolean(r.cityCode && sorotKota.has(r.cityCode))
       : sorotDealer ? r.dealerFilterCode === sorotDealer : false;
     const KELAS_BARIS = 'flex items-center gap-2 py-1 border-b border-slate-50 last:border-0' +
-      (disorot ? ' fx-sorot bg-amber-50' : '');
+      (disorot ? ' fx-sorot' : '');
     const klik = (jenisKlik && kodeKlik)
       ? ` onclick="filterDariFusi('${esc(jenisKlik)}','${esc(kodeKlik)}')" ` +
         `title="Saring seluruh halaman ke ${jenisKlik === 'dealer' ? 'dealer' : 'kota'} ini" ` +
@@ -1227,23 +1233,28 @@ export async function renderFusion() {
   isiSlot('fx-kpi-pelanggan',
     '<p class="text-xs text-slate-400 p-2">Memuat angka golongan…</p>');
 
-  // PERINGKAT (kota + dealer) diminta dengan PERIODE SAJA. Permintaan tim
-  // 2026-09-18: dulu memilih Kares/Kota/Dealer membuat blok-blok ini cuma menyisakan
-  // SATU baris, kehilangan seluruh konteks peringkatnya. Sekarang server selalu
-  // mengirim baris LENGKAP dan yang sedang disaring DISOROT (gambarDealer(),
-  // kotaSorotSet()) — melihat satu dealer sekaligus posisinya dibanding yang lain.
+  // Peringkat DEALER selalu diminta lengkap (periode saja): menyaringnya
+  // menghilangkan konteks "posisi dibanding dealer lain", yang justru gunanya.
   const fSemua = { periode: f.periode };
 
-  // MATRIKS DIKECUALIKAN dari aturan di atas (permintaan tim 2026-09-18 sore, setelah
-  // melihat hasilnya): ia IKUT saringan kota/karesidenan. Alasannya beda dengan
-  // Peringkat — Matriks bukan daftar berperingkat, jadi tidak ada "posisi dibanding
-  // yang lain" yang hilang kalau barisnya dipersempit. Yang tersisa cuma 49 baris
-  // yang harus digulir untuk mencari 6 kota Kedu yang sedang dilihat.
+  // MATRIKS dan PERINGKAT KOTA ikut saringan kota/karesidenan (permintaan tim
+  // 2026-09-20: "hanya menampilkan kota sesuai isian filter"). Keduanya daftar PER
+  // KOTA, jadi menyisakan kota yang sedang dilihat memang yang diminta — bukan 49
+  // baris yang harus digulir untuk mencari 14 kota Kedu.
   //
-  // Dealer SENGAJA tidak ikut: matriksnya per KOTA, dan menyaring dealer akan
-  // mengubah arti angkanya (jadi "kota ini menurut dealer itu") tanpa satu pun
-  // keterangan di layar. Judul bloknya sudah menyebut jumlah kotanya.
-  const fMatriks = { periode: f.periode, kota: f.kota, kotaBanyak: f.kotaBanyak };
+  // KECUALI SAAT LIVE. Mode Live memutar filter Kota tiap 3,5 detik untuk wallboard;
+  // kalau tabelnya ikut menyaring, isinya berkedip tinggal satu baris tiap putaran dan
+  // tidak ada yang bisa dibaca. Saat Live, keduanya kembali menampilkan SEMUA kota dan
+  // yang sedang diputar cuma DISOROT — itu sebabnya sorotannya dibuat mencolok
+  // (.fx-sorot di index.html), karena di mode inilah ia jadi satu-satunya penunjuk.
+  //
+  // Dealer sengaja TIDAK ikut menyaring matriks: matriksnya per KOTA, dan menyaring
+  // dealer mengubah arti angkanya jadi "kota ini menurut dealer itu" tanpa keterangan
+  // apa pun di layar.
+  const fPerKota = S.liveFusion
+    ? fSemua
+    : { periode: f.periode, kota: f.kota, kotaBanyak: f.kotaBanyak };
+
 
   // Pos TIDAK dipakai kelima panel halaman ini (permintaan tim 2026-09-18) — satu
   // pos cuma melayani sebagian kecil kelurahan satu kota, dan Kota/Dealer/Kares
@@ -1261,7 +1272,7 @@ export async function renderFusion() {
   let cakupan;
   try {
     [hasil, peringkat, matrix, irisan, cakupan] = await Promise.all([
-      fetchSegmentation(fPanel), fetchPeringkat(fSemua), fetchMatriks(fMatriks),
+      fetchSegmentation(fPanel), fetchPeringkat(fPerKota), fetchMatriks(fPerKota),
       fetchIrisan(fPanel), fetchCakupanSumber(fPanel),
     ]);
   } catch (error) {

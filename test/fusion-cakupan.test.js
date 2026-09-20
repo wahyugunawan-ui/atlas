@@ -121,7 +121,12 @@ test('baris tanpa nama tetap bisa dicari lewat keterangannya', async () => {
   await resetCentang(m);
 });
 
-test('daftar dipotong 25, dan pemotongannya dikatakan', async () => {
+test('daftar TIDAK dipotong, dan tidak ada klaim pemotongan', async () => {
+  // Batas 25 dibuang 2026-09-20 (permintaan tim: "menampilkan semuanya dengan
+  // ramping"). Yang dijaga sekarang kebalikannya, dan dua-duanya perlu: baris
+  // terakhir benar-benar ikut tergambar, DAN tidak ada kalimat "menampilkan N
+  // teratas" yang tertinggal — keterangan pemotongan pada daftar yang tidak dipotong
+  // lebih menyesatkan daripada tidak ada keterangan sama sekali.
   const m = await import(MODUL);
   await resetCentang(m);
   const banyak = {
@@ -133,10 +138,11 @@ test('daftar dipotong 25, dan pemotongannya dikatakan', async () => {
     })),
   };
   const html = m.cakupanSumber(banyak);
-  assert.match(html, /Menampilkan 25 teratas dari 30/,
-    'daftar yang dipotong diam-diam membuat pembaca mengira itu seluruhnya');
   assert.ok(html.includes('Kota 0'), 'yang teratas harus ikut');
-  assert.ok(!html.includes('Kota 29'), 'yang ke-30 tidak boleh ikut');
+  assert.ok(html.includes('Kota 29'),
+    'baris ke-30 hilang — daftarnya masih dipotong diam-diam');
+  assert.ok(!/teratas dari/.test(html),
+    'masih ada klaim pemotongan padahal tidak ada yang dipotong');
 });
 
 test('tanpa data sama sekali bukan error', async () => {

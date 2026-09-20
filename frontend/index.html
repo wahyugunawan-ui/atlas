@@ -122,6 +122,27 @@
   .fx-mode:hover { background: #e2e8f0; }
   .fx-mode-aktif { background: var(--astra-navy); color: #fff; }
   .fx-mode-aktif:hover { background: var(--astra-navy); }
+
+  /* Baris yang sedang disorot filter (Matriks, Peringkat Kota, Peringkat Dealer).
+     Sampai 2026-09-20 sorotannya cuma `bg-amber-50` — latar krem samar yang hilang
+     di antara 49 baris lain, padahal seluruh gunanya adalah supaya baris itu KETEMU
+     tanpa dicari. Sekarang: latar lebih kuat, garis kiri tebal sebagai penanda yang
+     tetap terlihat walau barisnya terpotong scroll, outline penuh, dan satu denyut
+     singkat sekali jalan saat barisnya baru muncul.
+
+     Denyutnya SEKALI, bukan berulang: animasi yang terus bergerak di wallboard yang
+     ditonton berjam-jam berubah jadi gangguan, bukan penunjuk. */
+  .fx-sorot { position: relative; background: #fde68a !important;
+    box-shadow: inset 3px 0 0 0 #d97706, 0 0 0 1.5px #f59e0b;
+    border-radius: 4px; animation: fxSorotDenyut .9s ease-out 1; }
+  .fx-sorot td, .fx-sorot span { font-weight: 700; }
+  @keyframes fxSorotDenyut {
+    0%   { box-shadow: inset 3px 0 0 0 #d97706, 0 0 0 1.5px #f59e0b, 0 0 0 0 rgba(217,119,6,.55); }
+    100% { box-shadow: inset 3px 0 0 0 #d97706, 0 0 0 1.5px #f59e0b, 0 0 0 10px rgba(217,119,6,0); }
+  }
+  /* Orang yang mematikan animasi di sistemnya tidak ikut didenyutkan. Sorotannya
+     tetap penuh — yang hilang cuma gerakannya. */
+  @media (prefers-reduced-motion: reduce) { .fx-sorot { animation: none; } }
   .step-dot { width: 26px; height: 26px; border-radius: 999px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; }
   .step-dot.done { background: #10b981; color: #fff; }
   .step-dot.now { background: var(--astra-navy); color: #fff; }
@@ -1124,7 +1145,12 @@
   <!-- Cakupan Sumber: tidak lagi memakan satu sel grid permanen. Dimunculkan lewat
        tombol di kepala halaman, karena ia alat pemeriksa sesekali, bukan angka yang
        perlu dilihat terus-menerus. -->
-  <div id="fx-cakupan-panel" class="hidden absolute top-12 right-4 w-80 max-w-[90%] max-h-[75%] map-panel p-3 z-20 overflow-y-auto">
+  <!-- Dirampingkan 2026-09-20 (permintaan tim: "fit, menampilkan semuanya dengan
+       ramping"). Tingginya naik 75%->88%, lebarnya 80->96 supaya nama kota/dealer
+       tidak terpotong, dan padding-nya turun. Barisnya sendiri dipadatkan di
+       fusion.js. Panel ini melayang di atas peta, jadi menghabiskan seluruh tinggi
+       layar bukan pilihan — yang bisa dilakukan: memuat sebanyak mungkin per layar. -->
+  <div id="fx-cakupan-panel" class="hidden absolute top-12 right-4 w-96 max-w-[92%] max-h-[88%] map-panel p-2.5 z-20 overflow-y-auto">
     <div class="flex items-baseline gap-2 mb-1">
       <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Cakupan sumber</span>
       <span id="fx-cakupan-per" class="text-[10px] text-slate-400"></span>
