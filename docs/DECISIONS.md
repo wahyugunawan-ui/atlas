@@ -4337,3 +4337,77 @@ Dealer sepenuhnya; itu yang menutup sumber pos ganda dari tebakan `resolveGroups
   memakai `COLUMN` darinya.
 - CLI `npm run import` masih memakai template lama; dicatat sebagai utang terbuka di
   ROADMAP, bukan dibiarkan tanpa disebut.
+
+## [2026-09-20, putaran kedua] Satu titik peta = satu orang, tanpa menaruh PII di muatan peta
+
+**MENGGANTIKAN** dua entri sebelumnya soal hover titik (2026-09-18 "agregat saja" dan
+2026-09-18 sore "klik/3 detik"). Keduanya tidak dihapus — masing-masing mencatat
+alasan yang saat itu benar, dan yang berubah bentuk pertanyaannya.
+
+**Konteks:** Tim menunjuk kesalahan konsep. Hover titik menampilkan ringkasan
+KELURAHAN ("4 KTP, 0 Servis, 0 Pengiriman"), padahal tiap titik mewakili satu orang.
+Kalau satu desa punya tiga titik, ketiganya harus menampilkan tiga orang berbeda.
+
+**Ketegangannya:** muatan peta melintasi seluruh wilayah cakupan sekaligus. Menaruh
+nomor mesin di properti fitur berarti seluruh basis data konsumen ada di browser
+begitu halaman dibuka — persis vektor penyedotan yang dicegah arsitektur ini.
+
+**Keputusan:** tiap fitur titik membawa NOMOR URUT-nya di dalam kantong
+(`idx`, 0..n-1) dan tidak lebih. Identitas diminta terpisah lewat
+`/v1/kelurahan/:village/pelanggan` yang sudah ber-`piiLimiter` + `logCustomerAccess`,
+satu kantong per permintaan, hasilnya di-cache per (kelurahan, dealer, periode).
+
+**Dua tingkat, dan jedanya bukan hiasan:** tooltip biru (ringkasan kelurahan) menyala
+seketika karena isinya sudah ada di browser; kartu putih (orang di titik itu) menyusul
+sesudah 350 ms karena ia memanggil rute PII. Tanpa jeda itu, menyeret kursor melintasi
+30 kelurahan menembakkan 30 permintaan dan menghabiskan pembatas 30/menit dalam satu
+gerakan — fiturnya mematikan dirinya sendiri. Cache membuat titik ke-2 sampai ke-40 di
+desa yang sama muncul tanpa permintaan baru.
+
+**Aturan yang paling penting:** `orangDiTitik()` MENOLAK MENEBAK. Lapisan Servis hanya
+menggambar orang yang punya servis, jadi daftarnya disaring dulu menurut jenis
+lapisan; dan kalau jumlahnya tidak cocok dengan `idx`, fungsinya mengembalikan null.
+Titik lahir dari `source_overlap` sedangkan daftarnya dari `customer_fusion` — walau
+keduanya ditulis perhitungan yang sama, menampilkan nama orang yang SALAH jauh lebih
+buruk daripada tidak menampilkan nama. Saat itu terjadi, tooltip kelurahan yang biru
+dibiarkan: keadaan antara yang jujur, bukan kartu kosong yang terlihat rusak.
+
+**Alternatif yang ditolak:** (a) Menaruh `engine_no` di properti fitur — ditolak,
+alasan di atas. (b) Hover tanpa jeda — ditolak, pembatas laju. (c) Menjepit `idx` ke
+baris terakhir saat di luar jangkauan — ditolak, itu persis cara menampilkan orang
+yang salah tanpa satu pun gejala.
+
+**Konsekuensi:** `kunciBucket()` sekarang membedakan TIAP TITIK (idx ikut), bukan cuma
+kantong — dulu menggeser satu titik ke tetangganya menampilkan orang yang lama. Kartu
+putih (`.float-tooltip.kartu-orang`) sengaja beda warna dari tooltip biru: warnanya
+yang membedakan "ini satu orang" dari "ini sekian orang". Dijaga uji mutasi lima
+kerusakan di `test/map-titik-fusi-tooltip.test.js`.
+
+## [2026-09-20, putaran kedua] Heatmap relatif memakai unit mutlak saat filter dealer/pos
+
+**Konteks:** Tim melaporkan dan menganalisis sendiri: pada mode "Per Peringkat
+Relatif", saat filter DEALER aktif, kelurahan dengan penjualan sangat sedikit justru
+tampil paling gelap. Saat filter KOTA saja hasilnya benar.
+
+**Sebabnya:** `contributionsForRows()` menghitung % terhadap total KOTA **dari baris
+yang sudah tersaring**. Satu dealer dengan 1 unit di kota yang — bagi dealer itu —
+juga cuma 1 unit menghasilkan kontribusi 100%. Filter kota tidak kena karena
+penyebutnya sama untuk semua kelurahan yang tampil.
+
+**Keputusan:** saat mode relatif DAN ada filter dealer/pos, peringkatnya dihitung dari
+unit MUTLAK per kelurahan (`unitsForRows()`, pembantu murni baru di sales-stats.js).
+Tanpa filter dealer/pos, kontribusi % TETAP dipakai.
+
+**Alasan tidak menggantinya di semua keadaan:** kontribusi % dipilih sengaja pada
+2026-08-30 supaya kelurahan kecil yang dominan di kotanya sendiri tidak tenggelam di
+bawah kelurahan bervolume besar dari kota lain. Itu masih benar saat membandingkan
+lintas kota. Yang merusaknya cuma penyebut yang ikut menyempit bersama filternya.
+
+**Alternatif yang ditolak:** Mengganti seluruh mode relatif ke unit mutlak — ditolak,
+membatalkan keputusan 2026-08-30 tanpa alasan untuk keadaan yang memang sudah benar.
+Mode 'fixed' juga tidak ikut: intervalnya memang didefinisikan atas kontribusi %, dan
+"sama di mana pun" justru satu-satunya sifat yang membuatnya berguna.
+
+**Konsekuensi:** `paintChoropleth()` mengembalikan `satuan`, dan legendanya MENYEBUT
+satuan itu — tanpa itu angka "12" berarti "12% kontribusi" di satu keadaan dan "12
+unit" di keadaan lain, di kotak yang bentuknya persis sama.

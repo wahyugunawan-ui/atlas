@@ -211,6 +211,27 @@ cuma perluasan ke Sulawesi ke timur.
     filter sudah dipakai bersama sejak 2026-09-17. Namanya saja yang diganti.
   - Pengiriman belum masuk checklist Periode Tersimpan — sengaja, sampai ada ping
     pertama (tanpa itu setiap bulan terbaca "3 dari 4").
+- **Utang dari sesi 2026-09-20 putaran kedua — DUA dari 18 revisi belum dikerjakan:**
+  - **Pop-up klik angka di sel "Matriks Kota x Golongan"** belum dibuat. Butuh rute
+    PII baru berlingkup KOTA (`/v1/kota/:city/golongan/:segment/pelanggan`), dan itu
+    lingkup yang lebih luas dari aturan "satu kelurahan per permintaan" yang selama
+    ini menjaga basis data konsumen. Tim sudah memilih bentuknya: berhalaman 100 +
+    kotak cari, jumlah sebenarnya selalu disebut. Sengaja tidak dikerjakan
+    setengah-setengah di ujung sesi — jalur PII yang separuh jadi lebih buruk
+    daripada belum ada.
+  - **Sisa jalur penjualan lama belum dibongkar**: `runImport()`,
+    `writeCustomers()`, `DISTRICT_ALIASES` di importer.js, `scripts/import-cli.js`,
+    tabel `customers` yang sudah mati, dan lapisan titik penjualan di peta
+    (`jual-titik`, `buildSalePoints()`, toggle "Titik Penjualan"). Keputusan tim
+    sudah jelas: tabel `sales` dan halaman Sales Analytics TETAP. Bagian terberatnya
+    memindahkan `test/import.test.js` (1.021 baris, 17 pemanggilan `runImport`) ke
+    jalur impor KTP — yang dijaganya (idempotensi, rollback, jejak audit, pencocokan
+    alias, perlindungan kurasi manusia) masih berlaku penuh, jadi pemindahannya
+    berharga dan tidak boleh diburu-buru.
+  - **Belum satu pun perubahan empat sesi terakhir dilihat di browser.** Yang paling
+    perlu diperiksa lebih dulu: kartu putih di titik peta dan apakah jeda 350 ms
+    terasa pas, heatmap saat filter dealer, dan halaman Import yang sekarang cuma
+    punya satu jalan masuk.
 - **Utang dari sesi 2026-09-20:**
   - **CLI `npm run import` masih memakai template PENJUALAN yang lama.** Supaya
     benar-benar satu template di mana-mana, ia perlu diarahkan ke
@@ -272,6 +293,53 @@ cuma perluasan ke Sulawesi ke timur.
 ---
 
 ## Selesai
+
+### Satu titik peta = satu orang, heatmap relatif diperbaiki, 16 dari 18 revisi tim (2026-09-20, putaran kedua)
+
+Empat commit, `69445e6` sampai `dfe1be9`, tetap **50/50 berkas tes**.
+
+Tim memberi 18 revisi sekaligus sesudah memakai aplikasinya. Dua yang mengubah
+konsep, bukan sekadar tampilan:
+
+- **Hover titik peta: dari ringkasan kelurahan jadi identitas per orang.** Tiap fitur
+  titik kini membawa NOMOR URUT-nya di dalam kantong (`idx`); identitasnya diminta
+  terpisah lewat rute PII yang sudah berpagar, satu kantong per permintaan, hasilnya
+  di-cache. Muatan peta tetap anonim — tidak satu pun nomor mesin ikut dikirim
+  bersama titik.
+  Dua tingkat: tooltip BIRU (ringkasan kelurahan) seketika dan gratis; kartu PUTIH
+  (orang di titik itu) sesudah 350 ms. Jeda itu yang membuat fiturnya mungkin sama
+  sekali — tanpa itu menyeret kursor melintasi 30 kelurahan menghabiskan `piiLimiter`
+  (30/menit) dalam satu gerakan.
+  `orangDiTitik()` menyaring daftar menurut jenis lapisannya (lapisan Servis hanya
+  menggambar yang punya servis) dan **menolak menebak** saat jumlahnya tidak cocok —
+  menampilkan nama orang yang SALAH jauh lebih buruk daripada tidak menampilkan nama.
+- **Heatmap "Per Peringkat Relatif" diperbaiki saat filter dealer/pos.** Analisis tim
+  benar: `contributionsForRows()` membagi dengan total KOTA dari baris yang sudah
+  tersaring, jadi satu dealer dengan 1 unit di kota yang (baginya) juga 1 unit
+  menghasilkan 100% — kelurahan dengan penjualan paling sedikit tampil paling gelap.
+  Sekarang memakai unit MUTLAK (`unitsForRows()`) saat scope dealer/pos aktif;
+  kontribusi % tetap dipakai tanpa filter itu.
+
+Selebihnya perapian: nama golongan seragam (`short` = `label`), CR satu angka di
+belakang koma lewat `formatPercent(n, 1)` yang sudah ada, kolom jumlah di Peringkat
+Dealer dibuang, judul halaman Fusion dibuang, Telusur pindah ke bilah filter tanpa
+tombol, LIVE ditambahkan di Sales Analytics, legenda "No Sales" + hitungan per
+kelompok dibuang, ring/coverage membuka-menutup sendiri mengikuti scope, Matriks &
+Peringkat Kota ikut filter kota **kecuali saat LIVE** (saat Live menyaring membuat
+tabel berkedip satu baris tiap 3,5 detik — jadi menyorot, dan karena itu sorotannya
+dibuat jauh lebih mencolok), Cakupan Sumber dirampingkan dan batas 25 barisnya
+dibuang, serta tabel Lokasi Servis/Delivery disamakan gayanya dengan halaman Data KTP
+tanpa mengubah kerapatan barisnya.
+
+**Penjaga yang bekerja:** penjaga "nama dipakai tapi tidak di-import" yang dipasang
+2026-09-19 langsung menangkap bug yang dibuat di commit pertama putaran ini —
+`formatPercent` dipakai di fusion.js tanpa di-import. Persis kelas bug yang membuat
+dua halaman kosong berbulan-bulan, kali ini ketahuan dalam hitungan detik.
+
+**Satu asersi tes yang saya tulis ternyata keliru dan diperbaiki, bukan dibiarkan:**
+saya menuntut `idx` berbentuk teks ('1') ditolak. Padahal koersinya tetap menunjuk
+baris yang benar — menolaknya cuma mematikan fitur tanpa menambah keamanan sedikit
+pun. Yang ditolak sekarang nilai yang memang tidak menunjuk baris mana pun.
 
 ### Satu berkas masuk per bulan: penjualan diturunkan dari impor Data KTP (2026-09-20)
 
