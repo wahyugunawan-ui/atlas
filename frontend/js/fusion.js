@@ -1464,19 +1464,34 @@ function navHalaman(hasil, fungsi) {
 }
 
 /** Tabel sederhana: judul kolom + baris. Semua nilai dari Excel, jadi WAJIB esc(). */
+/**
+ * Tabel untuk halaman Lokasi Servis dan Lokasi Delivery.
+ *
+ * GAYANYA DISAMAKAN dengan tabel Data Konsumen · berdasarkan KTP (index.html,
+ * #table-konsumen-body) pada 2026-09-20 — permintaan tim. Dulu dua halaman yang
+ * bersebelahan di menu yang sama terlihat seperti dibuat aplikasi yang berbeda:
+ * kepala tabel yang satu 11px ber-shadow, yang satu lagi 10px tanpa; barisnya yang
+ * satu punya hover, yang satu lagi tidak.
+ *
+ * JARAK ANTAR BARIS SENGAJA TIDAK IKUT diperbesar (px-3 py-2.5 di halaman KTP menjadi
+ * px-3 py-1 di sini) — permintaan tim eksplisit: "jarak antar baris dan isiannya tetap
+ * ada saat ini". Halaman ini memuat 100 baris per halaman dan dipakai untuk memindai
+ * cepat, bukan membaca satu per satu.
+ */
 function tabelSumber(kolom, rows) {
   if (!rows.length) {
     return '<p class="text-xs text-slate-400 py-6 text-center">Tidak ada baris untuk ' +
       'saringan ini.</p>';
   }
   const kepala = kolom.map((k) =>
-    `<th class="px-2 py-1.5 text-left text-[10px] font-bold text-slate-500 uppercase">${
+    `<th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">${
       esc(k.judul)}</th>`).join('');
   const isi = rows.map((r) =>
-    `<tr class="border-b border-slate-50 last:border-0">${
-      kolom.map((k) => `<td class="px-2 py-1 text-[11px] ${k.kelas || 'text-slate-600'}">${
+    `<tr class="hover:bg-slate-50 border-b border-slate-100 last:border-0">${
+      kolom.map((k) => `<td class="px-3 py-1 text-[11px] ${k.kelas || 'text-slate-600'}">${
         k.nilai(r)}</td>`).join('')}</tr>`).join('');
-  return `<div class="overflow-auto"><table class="w-full"><thead class="sticky top-0" ` +
+  return `<div class="overflow-auto rounded-xl border border-slate-200 bg-white">` +
+    `<table class="w-full"><thead class="sticky top-0 z-10 shadow-sm" ` +
     `style="background:#eef1f7"><tr>${kepala}</tr></thead><tbody>${isi}</tbody></table></div>`;
 }
 
