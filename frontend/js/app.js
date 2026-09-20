@@ -52,7 +52,8 @@ import {
 } from './tables.js';
 import {
   bukaDaftarTitik, bukaTelusurMesin, bukaTelusurMesinDari,
-  cariCakupan, filterDariFusi, kembaliKeDaftarTitik, kirimPage, renderDeliveryTable,
+  cariCakupan, cariServis, filterDariFusi, kembaliKeDaftarTitik, kirimPage,
+  renderDeliveryTable,
   renderFusion,
   renderServiceTable, servisPage, setKpiServis, setModeMatriks,
   toggleCakupanPanel, toggleSortDealer, toggleSortMatriks,
@@ -93,7 +94,7 @@ const HANDLERS = {
   // penyatuan tiga sumber (docs/FUSION.md Tahap F)
   renderFusion, renderServiceTable, renderDeliveryTable, servisPage, kirimPage,
   setKpiServis,
-  toggleSumberCakupan, cariCakupan, bukaTelusurMesin, tutupTelusurMesin,
+  toggleSumberCakupan, cariCakupan, cariServis, bukaTelusurMesin, tutupTelusurMesin,
   setModeMatriks, filterDariFusi, toggleCakupanPanel, toggleLiveFusion,
   toggleSortMatriks, toggleSortDealer,
   // Panel titik peta. bukaDaftarTitik dipanggil map.js lewat window (import balik ke

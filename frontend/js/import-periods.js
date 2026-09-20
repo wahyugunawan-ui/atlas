@@ -14,9 +14,21 @@
  * tepat: orang bisa mengimpor ulang sebulan penuh karena mengira datanya hilang.
  */
 
-/** Tiga jenis data yang bisa dipertanggungjawabkan per periode. */
+/**
+ * Jenis data yang bisa dipertanggungjawabkan per periode — yaitu yang benar-benar
+ * DIIMPOR orang sebagai berkas.
+ *
+ * "Penjualan" DIBUANG 2026-09-21 (permintaan tim). Sampai 2026-09-19 dia memang satu
+ * jenis impor tersendiri dengan berkasnya sendiri. Sejak impor penjualan dipensiunkan,
+ * angka penjualan DITURUNKAN dari impor Data KTP — jadi menampilkannya di sini sebagai
+ * jenis data ketiga membuat orang mengira ada satu berkas lagi yang harus diunggah,
+ * padahal tidak ada. Angkanya sendiri tidak hilang; ia tetap tampil di Sales Analytics,
+ * yang memang tempatnya.
+ *
+ * Konsekuensinya penyebut checklist turun dari 3 jadi 2 ("2 dari 2 jenis data
+ * tersimpan"), dan itu memang jumlah berkas yang sebenarnya diminta tiap bulan.
+ */
 export const JENIS_DATA = [
-  { kunci: 'sales', label: 'Penjualan', field: 'units' },
   { kunci: 'ktp', label: 'Data KTP', field: 'ktpRows' },
   { kunci: 'servis', label: 'Data Servis', field: 'servisRows' },
 ];

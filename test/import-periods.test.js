@@ -28,25 +28,30 @@ test('checklist memakai angka sungguhan, bukan sekadar tanda centang', async () 
   const hasil = checklistPeriode({
     period: '2026-08', units: 10019, ktpRows: 19598, servisRows: 186471,
   });
-  assert.deepStrictEqual(hasil.map((x) => x.kunci), ['sales', 'ktp', 'servis']);
-  assert.deepStrictEqual(hasil.map((x) => x.status), ['ada', 'ada', 'ada']);
-  assert.deepStrictEqual(hasil.map((x) => x.jumlah), [10019, 19598, 186471]);
+  // DUA jenis, bukan tiga. "Penjualan" dibuang 2026-09-21: sejak impor penjualan
+  // dipensiunkan, angkanya diturunkan dari impor Data KTP — menampilkannya di
+  // checklist membuat orang mengira ada satu berkas lagi yang harus diunggah.
+  assert.deepStrictEqual(hasil.map((x) => x.kunci), ['ktp', 'servis']);
+  assert.deepStrictEqual(hasil.map((x) => x.status), ['ada', 'ada']);
+  assert.deepStrictEqual(hasil.map((x) => x.jumlah), [19598, 186471]);
+  assert.ok(!hasil.some((x) => x.kunci === 'sales'),
+    'jenis "Penjualan" masih ikut — checklist jadi meminta berkas yang tidak ada');
 });
 
 test('periode yang hanya punya KTP tetap terbaca benar', async () => {
   const { checklistPeriode } = await import(MODUL);
   // Bisa terjadi: Data KTP bulan ini sudah diimpor, penjualannya belum.
   const hasil = checklistPeriode({ period: '2026-09', units: 0, ktpRows: 120, servisRows: 0 });
-  assert.deepStrictEqual(hasil.map((x) => x.status), ['kosong', 'ada', 'kosong']);
+  assert.deepStrictEqual(hasil.map((x) => x.status), ['ada', 'kosong']);
 });
 
 test('database PII tidak ada: jumlahnya null, bukan nol', async () => {
   const { checklistPeriode } = await import(MODUL);
   const hasil = checklistPeriode({ period: '2026-08', units: 10019, ktpRows: null, servisRows: null });
-  assert.deepStrictEqual(hasil.map((x) => x.status), ['ada', 'tak-diketahui', 'tak-diketahui']);
+  assert.deepStrictEqual(hasil.map((x) => x.status), ['tak-diketahui', 'tak-diketahui']);
   // Jumlahnya TIDAK boleh jadi 0 — angka nol di layar adalah pernyataan yang salah.
+  assert.strictEqual(hasil[0].jumlah, null);
   assert.strictEqual(hasil[1].jumlah, null);
-  assert.strictEqual(hasil[2].jumlah, null);
 });
 
 test('hasil impor sumber: selisih dibaca-vs-terpakai dihitung dan ditandai', async () => {
@@ -85,20 +90,20 @@ test('hasil impor sumber: jawaban kosong tidak melempar galat', async () => {
 
 test('ringkasan tidak mencampur "tidak diketahui" ke dalam pecahan', async () => {
   const { checklistPeriode, ringkasChecklist } = await import(MODUL);
-  // 1 ada + 2 tak diketahui. "1 dari 3" akan berbohong: penyebutnya memuat dua hal
+  // 1 ada + 1 tak diketahui. "1 dari 2" akan berbohong: penyebutnya memuat satu hal
   // yang tidak pernah diperiksa.
   const sebagian = ringkasChecklist(checklistPeriode(
-    { units: 10019, ktpRows: null, servisRows: null }));
+    { ktpRows: 19598, servisRows: null }));
   assert.match(sebagian, /1 dari 1 jenis data tersimpan/);
-  assert.match(sebagian, /2 tidak bisa diperiksa/);
+  assert.match(sebagian, /1 tidak bisa diperiksa/);
 
   const lengkap = ringkasChecklist(checklistPeriode(
-    { units: 10019, ktpRows: 19598, servisRows: 0 }));
-  assert.strictEqual(lengkap, '2 dari 3 jenis data tersimpan');
+    { ktpRows: 19598, servisRows: 0 }));
+  assert.strictEqual(lengkap, '1 dari 2 jenis data tersimpan');
 });
 
 test('ringkasan waktu tidak ada satu pun yang bisa diperiksa', async () => {
   const { checklistPeriode, ringkasChecklist } = await import(MODUL);
-  const hasil = checklistPeriode({ units: null, ktpRows: null, servisRows: null });
+  const hasil = checklistPeriode({ ktpRows: null, servisRows: null });
   assert.strictEqual(ringkasChecklist(hasil), 'Tidak bisa diperiksa.');
 });

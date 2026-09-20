@@ -445,7 +445,7 @@
         <button onclick="switchTab('kirim')" id="nav-kirim" class="pilih-opsi"><i class="ph ph-truck mr-2"></i>berdasarkan Lokasi Delivery</button>
       </div>
     </div>
-    <button onclick="switchTab('fusion')" id="nav-fusion" class="nav-btn whitespace-nowrap flex items-center px-3.5 py-1.5 rounded-xl text-sm font-semibold" title="ATLAS Confidence Fusion Dashboard — Controlling Quality of Data"><i class="ph ph-crosshair text-lg mr-2"></i> Confidence Fusion</button>
+    <button onclick="switchTab('fusion')" id="nav-fusion" class="nav-btn whitespace-nowrap flex items-center px-3.5 py-1.5 rounded-xl text-sm font-semibold" title="Controlling Quality of Data"><i class="ph ph-crosshair text-lg mr-2"></i> Confidence Fusion</button>
     <!-- Sejak 2026-08-31 malam: Master Dealer/Master Pos Dealer/Master Kelurahan
          dipindah dari tiga tombol datar ke satu flyout "Master" (permintaan user,
          navbar disederhanakan jadi 4 tombol). Gaya `.pilih`/`.pilih-panel`/`.pilih-opsi`
@@ -1037,6 +1037,13 @@
 <section id="tab-servis" class="hidden p-4 md:p-6 h-full flex flex-col gap-4">
   <div class="flex items-center gap-2 text-sm font-bold text-slate-700">
     <i class="ph-fill ph-wrench"></i> DATA KONSUMEN &middot; LOKASI SERVICE
+    <!-- Pencarian dicocokkan server ke NOMOR MESIN atau NAMA KELURAHAN (lihat
+         serviceVisits() di repository.js) — bukan nama konsumen, karena tabel servis
+         memang tidak menyimpannya. Placeholder-nya menyebut keduanya supaya orang
+         tidak mengetik nama orang lalu mengira datanya hilang. -->
+    <input id="servis-cari" oninput="cariServis()" type="text"
+      placeholder="Cari nomor mesin atau kelurahan..."
+      class="ml-auto px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-normal w-64">
   </div>
   <div id="servis-isi" class="flex-1 min-h-0"></div>
 </section>

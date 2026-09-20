@@ -1382,14 +1382,45 @@ let servisOffset = 0;
 let kirimOffset = 0;
 
 /** Saringan dua subhalaman: periode + kota, mengikuti bilah filter bersama. */
-function saringSumber(offset) {
+/**
+ * Saringan untuk halaman Lokasi Servis dan Lokasi Delivery.
+ *
+ * `kotakCari` menunjuk id kotak pencarian halaman yang bersangkutan — servernya sudah
+ * lama menerima parameter `q` (dicocokkan ke nomor mesin atau nama kelurahan), yang
+ * belum ada cuma kotaknya di layar. Halaman Pengiriman belum punya kotaknya, jadi
+ * argumennya boleh kosong dan saringannya jalan seperti sebelumnya.
+ */
+function saringSumber(offset, kotakCari) {
   const f = pageFilters();
+  const kotak = kotakCari ? $(kotakCari) : null;
   return {
     periodFrom: f.from !== 'ALL' ? f.from : null,
     periodTo: f.to !== 'ALL' ? f.to : null,
     city: f.cityCode !== 'ALL' ? f.cityCode : null,
+    query: kotak ? kotak.value.trim() : '',
     offset,
   };
+}
+
+/**
+ * Ketikan di kotak cari halaman Lokasi Servis.
+ *
+ * Offset dikembalikan ke nol: hasil pencarian baru selalu lebih pendek, dan bertahan
+ * di halaman 4 berarti mendarat di tabel kosong yang terlihat seperti "tidak ada
+ * hasil" padahal hasilnya ada di halaman pertama.
+ *
+ * Ditunda 300 ms supaya tiap huruf tidak jadi satu permintaan sendiri — rute ini
+ * lewat piiLimiter, dan mengetik "sinduadi" tanpa penundaan berarti delapan
+ * permintaan berturut-turut untuk satu pencarian.
+ */
+let pewaktuCariServis = null;
+export function cariServis() {
+  if (pewaktuCariServis) clearTimeout(pewaktuCariServis);
+  pewaktuCariServis = setTimeout(() => {
+    pewaktuCariServis = null;
+    servisOffset = 0;
+    renderServiceTable();
+  }, 300);
 }
 
 /**
@@ -1564,7 +1595,7 @@ export async function renderServiceTable() {
   wadah.innerHTML = '<p class="text-xs text-slate-400 p-4">Memuat Data Servis…</p>';
 
   try {
-    const hasil = await fetchServis(saringSumber(servisOffset));
+    const hasil = await fetchServis(saringSumber(servisOffset, 'servis-cari'));
     servisOffset = hasil.offset;
 
     // Berapa baris di halaman ini yang jaraknya benar-benar terukur. Dikatakan apa
