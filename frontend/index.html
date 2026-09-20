@@ -74,6 +74,14 @@
   .map-panel { background: rgba(255,255,255,0.94); backdrop-filter: blur(14px) saturate(160%); border: 1px solid rgba(11,47,107,0.18); border-radius: 16px; box-shadow: 0 10px 24px rgba(11,47,107,0.20); }
   .float-tooltip { position: fixed; z-index: 400; pointer-events: none; background: rgba(7,28,66,0.9); backdrop-filter: blur(10px); color: #e2e8f0; border-radius: 10px; padding: 10px 12px; font-size: 12.5px; box-shadow: 0 14px 34px rgba(0,0,0,0.3); transform: translate(-50%,-120%); max-width: 260px; opacity: 0; transition: opacity 0.15s; border: 1px solid rgba(255,255,255,0.12); }
   .float-tooltip.show { opacity: 1; }
+  /* Varian PUTIH: dipakai kartu satu ORANG di titik peta (nama, golongan, nomor
+     mesin), supaya beda tegas dari tooltip biru yang menampilkan ringkasan
+     KELURAHAN. Warnanya yang membedakan "ini satu orang" dari "ini sekian orang" —
+     permintaan tim 2026-09-20. Lebih lebar karena isinya baris-baris data, bukan
+     tiga angka. */
+  .float-tooltip.kartu-orang { background: #ffffff; color: #0f172a;
+    border: 1px solid #cbd5e1; box-shadow: 0 16px 38px rgba(15,23,42,0.22);
+    max-width: 320px; }
 
   .switch { position: relative; width: 34px; height: 19px; flex-shrink: 0; }
   .switch input { opacity: 0; width: 0; height: 0; }

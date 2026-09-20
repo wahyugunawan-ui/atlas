@@ -6,13 +6,15 @@ import {
 } from './config.js';
 import { classOf, dealerColor, percentileBreaks, RAMP, COLOR_EMPTY } from './colors.js';
 import { $, bbox, displayCityName, esc, formatNumber, sumBy, toast } from './dom.js';
-import { fetchGeo, fetchKpiJarak, fetchTitikPeta } from './api.js';
+import { fetchGeo, fetchKpiJarak, fetchTitikPeta, fetchVillageCustomers } from './api.js';
 import { activeRows, fusionFilterPeta, pageFilters, scopeValue } from './filters.js';
 import { circle, EMPTY_COLLECTION } from './geo.js';
 import {
   cincinPerDesa, ikonKotak, pembangkitAcak, sebarDiPoligon, titikPerDesa,
 } from './fusion-points.js';
 import { fiturTelusur } from './fusion-alasan.js';
+// Cuma tabel warna+nama golongan (data murni, tanpa DOM) — bukan lingkaran modul.
+import { SEGMENTS } from './fusion-segments.js';
 import { contributionsForRows, fixedContributionClass, unitsForRows } from './sales-stats.js';
 // outlets.js TIDAK meng-import berkas ini (ia cuma memakai colors, dom, filters, dan
 // state), jadi impor ini tidak membuat lingkaran modul. Lihat catatan serupa di
@@ -341,29 +343,28 @@ export function addLayers() {
     S.map.on('mouseenter', layerId, () => { S.map.getCanvas().style.cursor = 'pointer'; });
     S.map.on('mousemove', layerId, (e) => {
       if (!e.features || !e.features.length) return;
-      const props = e.features[0].properties;
-      tampilkanTooltipTitikFusi(jenis, props, e.originalEvent);
-      jadwalkanDaftarTitik(jenis, props);
+      hoverTitik(jenis, e.features[0].properties, e.originalEvent);
     });
     S.map.on('mouseleave', layerId, () => {
       S.map.getCanvas().style.cursor = '';
-      $('tooltip').classList.remove('show');
-      batalkanDaftarTitik();
+      const tip = $('tooltip');
+      if (tip) { tip.classList.remove('show'); tip.classList.remove('kartu-orang'); }
+      batalkanKartuTitik();
     });
-    // Klik = pemicu kedua, dan yang paling jelas disengaja. Pewaktunya dibatalkan
-    // dulu supaya satu klik tidak berbuntut panggilan kedua tiga detik kemudian.
+    // Klik = riwayat LENGKAP orang itu, bukan sekadar kartunya. Pewaktunya dibatalkan
+    // dulu supaya satu klik tidak berbuntut kartu yang muncul sesaat sesudahnya.
     S.map.on('click', layerId, (e) => {
       if (!e.features || !e.features.length) return;
-      batalkanDaftarTitik();
-      bukaDaftarTitikDariProps(jenis, e.features[0].properties);
+      batalkanKartuTitik();
+      bukaRiwayatDariTitik(jenis, e.features[0].properties);
     });
   });
 
   // Peta yang digeser/di-zoom membatalkan hitungan mundur: kursor yang kebetulan
   // berhenti di atas titik selama animasi bukan permintaan siapa pun, dan tiap
   // bukaan menembus pagar PII sekaligus menulis satu baris access_log.
-  S.map.on('movestart', batalkanDaftarTitik);
-  S.map.on('zoomstart', batalkanDaftarTitik);
+  S.map.on('movestart', batalkanKartuTitik);
+  S.map.on('zoomstart', batalkanKartuTitik);
 
   // Lingkaran radius KPI Jarak. Fill sangat tipis + garis putus-putus: ini alat ukur,
   // bukan data — tidak boleh menutupi wilayah di bawahnya.
@@ -602,64 +603,206 @@ function tampilkanTooltipTitikFusi(jenis, properties, event) {
   moveTooltip(event);
 }
 
-/** Lama kursor harus DIAM di atas satu titik sebelum daftar pelanggannya diminta. */
-const TUNDA_DAFTAR_TITIK_MS = 3000;
+/* ==========================================================================
+   SATU TITIK = SATU ORANG
+   ==========================================================================
+   Permintaan tim 2026-09-20, dan perubahan KONSEP: hover titik tidak lagi menjawab
+   "kelurahan ini punya berapa" melainkan "titik ini siapa".
 
-let pewaktuDaftarTitik = null;
-let kunciDaftarTitik = null;
+   Yang TIDAK berubah, dan tidak boleh berubah: muatan peta tetap anonim. Tidak ada
+   satu pun nomor mesin ikut dikirim bersama titik — kalau iya, seluruh basis data
+   konsumen ada di browser begitu halaman dibuka. Yang dibawa titik cuma kelurahan,
+   dealer, dan NOMOR URUT-nya di dalam kantong itu (`idx`, lihat bangunTitikFusi()).
+
+   Identitasnya diminta terpisah lewat rute PII yang sudah berpagar
+   (/v1/kelurahan/:village/pelanggan), satu kantong per permintaan, dan hasilnya
+   di-cache. Menyapu 40 titik di satu desa = SATU permintaan, bukan 40.
+   ========================================================================== */
+
+/** Jeda sebelum daftar kantong diminta saat hover. Lihat alasannya di hoverTitik(). */
+const TUNDA_KARTU_MS = 350;
 
 /**
- * Identitas satu kantong titik: jenis + kelurahan + dealer.
+ * Daftar pelanggan per kantong, berkunci 'kelurahan|dealer|periode'.
  *
- * Dipakai untuk tahu apakah kursor masih di atas kantong yang SAMA. Titik-titik satu
- * kantong digambar terpisah-pisah (satu fitur per pelanggan, disebar acak), jadi
- * bergeser satu piksel sering berarti pindah FITUR tapi tidak pindah kantong — dan
- * hitungan mundur tidak boleh mulai dari nol lagi setiap kali itu terjadi.
+ * Nilainya Promise, bukan array: dua titik dari kantong yang sama yang di-hover
+ * berurutan sebelum permintaan pertama selesai harus MENUNGGU permintaan itu, bukan
+ * menembakkan yang kedua.
  *
- * Murni dan diekspor supaya aturan ini bisa diuji tanpa peta sungguhan.
+ * Dibersihkan tiap muatan titik diganti (lihat muatTitikFusi()) — periode atau
+ * saringan yang berubah membuat isinya tidak lagi menjawab pertanyaan yang sama.
+ */
+let cacheKantong = new Map();
+
+export function bersihkanCacheKantong() { cacheKantong = new Map(); }
+
+function ambilKantong(village, dealer, periode) {
+  const kunci = `${village}|${dealer || ''}|${periode || ''}`;
+  if (!cacheKantong.has(kunci)) {
+    cacheKantong.set(kunci, fetchVillageCustomers(village, { dealer, periode })
+      .then((jawab) => (jawab && jawab.rows) || [])
+      // Kegagalan TIDAK di-cache sebagai daftar kosong permanen: kantongnya dilepas
+      // supaya percobaan berikutnya benar-benar mencoba lagi. Daftar kosong yang
+      // tertanam akan terbaca "tidak ada orangnya di sini" selamanya.
+      .catch((e) => { cacheKantong.delete(kunci); throw e; }));
+  }
+  return cacheKantong.get(kunci);
+}
+
+/**
+ * Baris mana di daftar kantong yang diwakili titik ini.
+ *
+ * Lapisan KTP menggambar SEMUA orang di kantong; lapisan Servis hanya yang punya
+ * servis; Kirim hanya yang punya pengiriman. Jadi daftarnya disaring dulu dengan
+ * aturan yang sama sebelum `idx` dipakai — kalau tidak, titik Servis ke-2 akan
+ * menunjuk orang ke-2 di daftar LENGKAP, yang belum tentu punya servis sama sekali.
+ *
+ * Mengembalikan null kalau jumlahnya tidak cocok. Itu bukan kelalaian: titik lahir
+ * dari source_overlap sedangkan daftar dari customer_fusion, dan walau keduanya
+ * ditulis perhitungan yang sama, menebak saat keduanya menyimpang berarti menampilkan
+ * nama orang yang SALAH — jauh lebih buruk daripada tidak menampilkan nama.
+ *
+ * Murni: diekspor supaya bisa diuji tanpa peta maupun jaringan.
+ */
+export function orangDiTitik(rows, jenis, idx) {
+  if (!Array.isArray(rows)) return null;
+  const saring = jenis === 'servis' ? ((r) => Number(r.serviceCount) > 0)
+    : jenis === 'kirim' ? ((r) => Number(r.deliveryCount) > 0)
+      : (() => true);
+  const cocok = rows.filter(saring);
+  const n = Number(idx);
+  if (!Number.isInteger(n) || n < 0 || n >= cocok.length) return null;
+  return cocok[n];
+}
+
+/** Satu baris "punya / tidak punya" untuk ketiga sumber. */
+function barisSumber(ada, label, nilai) {
+  const warna = ada ? 'color:#0f172a' : 'color:#94a3b8';
+  const tanda = ada ? '&check;' : '&times;';
+  return `<div class="flex items-center gap-2 text-[11px]" style="${warna}">` +
+    `<span style="width:12px;display:inline-block;text-align:center">${tanda}</span>` +
+    `<span class="flex-1">${esc(label)}</span>` +
+    `<span class="mono font-bold">${esc(nilai)}</span></div>`;
+}
+
+/** Kartu PUTIH satu orang. Semua nilai dari PII — WAJIB lewat esc(). */
+function tampilkanKartuOrang(jenis, orang, event) {
+  const tip = $('tooltip');
+  if (!tip) return;
+  const golongan = SEGMENTS[orang.segment];
+  const servis = Number(orang.serviceCount) || 0;
+  const kirim = Number(orang.deliveryCount) || 0;
+
+  tip.classList.add('kartu-orang');
+  tip.innerHTML =
+    `<div class="font-extrabold text-[13px] leading-tight">${
+      esc(orang.name || 'Nama tidak ada di data KTP')}</div>` +
+    `<div class="text-[11px] font-bold" style="color:${
+      golongan ? golongan.color : '#64748b'}">${
+      esc(golongan ? golongan.label : orang.segment || '—')}</div>` +
+    `<div class="text-[10px] mono text-slate-500 mt-0.5">${esc(orang.engineNo || '—')}</div>` +
+    `<div class="mt-2 pt-2 border-t border-slate-200 space-y-0.5">` +
+      barisSumber(true, 'Data KTP', 'ada') +
+      barisSumber(servis > 0, 'Servis', servis ? `${servis}x` : 'tidak ada') +
+      barisSumber(kirim > 0, 'Pengiriman', kirim ? `${kirim}x` : 'tidak ada') +
+    `</div>` +
+    `<div class="text-[10px] text-slate-400 mt-2 pt-2 border-t border-slate-200 leading-snug">` +
+      `Titik ${esc(LABEL_TITIK[jenis] || '')} · posisi acak di dalam kelurahan, bukan ` +
+      `alamat sebenarnya.<br><span class="font-bold text-slate-600">Klik</span> untuk ` +
+      `riwayat lengkapnya.</div>`;
+  tip.classList.add('show');
+  moveTooltip(event);
+}
+
+
+let pewaktuKartu = null;
+let kunciKartuTerakhir = null;
+
+/**
+ * Identitas satu TITIK: jenis + kelurahan + dealer + nomor urutnya.
+ *
+ * Dipakai untuk tahu apakah kursor masih di atas titik yang SAMA. Beda dari versi
+ * sebelumnya yang cuma sampai kantong (jenis|kelurahan|dealer): sekarang tiap titik
+ * menampilkan ORANG yang berbeda, jadi pindah satu titik ke tetangganya di kelurahan
+ * yang sama pun harus mengganti kartunya.
+ *
+ * Murni dan diekspor supaya aturannya bisa diuji tanpa peta sungguhan.
  */
 export function kunciBucket(props, jenis) {
   const p = props || {};
-  return [jenis || '', p.village || '', p.dealer || ''].join('|');
+  return [jenis || '', p.village || '', p.dealer || '', p.idx == null ? '' : p.idx].join('|');
+}
+
+function batalkanKartuTitik() {
+  if (pewaktuKartu) clearTimeout(pewaktuKartu);
+  pewaktuKartu = null;
+  kunciKartuTerakhir = null;
 }
 
 /**
- * Mulai (atau lanjutkan) hitungan mundur 3 detik untuk satu kantong.
+ * Hover satu titik: tooltip kelurahan dulu, kartu orang menyusul.
  *
- * Kantong yang sama: pewaktunya DIBIARKAN berjalan — kalau di-reset tiap mousemove,
- * kursor manusia yang tidak pernah benar-benar diam tidak akan pernah mencapai tiga
- * detik, dan pemicunya jadi fitur yang tidak pernah menyala.
- * Kantong berbeda: hitungan lama dibuang, mulai dari nol.
+ * DUA TINGKAT, dan jedanya yang membuat ini mungkin sama sekali:
+ *   segera       -> tooltip BIRU berisi ringkasan kelurahan. Gratis, seluruh isinya
+ *                   sudah ada di browser, jadi tidak apa-apa kalau menyala ratusan
+ *                   kali saat kursor menyapu peta.
+ *   sesudah 350ms -> kartu PUTIH berisi ORANG di titik itu. Ini memanggil rute PII.
+ *
+ * Tanpa jeda itu, menyeret kursor melintasi 30 kelurahan menembakkan 30 permintaan
+ * PII dan langsung menghabiskan piiLimiter (30/menit) — fiturnya mematikan dirinya
+ * sendiri dalam satu gerakan. 350 ms tidak terasa sebagai menunggu bagi orang yang
+ * memang sedang menunjuk satu titik, tapi cukup untuk menyaring lewatan.
+ *
+ * Hasil per kantong di-cache, jadi titik ke-2 sampai ke-40 di kelurahan yang sama
+ * muncul seketika tanpa permintaan baru.
  */
-function jadwalkanDaftarTitik(jenis, props) {
+function hoverTitik(jenis, props, event) {
+  tampilkanTooltipTitikFusi(jenis, props, event);
+
   const kunci = kunciBucket(props, jenis);
-  if (kunci === kunciDaftarTitik && pewaktuDaftarTitik) return;
+  if (kunci === kunciKartuTerakhir) return;
+  batalkanKartuTitik();
+  kunciKartuTerakhir = kunci;
 
-  batalkanDaftarTitik();
-  kunciDaftarTitik = kunci;
-  pewaktuDaftarTitik = setTimeout(() => {
-    pewaktuDaftarTitik = null;
-    bukaDaftarTitikDariProps(jenis, props);
-  }, TUNDA_DAFTAR_TITIK_MS);
-}
+  const { village, dealer, idx } = props || {};
+  if (!village) return;
+  const periode = fusionFilterPeta().periode;
 
-function batalkanDaftarTitik() {
-  if (pewaktuDaftarTitik) clearTimeout(pewaktuDaftarTitik);
-  pewaktuDaftarTitik = null;
-  kunciDaftarTitik = null;
+  pewaktuKartu = setTimeout(() => {
+    pewaktuKartu = null;
+    ambilKantong(village, dealer, periode).then((rows) => {
+      // Kursor sudah pindah sebelum jawabannya datang: jangan menimpa apa pun.
+      if (kunciKartuTerakhir !== kunci) return;
+      const orang = orangDiTitik(rows, jenis, idx);
+      // Tidak ketemu -> tooltip kelurahan yang biru DIBIARKAN. Itu keadaan antara yang
+      // jujur: "belum bisa menunjuk satu orang", bukan kartu kosong yang terlihat
+      // seperti kerusakan.
+      if (orang) tampilkanKartuOrang(jenis, orang, event);
+    }).catch(() => { /* tooltip biru tetap tampil; galat PII tidak dibuat ribut di peta */ });
+  }, TUNDA_KARTU_MS);
 }
 
 /**
- * Minta panel daftar pelanggan untuk satu kantong.
+ * Klik satu titik: buka panel Telusur berisi riwayat LENGKAP orang itu.
  *
- * Lewat `window`, bukan import langsung: fusion.js sudah meng-import berkas ini
- * (gambarTelusurDiPeta dkk), jadi meng-import baliknya membuat lingkaran modul. Pola
- * yang sama dipakai `window.openDealerDetail` di filter-bar.js dan outlets.js.
+ * Lewat `window`, bukan import langsung: fusion.js sudah meng-import berkas ini, jadi
+ * meng-import baliknya membuat lingkaran modul. Pola yang sama dipakai
+ * window.openDealerDetail di filter-bar.js dan outlets.js.
  */
-function bukaDaftarTitikDariProps(jenis, props) {
-  const p = props || {};
-  if (!p.village || !window.bukaDaftarTitik) return;
-  window.bukaDaftarTitik(jenis, p.village, p.dealer || null);
+function bukaRiwayatDariTitik(jenis, props) {
+  const { village, dealer, idx } = props || {};
+  if (!village) return;
+  const periode = fusionFilterPeta().periode;
+  ambilKantong(village, dealer, periode).then((rows) => {
+    const orang = orangDiTitik(rows, jenis, idx);
+    if (orang && orang.engineNo && window.bukaTelusurMesinDari) {
+      window.bukaTelusurMesinDari(orang.engineNo);
+    } else if (window.bukaDaftarTitik) {
+      // Titiknya tidak bisa dipetakan ke satu orang — buka daftar sekantongnya supaya
+      // orangnya tetap bisa dicari sendiri, bukan kliknya tidak melakukan apa-apa.
+      window.bukaDaftarTitik(jenis, village, dealer || null);
+    }
+  }).catch(() => { /* panel tidak dibuka; pesannya sudah muncul di panel telusur */ });
 }
 
 function bangunTitikFusi(jenis) {
@@ -676,13 +819,25 @@ function bangunTitikFusi(jenis) {
     const ring = data.cincin[kode];
     if (!ring) return;
     perDesa[kode].forEach((bagian) => {
-      sebarDiPoligon(ring, bagian.n, rand).forEach((koordinat) => {
+      // `idx` = nomor urut titik ini DI DALAM kantongnya (kelurahan+dealer+jenis),
+      // 0..n-1. Inilah yang membuat tiap titik bisa menunjuk SATU orang tanpa satu
+      // pun nomor mesin ikut di muatan peta: panelnya mengambil daftar kantong lewat
+      // rute PII yang sudah berpagar, lalu menampilkan baris ke-idx. Tiga titik di
+      // satu desa jadi tiga orang berbeda (permintaan tim 2026-09-20).
+      //
+      // Urutannya harus STABIL antara titik dan daftar. Titik digambar dari
+      // source_overlap (`bagian.n`), daftarnya dari customer_fusion — dua tabel yang
+      // ditulis perhitungan yang SAMA, jadi jumlahnya cocok. Kalau suatu saat tidak
+      // cocok, pemetaannya ditolak dengan jujur (lihat orangDiTitik() di bawah):
+      // menampilkan nama yang SALAH jauh lebih buruk daripada tidak menampilkan nama.
+      sebarDiPoligon(ring, bagian.n, rand).forEach((koordinat, idx) => {
         features.push({
           type: 'Feature',
           properties: {
             warna: dealerColor(S.registry, bagian.dealer),
             dealer: bagian.dealer,
             village: kode,
+            idx,
           },
           geometry: { type: 'Point', coordinates: koordinat },
         });

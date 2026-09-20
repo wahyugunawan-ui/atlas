@@ -70,12 +70,22 @@ async function main() {
   // tidak me-reset dan panel yang terbuka memuat kantong yang SALAH.
   const { kunciBucket } = await import(MODUL);
 
-  const titikA1 = { village: '34.04.01.2001', dealer: 'NUSANTARASAKTIGEJAYAN', warna: '#111' };
-  const titikA2 = { village: '34.04.01.2001', dealer: 'NUSANTARASAKTIGEJAYAN', warna: '#999' };
+  const titikA1 = { village: '34.04.01.2001', dealer: 'NUSANTARASAKTIGEJAYAN', idx: 0, warna: '#111' };
+  const titikA2 = { village: '34.04.01.2001', dealer: 'NUSANTARASAKTIGEJAYAN', idx: 0, warna: '#999' };
 
+  // Titik yang SAMA (kelurahan+dealer+nomor urut sama) berkunci sama walau warnanya
+  // beda — warna bukan identitas.
   assert.strictEqual(kunciBucket(titikA1, 'ktp'), kunciBucket(titikA2, 'ktp'),
-    'dua titik di kantong yang sama harus berkunci sama — kalau tidak, hitungan ' +
-    'mundur 3 detik tidak akan pernah selesai');
+    'titik yang sama harus berkunci sama — kalau tidak, kartunya diambil ulang terus ' +
+    'dan jeda 350 ms tidak pernah selesai');
+
+  // Sejak tiap titik menampilkan ORANG yang berbeda (2026-09-20), pindah ke titik
+  // TETANGGA di kelurahan yang sama pun WAJIB mengganti kartunya. Dulu kuncinya
+  // berhenti di kantong, jadi menggeser satu titik ke sebelahnya menampilkan orang
+  // yang lama.
+  assert.notStrictEqual(kunciBucket(titikA1, 'ktp'),
+    kunciBucket({ ...titikA1, idx: 1 }, 'ktp'),
+    'nomor urut titik tidak ikut kunci — titik tetangga akan menampilkan orang yang salah');
 
   assert.notStrictEqual(kunciBucket(titikA1, 'ktp'),
     kunciBucket({ village: '33.01.01.2001', dealer: 'NUSANTARASAKTIGEJAYAN' }, 'ktp'),
@@ -92,9 +102,70 @@ async function main() {
   assert.strictEqual(typeof kunciBucket(undefined, undefined), 'string',
     'dipanggil tanpa argumen pun harus mengembalikan string, bukan meledak');
 
+  // --- orangDiTitik(): satu titik = satu orang ------------------------------
+  //
+  // Perubahan KONSEP 2026-09-20. Hover titik tidak lagi menjawab "kelurahan ini punya
+  // berapa" melainkan "titik ini siapa". Titiknya tetap anonim di muatan peta — yang
+  // dibawa cuma kelurahan, dealer, dan NOMOR URUT-nya (idx). Fungsi ini yang
+  // memetakan nomor urut itu ke satu baris di daftar kantong.
+  //
+  // Yang paling gampang salah, dan itulah yang diuji di sini: lapisan Servis hanya
+  // menggambar orang yang PUNYA servis, jadi titik Servis ke-2 menunjuk orang ke-2 di
+  // antara yang punya servis — BUKAN orang ke-2 di daftar lengkap. Salah di sini
+  // menampilkan nama orang yang keliru, dan tidak ada galat apa pun yang menandainya.
+  const { orangDiTitik } = await import(MODUL);
+
+  const kantong = [
+    { engineNo: 'M1', name: 'Ani', segment: 'loyal_verified', serviceCount: 2, deliveryCount: 1 },
+    { engineNo: 'M2', name: 'Budi', segment: 'registered_only', serviceCount: 0, deliveryCount: 0 },
+    { engineNo: 'M3', name: 'Cici', segment: 'service_near', serviceCount: 5, deliveryCount: 0 },
+    { engineNo: 'M4', name: 'Dedi', segment: 'nomad', serviceCount: 0, deliveryCount: 3 },
+  ];
+
+  // Lapisan KTP menggambar SEMUA orang di kantong: urutannya apa adanya.
+  assert.strictEqual(orangDiTitik(kantong, 'ktp', 0).engineNo, 'M1');
+  assert.strictEqual(orangDiTitik(kantong, 'ktp', 3).engineNo, 'M4');
+
+  // Lapisan SERVIS hanya yang punya servis: M1 dan M3. Titik ke-1 = M3, BUKAN M2.
+  assert.strictEqual(orangDiTitik(kantong, 'servis', 0).engineNo, 'M1',
+    'titik servis pertama harus orang pertama yang PUNYA servis');
+  assert.strictEqual(orangDiTitik(kantong, 'servis', 1).engineNo, 'M3',
+    'titik servis kedua menunjuk orang kedua di daftar LENGKAP — daftarnya belum ' +
+    'disaring lebih dulu menurut jenis lapisannya');
+  assert.strictEqual(orangDiTitik(kantong, 'servis', 2), null,
+    'cuma dua orang yang punya servis; titik ketiga tidak boleh menunjuk siapa pun');
+
+  // Lapisan KIRIM hanya yang punya pengiriman: M1 dan M4.
+  assert.strictEqual(orangDiTitik(kantong, 'kirim', 0).engineNo, 'M1');
+  assert.strictEqual(orangDiTitik(kantong, 'kirim', 1).engineNo, 'M4',
+    'penyaring kirim tertukar dengan penyaring servis');
+
+  // JUMLAH TIDAK COCOK = null, bukan menebak. Titik lahir dari source_overlap
+  // sedangkan daftarnya dari customer_fusion; kalau keduanya menyimpang, menampilkan
+  // nama yang SALAH jauh lebih buruk daripada tidak menampilkan nama.
+  assert.strictEqual(orangDiTitik(kantong, 'ktp', 4), null,
+    'idx di luar jangkauan harus null, bukan melipat balik ke baris pertama');
+  assert.strictEqual(orangDiTitik(kantong, 'ktp', -1), null);
+  assert.strictEqual(orangDiTitik([], 'ktp', 0), null);
+  assert.strictEqual(orangDiTitik(null, 'ktp', 0), null,
+    'rows null tidak boleh melempar galat — jawaban rute bisa gagal');
+  assert.strictEqual(orangDiTitik(kantong, 'ktp', undefined), null,
+    'titik tanpa idx (muatan peta versi lama) tidak boleh menunjuk orang asal');
+  // Angka dalam bentuk teks DITERIMA. MapLibre mengembalikan properti fitur apa
+  // adanya, tapi kalau suatu saat idx sampai ke sini sebagai '1', baris ke-1 tetap
+  // baris yang benar — menolaknya cuma mematikan fitur tanpa menambah keamanan
+  // sedikit pun. Yang ditolak nilai yang memang tidak menunjuk baris mana pun.
+  assert.strictEqual(orangDiTitik(kantong, 'ktp', '1').engineNo, 'M2',
+    'idx berbentuk teks angka seharusnya tetap menunjuk baris yang sama');
+  assert.strictEqual(orangDiTitik(kantong, 'ktp', 1.5), null,
+    'idx pecahan tidak menunjuk baris mana pun');
+  assert.strictEqual(orangDiTitik(kantong, 'ktp', 'abc'), null,
+    'idx yang bukan angka harus null, bukan NaN yang diam-diam jadi baris pertama');
+
   console.log('OK map-titik-fusi-tooltip — carikanBagianTitikFusi mencocokkan desa DAN ' +
     'dealer sekaligus (tidak tertukar kalau salah satunya sama), null untuk yang tidak ' +
-    'ketemu maupun rows kosong; kunciBucket membedakan kantong, bukan tiap titik');
+    'ketemu maupun rows kosong; kunciBucket membedakan TIAP TITIK; orangDiTitik ' +
+    'menyaring daftar menurut jenis lapisan dan menolak menebak saat jumlahnya tidak cocok');
 }
 
 main().catch((error) => {
