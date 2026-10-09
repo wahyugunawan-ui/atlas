@@ -199,7 +199,7 @@ cuma perluasan ke Sulawesi ke timur.
     PostgreSQL lokal mati, dan log-nya mencatat "GAGAL" tanpa ada yang membaca.
     PostgreSQL yang dinyalakan tugas terjadwal juga crash `0xC0000142` begitu ada
     koneksi; dinyalakan dari PowerShell biasa jalan normal. Sebabnya belum diselidiki.
-  - **`C:stra-data\geo\konsumen.json` (18.512 nama + alamat asli) masih ada di
+  - **`C:\astra-data\geo\konsumen.json` (18.512 nama + alamat asli) masih ada di
     laptop.** Tidak dipakai frontend dan tidak ikut ke VPS, tapi masih disajikan
     `/data` di laptop (di belakang login). Sebaiknya dihapus.
   - **Banner start di VPS bilang "berjalan tanpa HTTPS"** karena aplikasinya tidak
