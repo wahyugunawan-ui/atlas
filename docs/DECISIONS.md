@@ -4411,3 +4411,38 @@ Mode 'fixed' juga tidak ikut: intervalnya memang didefinisikan atas kontribusi %
 **Konsekuensi:** `paintChoropleth()` mengembalikan `satuan`, dan legendanya MENYEBUT
 satuan itu — tanpa itu angka "12" berarti "12% kontribusi" di satu keadaan dan "12
 unit" di keadaan lain, di kotak yang bentuknya persis sama.
+
+## [2026-10-09] Server review di VPS: Caddy + sslip.io, ufw sebagai pelindung port 3100
+
+**Konteks:** Tim perlu mereview UI dan fitur dari jauh, sedangkan laptop tidak bisa
+menyala terus. Ini server **review**, bukan go-live; go-live kemungkinan di server
+Astra.
+
+**Keputusan:**
+- **Hostinger VPS KVM 1 (4 GB)**, bukan hosting statis (Vercel). Frontend butuh
+  `/api` sungguhan, dan `offline-html` tertinggal 13 fungsi API (seluruh fitur
+  FUSION). Memperbaikinya butuh berjam-jam, dan hasilnya tetap tanpa login.
+  RAM 4 GB karena impor `Dealer & POS` memuncak di 2,7 GB.
+- **Caddy + sslip.io** untuk HTTPS tanpa membeli domain. User cukup membuka link dan
+  memasukkan sandi; tidak perlu VPN atau aplikasi tambahan, karena penggunanya non-IT.
+- **ufw adalah kontrol keamanan, bukan pelengkap.** `index.js` bind ke `0.0.0.0` (untuk
+  akses LAN di laptop). Di VPS, yang menutup port 3100 dari internet cuma ufw.
+- **Semua data ikut, termasuk `astra_customers`.** Impor dan ekspor tetap lewat web;
+  pemiliknya memutuskan ini aman untuk pemakaian internal. Pengamannya: HTTPS, satu
+  sandi bersama ≥16 karakter yang diketik pemiliknya sendiri lewat `ssh -t` (tidak
+  pernah lewat chat), pembatas login yang sudah ada, dan `piiLimiter` + `access_log`
+  yang sudah ada.
+- **`konsumen.json` tidak ikut ke VPS.** Berkas lama berisi PII di luar
+  `astra_customers` dan sudah tidak dipakai frontend.
+- **Tanpa Docker atau CI.** Satu aplikasi di satu server dengan deploy sesekali;
+  `atlas-deploy` (git pull → npm ci → restart → cek) sudah cukup.
+
+**Alternatif yang ditolak:**
+- Oracle Always Free: gagal di verifikasi kartu Mandiri.
+- Google Cloud: kredit Free Trial sudah kedaluwarsa, dan e2-micro gratisan cuma 1 GB
+  di region AS.
+- Tailscale: aman, tapi setiap reviewer harus memasang aplikasinya.
+- Allowlist IP: reviewer bekerja remote dari IP yang berubah-ubah.
+
+**Konsekuensi:** Mulai 2026-10-09 VPS adalah sumber data utama. Backup harian masih di
+disk VPS yang sama; menyalinnya keluar tercatat di ROADMAP sebagai utang.

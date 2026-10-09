@@ -125,50 +125,112 @@ Periksa: bukalah alamatnya, login, dan pastikan empat hal ini benar:
 
 ## Pindah ke VPS Linux
 
-Sama persis sampai langkah 6, dengan empat tambahan.
-
-**PostGIS dipasang lewat paket, jauh lebih mudah daripada di Windows:**
-
-```
-sudo apt install postgresql-17 postgresql-17-postgis-3
-```
-
-**Nama berkas peka huruf besar-kecil.** Windows menganggap `Kelurahan.geojson` dan
-`kelurahan.geojson` sama; Linux tidak. Kalau peta kosong padahal berkasnya jelas ada,
-ini penyebabnya.
-
-**`DATA_DIR` pakai path Linux**, misalnya `/var/astra-data`.
-
-**Server harus hidup lagi setelah reboot.** Di laptop, `start.bat` dijalankan orang. Di
-VPS tidak ada yang menjalankannya. Buat systemd service:
-
-```ini
-# /etc/systemd/system/astra.service
-[Unit]
-Description=ATLAS - Astra Motor Geospasial Marketing Intelligence
-After=network.target postgresql.service
-
-[Service]
-WorkingDirectory=/opt/atlas
-ExecStart=/usr/bin/node backend/server/index.js
-Restart=always
-User=astra
-
-[Install]
-WantedBy=multi-user.target
-```
+Yang tertulis di sini adalah **setup yang benar-benar berjalan** di VPS review
+(Hostinger KVM 1, Ubuntu 26.04, 2026-10-09). Alamatnya
+`https://187-77-121-178.sslip.io`; masuk ke servernya cukup `ssh atlas` (alias di
+`~/.ssh/config` laptop, kunci `~/.ssh/astra_atlas`).
 
 ```
-sudo systemctl enable --now astra
-sudo systemctl status astra
+Internet ─443/80─► Caddy (HTTPS otomatis) ─► 127.0.0.1:3100 atlas.service ─► 127.0.0.1:5432 PostgreSQL
+ufw: hanya 22, 80, 443 · fail2ban menjaga SSH · SSH hanya pakai kunci
+/opt/atlas       kode (git clone, milik user atlas)
+/var/lib/atlas   DATA_DIR: .env (0600), geo/, uploads/, logs/, backup/
 ```
 
-**Kalau dibuka ke internet**, dua hal wajib sebelum itu:
+### Yang gampang terlewat
 
-1. HTTPS lewat Caddy atau Nginx di depannya, lalu `COOKIE_SECURE=1` di `.env`
-2. PostgreSQL **jangan** dibuka ke internet — biarkan `listen_addresses = 'localhost'`
+- **Server bind ke `0.0.0.0:3100`** (`backend/server/index.js`). Di VPS, port 3100
+  tertutup dari luar **hanya karena ufw**. Jangan matikan ufw, dan jangan
+  `ufw allow 3100`. Pintu masuknya Caddy.
+- **SSH: nilai PERTAMA yang menang.** Image Hostinger membawa
+  `sshd_config.d/50-cloud-init.conf` berisi `PasswordAuthentication yes`. Karena itu
+  pengerasannya ditaruh di `00-atlas.conf` (terbaca lebih dulu). Cek hasil akhirnya
+  dengan `sshd -T | grep passwordauth`, bukan dengan membaca berkasnya.
+- **Versi PostgreSQL.** Ubuntu 26.04 membawa PG 18 + PostGIS 3.6 di repo bawaannya.
+  Dump dari laptop (PG 17) aman di-restore ke versi yang LEBIH BARU, tapi tidak
+  sebaliknya.
+- **`CREATE EXTENSION postgis` sebagai `postgres`** sebelum restore. Role `astra`
+  bukan superuser. Dump `astra_customers` ikut membawa perintah ekstensi itu, dan
+  errornya aman diabaikan karena skema konsumen tidak memakai PostGIS.
+- **Swap 2 GB wajib.** Impor `Dealer & POS` memakan RAM sampai 2,7 GB (exceljs
+  memuat seluruh workbook).
+- **`.env` jangan di-`source` utuh dari bash.** `PASSWORD_HASH` mengandung `$`. Skrip
+  yang butuh nilai DB membaca baris `DB_*` saja dengan `grep`.
+- **Geo yang diupload cukup empat:** `kelurahan.geojson`, `kecamatan.geojson`,
+  `kota.geojson`, `cakupan.pmtiles`. **`konsumen.json` JANGAN ikut.** Berkas lama itu
+  berisi nama dan alamat asli dan sudah tidak dipakai frontend.
+- **Nama berkas peka huruf besar-kecil** di Linux.
 
-Tanpa nomor 1, sandi dan cookie sesi lewat sebagai teks polos.
+### Langkah ringkas
+
+1. Dasar: `apt full-upgrade`, `timedatectl set-timezone Asia/Jakarta`,
+   `unattended-upgrades`, swap 2 GB, user sistem `atlas` (home `/var/lib/atlas`,
+   shell nologin)
+2. Keamanan: `00-atlas.conf` (PasswordAuthentication no, PermitRootLogin
+   prohibit-password), `ufw` deny incoming + allow 22/80/443, `fail2ban` untuk sshd.
+   Uji login kunci dari sesi KEDUA sebelum menutup sesi pertama.
+3. Runtime: `postgresql-18 postgresql-18-postgis-3 caddy` dari repo Ubuntu; Node 24
+   dari NodeSource (repo Ubuntu baru punya Node 22)
+4. Database: role `astra` LOGIN CREATEDB dengan sandi `openssl rand -hex 16`; buat
+   `astra` + `astra_customers`; postgis di `astra`; `pg_restore --no-owner`; cocokkan
+   jumlah baris dengan sumbernya; **hapus berkas dump dari server**
+5. Aplikasi: `git clone` ke `/opt/atlas`, `npm ci` sebagai `atlas`, tulis
+   `/var/lib/atlas/.env` (`PORT=3100`, `DATA_DIR=/var/lib/atlas`, `COOKIE_SECURE=1`,
+   `DB_*`), lalu sandi login diketik sendiri oleh pemiliknya:
+   `ssh -t atlas "cd /opt/atlas && sudo -u atlas -H env ACC_ENV_FILE=/var/lib/atlas/.env npm run set-password"`
+6. `/etc/systemd/system/atlas.service`: `User=atlas`,
+   `Environment=ACC_ENV_FILE=/var/lib/atlas/.env`, `Restart=always`, `RestartSec=5`,
+   `NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=full`, `ProtectHome`
+7. `/etc/caddy/Caddyfile`:
+
+   ```
+   187-77-121-178.sslip.io {
+   	encode zstd gzip
+   	request_body {
+   		max_size 100MB
+   	}
+   	header {
+   		Strict-Transport-Security "max-age=31536000"
+   		X-Content-Type-Options nosniff
+   		X-Frame-Options DENY
+   		Referrer-Policy same-origin
+   		X-Robots-Tag "noindex, nofollow"
+   		-Server
+   	}
+   	respond /robots.txt "User-agent: *
+   Disallow: /" 200
+   	reverse_proxy 127.0.0.1:3100
+   }
+   ```
+
+   Ganti nama host di baris pertama kalau nanti memakai domain sendiri; sertifikat
+   diurus Caddy.
+8. Backup: `/usr/local/bin/atlas-backup` (pg_dump `astra` + `pg_restore --list`, gagal
+   kalau berkasnya < 1 MB, simpan 14 hari) dijalankan `atlas-backup.timer` tiap
+   19:00. `astra_customers` sengaja tidak ikut.
+
+### Pemakaian sehari-hari
+
+| Perlu | Perintah |
+|---|---|
+| Update ke kode terbaru di GitHub | `ssh atlas atlas-deploy` |
+| Lihat log aplikasi | `ssh atlas journalctl -u atlas -f` |
+| Status semua layanan | `ssh atlas systemctl status atlas caddy postgresql` |
+| Backup sekarang / cek jadwal | `ssh atlas systemctl start atlas-backup` / `systemctl list-timers` |
+| Ganti sandi login | perintah `set-password` di langkah 5, lalu `systemctl restart atlas` |
+
+### Cara memeriksanya dari luar
+
+- `https://…/login` → 200, sertifikat Let's Encrypt
+- `curl -s -o /dev/null -w '%{http_code}' https://…/api/outlets` → 401
+- `https://…/data/kelurahan.geojson` tanpa login → 302 ke `/login`
+- POST `/login` salah 6x → yang keenam 429
+- `systemctl reboot` → situs hidup lagi tanpa disentuh
+
+**Hati-hati menguji port dari laptop.** `Test-NetConnection` dari laptop melaporkan
+3100 dan 5432 "terbuka", tapi port 9999 yang tidak dipakai apa pun juga dilaporkan
+sama. Ada perangkat di jaringan laptop (WARP atau antivirus) yang menerima koneksinya
+lebih dulu. Ukurannya: aplikasi tidak pernah menjawab HTTP di 3100 dari luar.
 
 ---
 

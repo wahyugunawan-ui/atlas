@@ -47,6 +47,7 @@ Istilah wilayah memakai terjemahan resmi BPS supaya konsisten:
 | 4 | Impor Excel lewat web | **selesai** | 10/11 mutasi tertangkap |
 | 5 | Sunting master outlet | **selesai** | pin koordinat, alamat, dan pindah dealer |
 | 6 | Bisa dijalankan orang non-IT | **selesai** | `start.bat`, README.md, PINDAH.md |
+| 7 | Server review di VPS | **jalan** | 2026-10-09, `https://187-77-121-178.sslip.io`, lihat PINDAH.md |
 
 ---
 
@@ -187,8 +188,24 @@ cuma perluasan ke Sulawesi ke timur.
   EXISTS`, jadi perubahan tipe kolom hanya berlaku untuk database yang belum ada.
   Ditandai `ponytail:` di `db.js`. Baru mendesak saat ada mesin kedua — dan jadi
   prasyarat kalau migrasi `geography` di atas dikerjakan.
-- **HTTPS belum dipakai.** Mekanismenya ada di `index.js` dan menolak start kalau
-  sertifikatnya salah tulis; sertifikatnya yang belum ada.
+- **HTTPS belum dipakai di laptop.** Mekanismenya ada di `index.js` dan menolak start
+  kalau sertifikatnya salah tulis; sertifikatnya yang belum ada. Di VPS review, HTTPS
+  diurus Caddy (2026-10-09).
+- **Utang dari deploy VPS 2026-10-09, dicatat bukan diperbaiki:**
+  - **Backup VPS masih di disk yang sama.** `atlas-backup` jalan tiap 19:00 dan sudah
+    diuji, tapi kalau VPS-nya hilang, backupnya ikut hilang. Perlu disalin ke luar
+    (laptop atau penyimpanan lain).
+  - **Backup laptop 0 byte sejak akhir September.** `ops/backup.bat` jalan saat
+    PostgreSQL lokal mati, dan log-nya mencatat "GAGAL" tanpa ada yang membaca.
+    PostgreSQL yang dinyalakan tugas terjadwal juga crash `0xC0000142` begitu ada
+    koneksi; dinyalakan dari PowerShell biasa jalan normal. Sebabnya belum diselidiki.
+  - **`C:stra-data\geo\konsumen.json` (18.512 nama + alamat asli) masih ada di
+    laptop.** Tidak dipakai frontend dan tidak ikut ke VPS, tapi masih disajikan
+    `/data` di laptop (di belakang login). Sebaiknya dihapus.
+  - **Banner start di VPS bilang "berjalan tanpa HTTPS"** karena aplikasinya tidak
+    tahu ada Caddy di depannya. Kosmetik, tapi bisa membingungkan yang membaca log.
+  - **Sumber data utama sekarang VPS.** Impor berikutnya lewat web VPS. Database
+    `astra_v2` di laptop cuma salinan per 2026-10-09 pagi.
 - **Tugas terjadwal jalan saat login, bukan saat komputer menyala.** Untuk server yang
   tidak pernah ada yang login, PostgreSQL dan aplikasi harus jadi Windows service —
   butuh admin sekali, langkahnya di `PINDAH.md`.
@@ -293,6 +310,33 @@ cuma perluasan ke Sulawesi ke timur.
 ---
 
 ## Selesai
+
+### Server review di VPS Hostinger, bisa dibuka dari mana saja (2026-10-09)
+
+Laptop tidak bisa menyala terus, padahal tim perlu mereview UI dan fitur dari jauh.
+Oracle Free gagal di verifikasi kartu dan kredit Google Cloud sudah kedaluwarsa,
+jadi dipakai **Hostinger VPS KVM 1** (1 vCPU, 4 GB, Ubuntu 26.04) sebagai server
+review sementara. Go-live kemungkinan di server Astra.
+
+- Alamat: `https://187-77-121-178.sslip.io` (sslip.io supaya dapat sertifikat
+  tanpa membeli domain); masuk server: `ssh atlas`
+- Kode = commit `3c1124e` (GitHub `wahyugunawan-ui/atlas`); data = dump `astra_v2`
+  + `astra_customers_v2` dari laptop. Jumlah baris di VPS sama persis: sales
+  20.320, coverage 20.733, poligon 8.999, outlet 79, dealer 52, KTP 19.598, servis
+  186.471.
+- Caddy (HTTPS + header keamanan + noindex) → systemd `atlas.service` → PostgreSQL
+  18 + PostGIS 3.6 di localhost. ufw hanya 22/80/443, SSH hanya pakai kunci,
+  fail2ban, unattended-upgrades, swap 2 GB.
+- Backup harian `atlas-backup.timer` 19:00 (gagal kalau berkas < 1 MB); update kode
+  cukup `ssh atlas atlas-deploy`.
+- **Sudah diuji dari luar:** login 200, `/api` tanpa login 401, `/data` tanpa login
+  302 ke login, salah sandi keenam 429, `kill -9` → hidup lagi dalam 5 detik, reboot
+  → semua layanan hidup lagi tanpa disentuh.
+- **Belum diuji:** tampilan setelah login di browser, dan impor Excel lewat web VPS.
+  Dua-duanya butuh sandi login, yang sengaja hanya diketahui pemiliknya.
+- Ditemukan saat setup: image Hostinger mengizinkan login root pakai password
+  (`50-cloud-init.conf`), kini ditutup lewat `00-atlas.conf`. `.env` tidak bisa
+  di-`source` bash karena `PASSWORD_HASH` mengandung `$`.
 
 ### Satu titik peta = satu orang, heatmap relatif diperbaiki, 16 dari 18 revisi tim (2026-09-20, putaran kedua)
 
