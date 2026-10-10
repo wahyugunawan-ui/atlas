@@ -11,10 +11,10 @@
  * ini tidak bisa.
  */
 import { closeCombo, fillCombo, setComboValue } from './combobox.js';
-import { ALLOWED_CITY_CODES, KARESIDENAN, MONTHS } from './config.js';
+import { KARESIDENAN, MONTHS } from './config.js';
 import { $, esc } from './dom.js';
 import {
-  clearScope, pageFilters, scopeValue, setKares, setPeriod, setScope,
+  clearScope, pageFilters, scopeOptions, scopeValue, setKares, setPeriod, setScope,
 } from './filters.js';
 import { invalidateSalePoints } from './map.js';
 import { S } from './state.js';
@@ -114,19 +114,51 @@ function bacaKotakPeriode(which, el) {
 }
 
 /**
- * Isi ulang combo Kota — dipanggil sekali di fillFilterBar() DAN tiap kali Kares
- * berganti (cascading). Opsinya disaring dua lapis: (1) cuma kode yang diizinkan
- * (ALLOWED_CITY_CODES, 14 kab/kota di 3 Kares), (2) kalau Kares aktif, dipersempit
- * lagi ke kota anggota Kares itu saja.
+ * Nama kota untuk dropdown. S.cityNames hanya memuat kota yang punya kecamatan
+ * berpenjualan; kota asal dealer yang belum punya penjualan jatuh ke kodenya.
  */
-function isiComboKota() {
-  const f = pageFilters();
-  const allowed = f.kares !== 'ALL' ? new Set(KARESIDENAN[f.kares].cities) : ALLOWED_CITY_CODES;
+const namaKota = (c) => S.cityNames[c] || c;
 
-  fillCombo('kota', 'Kota', Object.keys(S.cityNames)
-    .filter((c) => allowed.has(c))
-    .sort((a, b) => S.cityNames[a].localeCompare(S.cityNames[b]))
-    .map((c) => [c, S.cityNames[c]]), 'Semua', (value) => {
+/**
+ * Memilih dari daftar berarti "tampilkan yang ini", bukan "nyalakan atau matikan yang
+ * ini" — jadi dipaksa, tidak di-toggle. Toggle cuma masuk akal untuk klik di peta, dan
+ * itu jalur applyScope().
+ *
+ * Sejak 2026-09-14: memilih Dealer/Pos dari daftar ini JUGA membuka panel rincian per
+ * kelurahan (mode biasa saja) — pola yang sama dengan memilih Kota di bawah (membuka
+ * openCitySummary() otomatis). window.*, bukan import langsung: tables.js sudah
+ * meng-import dari berkas ini.
+ */
+const pilihLingkup = (kind) => (value) => {
+  setScope(kind, value, true);
+  repaint(false);
+  if (S.filterPage === 'peta' && !S.fullscreen && value !== 'ALL') {
+    if (kind === 'dealer' && window.openDealerDetail) window.openDealerDetail(value);
+    else if (kind === 'pos' && window.openDealerDetail) {
+      const outlet = S.outletByCode[value];
+      if (outlet) window.openDealerDetail(outlet.dealerCode);
+    }
+  }
+};
+
+/**
+ * Isi ulang dropdown Kota, Dealer, dan Pos menurut tingkat di atasnya (lihat
+ * scopeOptions() di filters.js). Dipanggil dari syncFilterBar(), jadi cukup satu tempat
+ * — tapi daftarnya baru dibangun ulang kalau tingkat di atasnya benar-benar berubah,
+ * bukan di setiap penggambaran ulang.
+ */
+let tandaOpsi = '';
+function isiComboBerjenjang(paksa) {
+  const f = pageFilters();
+  const tanda = [f.kares, f.cityCode, f.dealerCode, S.dealers.length, S.realOutlets.length].join('|');
+  if (!paksa && tanda === tandaOpsi) return;
+  tandaOpsi = tanda;
+
+  const opsi = scopeOptions(f);
+
+  fillCombo('kota', 'Kota', opsi.cities
+    .sort((a, b) => namaKota(a).localeCompare(namaKota(b)))
+    .map((c) => [c, namaKota(c)]), 'Semua', (value) => {
       setScope('kota', value, true);
       repaint(false);
       // Kota dipilih TANPA kecamatan spesifik yang sedang aktif -> buka ringkasan
@@ -136,6 +168,17 @@ function isiComboKota() {
         window.openCitySummary(value);
       }
     });
+
+  fillCombo('dealer', 'Dealer', S.registry.order
+    .filter((code) => S.dealerNames[code] && opsi.dealers.has(code))
+    .map((code) => [code, S.dealerNames[code]]), 'Semua', pilihLingkup('dealer'));
+
+  // S.realOutlets, bukan S.outlets — dropdown Pos cuma menawarkan pos fisik
+  // sungguhan, tidak ikut baris "proxy" per dealer (lihat schema.sql komentar
+  // outlets.is_dealer_proxy).
+  fillCombo('pos', 'Pos', S.realOutlets.filter((o) => opsi.outlets.has(o.code))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((o) => [o.code, o.name]), 'Semua', pilihLingkup('pos'));
 }
 
 /**
@@ -145,42 +188,13 @@ export function fillFilterBar() {
   isiKotakPeriode('dari');
   isiKotakPeriode('sampai');
 
-  // Memilih dari daftar berarti "tampilkan yang ini", bukan "nyalakan atau matikan
-  // yang ini" — jadi dipaksa, tidak di-toggle. Toggle cuma masuk akal untuk klik di
-  // peta, dan itu jalur applyScope().
-  //
-  // Sejak 2026-09-14: memilih Dealer/Pos dari daftar ini JUGA membuka panel rincian
-  // per kelurahan (mode biasa saja) — pola yang sama dengan isiComboKota() di bawah
-  // (memilih Kota sudah lebih dulu membuka openCitySummary() otomatis). window.*,
-  // bukan import langsung: tables.js sudah meng-import dari berkas ini.
-  const pilihLingkup = (kind) => (value) => {
-    setScope(kind, value, true);
-    repaint(false);
-    if (S.filterPage === 'peta' && !S.fullscreen && value !== 'ALL') {
-      if (kind === 'dealer' && window.openDealerDetail) window.openDealerDetail(value);
-      else if (kind === 'pos' && window.openDealerDetail) {
-        const outlet = S.outletByCode[value];
-        if (outlet) window.openDealerDetail(outlet.dealerCode);
-      }
-    }
-  };
-
+  // Kares tidak pernah menyempit (tingkat terbesar); Kota/Dealer/Pos diisi oleh
+  // isiComboBerjenjang() dan dibangun ulang mengikuti tingkat di atasnya.
   fillCombo('kares', 'Kares',
     Object.keys(KARESIDENAN).map((k) => [k, KARESIDENAN[k].label]), 'Semua',
-    (value) => { setKares(value); isiComboKota(); repaint(false); });
+    (value) => { setKares(value); repaint(false); });
 
-  isiComboKota();
-
-  fillCombo('dealer', 'Dealer', S.registry.order
-    .filter((code) => S.dealerNames[code])
-    .map((code) => [code, S.dealerNames[code]]), 'Semua', pilihLingkup('dealer'));
-
-  // S.realOutlets, bukan S.outlets — dropdown Pos cuma menawarkan pos fisik
-  // sungguhan, tidak ikut baris "proxy" per dealer (lihat schema.sql komentar
-  // outlets.is_dealer_proxy).
-  fillCombo('pos', 'Pos', S.realOutlets.slice()
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((o) => [o.code, o.name]), 'Semua', pilihLingkup('pos'));
+  isiComboBerjenjang(true);
 
   // Halaman analisis mulai di bulan terakhir. Data Konsumen sengaja TIDAK ikut: dia
   // dipakai untuk mencari nama tanpa tahu bulannya, dan membukanya di satu bulan
@@ -197,12 +211,14 @@ export function fillFilterBar() {
 /**
  * Tulis nilai halaman yang sedang aktif ke bilah.
  *
- * Satu arah saja: objek -> DOM. Ketiga dropdown lingkup (kota/dealer/pos) SALING
- * EKSKLUSIF sejak [tanggal eksekusi] — cuma satu yang pernah menunjukkan selain
- * "Semua ..." di saat yang sama (lihat setScope() di filters.js).
+ * Satu arah saja: objek -> DOM. Kares, kota, dealer, dan pos BERJENJANG sejak
+ * 2026-10-11 (lihat setScope() di filters.js): memilih yang kecil mengisi yang besar,
+ * memilih yang besar mempersempit daftar pilihan yang kecil.
  */
 export function syncFilterBar() {
   const f = pageFilters();
+  // Daftar pilihan dulu, baru nilainya — fillCombo() membangun ulang pilnya.
+  isiComboBerjenjang();
 
   // 'ALL' ditulis ke kedua dropdown sebagai kosong, yang tampil sebagai tanda hubung.
   [['dari', f.from], ['sampai', f.to]].forEach(([ujung, nilai]) => {
@@ -253,7 +269,6 @@ export function onPeriodChange(which, el) {
 export function resetFilters() {
   closeCombo();
   setKares('ALL');
-  isiComboKota();
   clearScope();
   if (window.closeDistrictDetail) window.closeDistrictDetail();
   repaint(false);

@@ -251,8 +251,10 @@ export function startCoverageEdit(outletCode) {
  * memutuskan aksinya, keduanya membaca scope yang sama supaya tidak pernah berbeda.
  */
 export function startGroupEdit() {
-  if (scopeValue('dealer') !== 'ALL') return startRingEdit();
+  // Pos dicek DULUAN: sejak filter berjenjang (2026-10-11) memilih pos ikut mengisi
+  // dealernya, jadi "dealer terisi" tidak lagi berarti "yang dipilih adalah dealer".
   if (scopeValue('pos') !== 'ALL') return startCoverageEdit();
+  if (scopeValue('dealer') !== 'ALL') return startRingEdit();
   return undefined;
 }
 

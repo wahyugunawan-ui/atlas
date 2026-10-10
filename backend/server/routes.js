@@ -376,6 +376,15 @@ function build(config) {
     }
     const dealerCode = dealerMinta ? await repo.legacyDealerCode(dealerMinta) : null;
 
+    // Filter Kota/Karesidenan di halaman ini = KUMPULAN DEALER terdaftar di kota-kota itu
+    // (dealers.city_code), bukan kota tempat konsumen tinggal. Dikirim sebagai daftar
+    // kode kota (`dealerCities`), tiap kode divalidasi sendiri. Dealer yang dipilih
+    // langsung lebih sempit dan menang.
+    const kotaDealer = String(q.dealerCities || '').split(',').map((x) => x.trim())
+      .filter((x) => CITY.test(x)).slice(0, 50);
+    const dealerCodes = (!dealerCode && kotaDealer.length)
+      ? await repo.legacyCodesOfCities(kotaDealer) : null;
+
     const result = await repo.browseCustomers({
       periodFrom: PERIOD.test(periodFrom) ? periodFrom : null,
       periodTo: PERIOD.test(periodTo) ? periodTo : null,
@@ -386,6 +395,7 @@ function build(config) {
       village: VILLAGE.test(village) ? village : null,
       city: CITY.test(city) ? city : null,
       dealerCode,
+      dealerCodes,
       query: search || null,
       offset: Number(q.offset) || 0,
     });
@@ -599,6 +609,7 @@ function build(config) {
         address: body.address,
         lat: lat === undefined ? null : lat,
         lng: lng === undefined ? null : lng,
+        cityCode: CITY.test(String(body.cityCode || '')) ? body.cityCode : null,
       });
       res.status(201).json({ dealer });
     } catch (error) {
@@ -613,6 +624,9 @@ function build(config) {
     const lng = patch.lng === null || patch.lng === undefined ? undefined : Number(patch.lng);
     const salah = cekKoordinatBebas(lat, lng);
     if (salah) return res.status(400).json({ error: salah });
+    if (patch.cityCode && !CITY.test(String(patch.cityCode))) {
+      return res.status(400).json({ error: 'Kode kota harus format BPS bertitik, mis. 34.04.' });
+    }
 
     let dealer;
     try {
@@ -621,6 +635,8 @@ function build(config) {
         address: typeof patch.address === 'string' ? patch.address.trim() : undefined,
         lat,
         lng,
+        // undefined = tidak diubah; kosong = dikosongkan. Kode tidak sah ditolak di atas.
+        cityCode: patch.cityCode === undefined ? undefined : (patch.cityCode || null),
       });
     } catch (error) {
       return res.status(400).json({ error: error.message });
@@ -818,17 +834,31 @@ function build(config) {
     // `kota` menerima SATU kode atau daftar dipisah koma (karesidenan). Tiap kode
     // divalidasi sendiri-sendiri dengan regex yang sama — daftarnya tidak pernah
     // dipercaya bulat-bulat. Pola ini mengikuti `outlets` di /api/customers/browse.
+    //
+    // ARTI `kota` BERUBAH (2026-10-11): ia memilih DEALER yang TERDAFTAR di kota itu,
+    // bukan pelanggan yang tinggal di sana. Kota -> daftar dealer (dealers.city_code)
+    // -> `dealerCodes`; pelanggan dealer itu tetap ikut walau tinggal di luar kota.
+    // Kolom `city_code` rollup (kota PELANGGAN) tidak lagi dipakai untuk saringan ini.
     const kota = String(q.kota || '');
     const daftar = kota.includes(',')
       ? kota.split(',').map((x) => x.trim()).filter((x) => CITY.test(x)).slice(0, 50)
-      : [];
+      : (CITY.test(kota) ? [kota] : []);
 
-    return {
-      cityCode: CITY.test(kota) ? kota : null,
-      cityCodes: daftar.length ? daftar : null,
-      dealerCode: await dealerFusi(q.dealer),
-      outletCode: OUTLET.test(String(q.pos || '')) ? String(q.pos) : null,
-    };
+    const outletCode = OUTLET.test(String(q.pos || '')) ? String(q.pos) : null;
+
+    // Jenjang kares > kota > dealer > pos: yang PALING SEMPIT menang. Bilah filter ikut
+    // mengisi tingkat di atas pilihan (memilih pos mengisi dealer, kota, dan kares),
+    // jadi permintaan yang membawa pos juga membawa dealer dan kotanya. Pos memakai
+    // mekanisme yang sudah ada (kecamatan jangkauannya) TANPA dikalikan saringan lain —
+    // itu perilaku sebelum filter berjenjang, dan tidak boleh berubah diam-diam.
+    // Dealer yang dipilih juga menentukan dirinya sendiri, jadi kumpulan dealer dari
+    // kota tidak ikut menyaring (kalau ikut, dealer berkota kosong lenyap tanpa sebab).
+    const dealerCode = outletCode ? null : await dealerFusi(q.dealer);
+    const dealerCodes = (!dealerCode && !outletCode && daftar.length)
+      ? await repo.legacyCodesOfCities(daftar)
+      : null;
+
+    return { dealerCodes, dealerCode, outletCode };
   };
 
   api.get('/v1/segmentasi', async (req, res) => {
@@ -1050,7 +1080,8 @@ function build(config) {
   api.get('/v1/cakupan-sumber', async (req, res) => {
     const period = await periodeFusi(req.query);
     const saring = await saringFusi(req.query);
-    const groupBy = saring.cityCode ? 'dealer' : 'kota';
+    // Kota/Kares dipilih (= kumpulan dealer) -> daftar turun jadi dealer-dealernya.
+    const groupBy = saring.dealerCodes ? 'dealer' : 'kota';
 
     if (!period) {
       return res.json({ period: null, groupBy, rows: [], total: 0,

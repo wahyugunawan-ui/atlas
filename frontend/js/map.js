@@ -2,12 +2,14 @@
  * Peta: basemap, lapisan choropleth, batas kabupaten, radius, dan titik penjualan.
  */
 import {
-  ATTRIBUTION, ATTRIBUTION_SATELLITE, BASEMAP_PMTILES, BASEMAP_SATELLITE, KARESIDENAN,
+  ATTRIBUTION, ATTRIBUTION_SATELLITE, BASEMAP_PMTILES, BASEMAP_SATELLITE,
 } from './config.js';
 import { classOf, dealerColor, percentileBreaks, RAMP, COLOR_EMPTY } from './colors.js';
 import { $, bbox, displayCityName, esc, formatNumber, sumBy, toast } from './dom.js';
 import { fetchDistrictCustomers, fetchKpiJarak, fetchTitikPeta } from './api.js';
-import { activeRows, fusionFilterPeta, pageFilters, scopeValue } from './filters.js';
+import {
+  activeRows, fusionFilterPeta, pageFilters, regionDealerCodes, scopeValue,
+} from './filters.js';
 import { circle, EMPTY_COLLECTION } from './geo.js';
 import {
   cincinPerDesa, ikonKotak, pembangkitAcak, sebarDiPoligon, titikPerDesa,
@@ -1188,8 +1190,10 @@ export function setCoverageViewPos(value) {
  * cuma membingungkan.
  */
 export function syncGroupControls() {
-  const dealerAktif = scopeValue('dealer') !== 'ALL';
+  // Pos menang atas dealer: memilih pos ikut mengisi dealernya (filter berjenjang), tapi
+  // yang relevan tetap coverage pos — bukan ring dealernya.
   const posAktif = scopeValue('pos') !== 'ALL';
+  const dealerAktif = scopeValue('dealer') !== 'ALL' && !posAktif;
 
   const ringBox = $('pilihan-ring-dealer');
   const coverBox = $('pilihan-coverage-pos');
@@ -1246,8 +1250,15 @@ export function paintChoropleth(rows) {
   // (KONTRIBUSI_TETAP), dan artinya justru "sama di mana pun" — mengubah satuannya
   // menurut filter akan menghancurkan satu-satunya sifat yang membuatnya berguna.
   const fixed = S.heatmapMode === 'fixed';
+  //
+  // Sejak 2026-10-11 kota dan karesidenan ikut: keduanya kini memilih KUMPULAN DEALER,
+  // jadi baris yang lolos berisi penjualan dealer-dealer itu di kota pelanggan mana pun.
+  // Penjualan yang menyasar kota lain cuma beberapa unit, dan kontribusi % terhadap
+  // total kota-pelanggan dari baris tersaring itu akan menjadikannya 100% — persis cacat
+  // yang diperbaiki untuk dealer/pos di atas.
   const pakaiUnit = !fixed
-    && (scopeValue('dealer') !== 'ALL' || scopeValue('pos') !== 'ALL');
+    && (scopeValue('dealer') !== 'ALL' || scopeValue('pos') !== 'ALL'
+      || scopeValue('kota') !== 'ALL' || pageFilters().kares !== 'ALL');
 
   const kontribusi = pakaiUnit
     ? unitsForRows(rows, S.districtByCode)
@@ -1535,15 +1546,18 @@ function salePointFilter() {
   const clauses = ['all'];
   const f = pageFilters();
 
-  // Kota, dealer, dan pos independen — semuanya di-AND-kan lewat 'all', bukan lagi
-  // if/else-if satu slot.
+  // Kares, kota, dealer, dan pos berjenjang — semua tingkat yang aktif di-AND-kan lewat
+  // 'all'.
   if (f.outletCode !== 'ALL') clauses.push(['==', ['get', 'outlet'], f.outletCode]);
   if (f.dealerCode !== 'ALL') clauses.push(['==', ['get', 'dealer'], f.dealerCode]);
-  if (f.cityCode !== 'ALL') clauses.push(['==', ['get', 'kota'], f.cityCode]);
 
-  if (f.kares !== 'ALL') {
-    clauses.push(['in', ['get', 'kota'], ['literal', KARESIDENAN[f.kares].cities]]);
-  }
+  // Kota/Karesidenan memilih KUMPULAN DEALER yang terdaftar di sana, BUKAN titik yang
+  // jatuh di dalam batas kota itu. Semua titik penjualan dealer-dealer itu tetap tampil,
+  // juga yang berada di kota/karesidenan lain. Prop `kota` pada titik (kota lokasi
+  // penjualan) sengaja tidak dipakai di sini. ['literal', []] cocok dengan tidak ada
+  // titik sama sekali — itu jawaban yang benar kalau tidak ada dealer terdaftar di sana.
+  const dealerWilayah = regionDealerCodes(f);
+  if (dealerWilayah) clauses.push(['in', ['get', 'dealer'], ['literal', dealerWilayah]]);
 
   return clauses.length === 1 ? null : clauses;
 }
@@ -1621,12 +1635,17 @@ export function fitToScope(auto) {
     if (district && district.lat != null) points.push([district.lng, district.lat]);
   });
 
+  // Pos dari dealer-dealer yang terpilih ikut dipas-kan, supaya letak dealernya sendiri
+  // terlihat bersama sebaran pelanggannya (kota/kares: seluruh dealer terdaftar di sana).
   const outlet = scopeValue('pos');
   const dealer = scopeValue('dealer');
+  const wilayah = regionDealerCodes();
+  const dealerWilayah = wilayah ? new Set(wilayah) : null;
   S.outlets.forEach((o) => {
     if (o.lat == null) return;
     const included = outlet !== 'ALL' ? o.code === outlet
-      : dealer !== 'ALL' ? o.dealerCode === dealer : false;
+      : dealer !== 'ALL' ? o.dealerCode === dealer
+        : dealerWilayah ? dealerWilayah.has(o.dealerCode) : false;
     if (included) points.push([o.lng, o.lat]);
   });
 

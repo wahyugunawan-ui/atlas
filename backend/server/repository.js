@@ -410,6 +410,12 @@ async function browseCustomers(filters) {
   // (sama seperti customer_fusion) — penerjemahan dari kode turunan nama dilakukan
   // rutenya lewat legacyDealerCode(), bukan di sini.
   if (f.dealerCode) { where.push('dealer_code = ?'); params.push(f.dealerCode); }
+  // Kumpulan dealer (filter Kota/Karesidenan). Kosong = tidak ada dealer terdaftar di
+  // sana -> hasil kosong, BUKAN "tanpa saringan" yang menampilkan seluruh konsumen.
+  if (Array.isArray(f.dealerCodes)) {
+    if (f.dealerCodes.length) { where.push('dealer_code = ANY(?)'); params.push(f.dealerCodes); }
+    else where.push('FALSE');
+  }
   if (f.query) {
     where.push("(name ILIKE ? ESCAPE '\\' OR address ILIKE ? ESCAPE '\\')");
     const like = '%' + escapeLike(f.query) + '%';
@@ -1263,6 +1269,7 @@ async function listOutletsForImport() {
 async function listDealers() {
   return store.all(store.db(), `
     SELECT d.dealer_code AS code, d.dealer_name AS name, d.address, d.lat, d.lng,
+           d.city_code AS "cityCode",
            COUNT(o.outlet_code) FILTER (WHERE NOT o.is_dealer_proxy) AS "outletCount"
     FROM dealers d
     LEFT JOIN outlets o ON o.dealer_code = d.dealer_code
@@ -1287,15 +1294,17 @@ async function createDealer(data) {
   if (ada) throw new Error(`Nama ${name} sudah dipakai oleh dealer "${ada.dealer_name}".`);
 
   await store.run(db, `
-    INSERT INTO dealers (dealer_code, dealer_name, address, lat, lng, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?)`,
+    INSERT INTO dealers (dealer_code, dealer_name, address, lat, lng, city_code, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)`,
   [code, name, data.address ? String(data.address).trim() : null,
     data.lat === undefined || data.lat === null ? null : data.lat,
     data.lng === undefined || data.lng === null ? null : data.lng,
+    data.cityCode || null,
     new Date().toISOString()]);
 
   return store.one(db,
-    'SELECT dealer_code AS code, dealer_name AS name, address, lat, lng FROM dealers WHERE dealer_code = ?',
+    `SELECT dealer_code AS code, dealer_name AS name, address, lat, lng,
+            city_code AS "cityCode" FROM dealers WHERE dealer_code = ?`,
     [code]);
 }
 
@@ -1324,18 +1333,38 @@ async function updateDealer(code, patch) {
   }
 
   await store.run(db, `
-    UPDATE dealers SET dealer_name = ?, address = ?, lat = ?, lng = ?, updated_at = ?
+    UPDATE dealers SET dealer_name = ?, address = ?, lat = ?, lng = ?, city_code = ?,
+                       updated_at = ?
     WHERE dealer_code = ?`, [
     name,
     patch.address === undefined ? current.address : patch.address,
     patch.lat === undefined ? current.lat : patch.lat,
     patch.lng === undefined ? current.lng : patch.lng,
+    // undefined = tidak diubah; null/'' = dikosongkan (dealer keluar dari filter Kota).
+    patch.cityCode === undefined ? current.city_code : (patch.cityCode || null),
     new Date().toISOString(), code,
   ]);
 
   return store.one(db,
-    'SELECT dealer_code AS code, dealer_name AS name, address, lat, lng FROM dealers WHERE dealer_code = ?',
+    `SELECT dealer_code AS code, dealer_name AS name, address, lat, lng,
+            city_code AS "cityCode" FROM dealers WHERE dealer_code = ?`,
     [code]);
+}
+
+/**
+ * Kode numerik Excel (`legacy_code`) seluruh dealer yang TERDAFTAR di salah satu kota.
+ *
+ * Inilah terjemahan filter Kota/Karesidenan di panel Fusion: rollup menyimpan kode
+ * numerik, dan yang dipilih adalah KUMPULAN DEALER menurut kota asalnya, bukan kota
+ * pelanggannya. Dealer tanpa legacy_code (dibuat manual) tidak punya data di rollup,
+ * jadi memang tidak ada yang bisa disaring untuknya.
+ */
+async function legacyCodesOfCities(cityCodes) {
+  if (!cityCodes || !cityCodes.length) return [];
+  const rows = await store.all(store.db(),
+    `SELECT legacy_code AS "legacyCode" FROM dealers
+     WHERE city_code = ANY(?) AND legacy_code IS NOT NULL`, [cityCodes]);
+  return rows.map((r) => r.legacyCode);
 }
 
 /** Tolak kalau masih ada pos yang menunjuk dealer ini — pindahkan dulu manual. */
@@ -1533,6 +1562,22 @@ const POS_FILTER = `r.village_code IN (
   SELECT village_code FROM villages WHERE district_code IN (
     SELECT district_code FROM coverage WHERE outlet_code = ?))`;
 
+/**
+ * Saringan KUMPULAN DEALER (kode numerik rollup) — hasil filter Kota/Karesidenan.
+ *
+ * Kota/Karesidenan di sini berarti "dealer yang TERDAFTAR di wilayah itu", bukan "pelanggan
+ * yang tinggal di wilayah itu": pelanggan sebuah dealer boleh berada di kota mana pun dan
+ * tetap ikut terhitung. Karena itu yang disaring `dealer_code`, BUKAN `city_code` rollup
+ * (itu kota pelanggan). Kumpulan KOSONG berarti tidak ada dealer terdaftar di wilayah itu:
+ * hasilnya harus kosong, bukan "tanpa saringan" yang diam-diam menampilkan semuanya.
+ */
+function addDealerSet(where, params, filter) {
+  if (!filter || !Array.isArray(filter.dealerCodes)) return;
+  if (!filter.dealerCodes.length) { where.push('FALSE'); return; }
+  where.push(`r.dealer_code IN (${filter.dealerCodes.map(() => '?').join(', ')})`);
+  params.push(...filter.dealerCodes);
+}
+
 /** Susun WHERE dari penyaring yang benar-benar diisi. */
 function fusionWhere(filter) {
   const where = ['r.period = ?'];
@@ -1543,6 +1588,7 @@ function fusionWhere(filter) {
     params.push(...filter.cityCodes);
   }
   if (filter.dealerCode) { where.push('r.dealer_code = ?'); params.push(filter.dealerCode); }
+  addDealerSet(where, params, filter);
   if (filter.outletCode) { where.push(POS_FILTER); params.push(filter.outletCode); }
   if (filter.segment) { where.push('r.segment = ?'); params.push(filter.segment); }
   return { text: where.join(' AND '), params };
@@ -1638,6 +1684,7 @@ async function fusionMatrix(period, filter) {
     where.push('r.dealer_code = ?');
     params.push(filter.dealerCode);
   }
+  addDealerSet(where, params, filter);
   if (filter && filter.outletCode) { where.push(POS_FILTER); params.push(filter.outletCode); }
 
   return store.all(store.db(), `
@@ -1670,6 +1717,7 @@ async function fusionOverlap(period, filter) {
     where.push('r.dealer_code = ?');
     params.push(filter.dealerCode);
   }
+  addDealerSet(where, params, filter);
   if (filter && filter.outletCode) { where.push(POS_FILTER); params.push(filter.outletCode); }
 
   return store.all(store.db(), `
@@ -1733,6 +1781,7 @@ async function fusionSourceCoverage(period, filter, groupBy) {
     where.push('r.dealer_code = ?');
     params.push(filter.dealerCode);
   }
+  addDealerSet(where, params, filter);
   if (filter && filter.outletCode) { where.push(POS_FILTER); params.push(filter.outletCode); }
 
   const hitung = `
@@ -1790,6 +1839,7 @@ async function fusionVillagePoints(period, filter) {
     where.push('r.dealer_code = ?');
     params.push(filter.dealerCode);
   }
+  addDealerSet(where, params, filter);
   if (filter && filter.outletCode) { where.push(POS_FILTER); params.push(filter.outletCode); }
   // Kelurahan tidak diketahui tidak bisa digambar di peta sama sekali.
   where.push("r.village_code <> ''");
@@ -1834,6 +1884,7 @@ async function fusionByCity(period, filter) {
     where.push('r.dealer_code = ?');
     params.push(filter.dealerCode);
   }
+  addDealerSet(where, params, filter);
   if (filter && filter.outletCode) { where.push(POS_FILTER); params.push(filter.outletCode); }
 
   return store.all(store.db(), `
@@ -1866,6 +1917,7 @@ async function fusionByDealer(period, filter) {
     where.push('r.dealer_code = ?');
     params.push(filter.dealerCode);
   }
+  addDealerSet(where, params, filter);
   if (filter && filter.outletCode) {
     where.push(POS_FILTER);
     params.push(filter.outletCode);
@@ -2037,6 +2089,7 @@ module.exports = {
   fusionDistrictCustomers,
   latestFusionPeriod, fusionTotals, fusionRows, fusionByCity, fusionByDealer,
   fusionEngineDetail, setAppConfig, fusionMatrix, fusionOverlap, legacyDealerCode,
+  legacyCodesOfCities,
   fusionSourceCoverage, fusionVillagePoints,
   summary, unmatched, imports, periodSummary, periodDataSummary,
   serviceVisits, deliveryPings, deleteSourcePeriod,

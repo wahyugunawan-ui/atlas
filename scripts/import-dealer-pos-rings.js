@@ -420,14 +420,15 @@ async function main(config, dealerPosFile, ringFile, noReset) {
   let dealerDitulis = 0;
   for (const d of dealerSheet.rows) {
     await store.run(db, `
-      INSERT INTO dealers (dealer_code, dealer_name, address, lat, lng, legacy_code, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO dealers (dealer_code, dealer_name, address, lat, lng, legacy_code,
+                           city_code, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (dealer_code) DO UPDATE SET
         dealer_name = EXCLUDED.dealer_name, address = EXCLUDED.address,
         lat = EXCLUDED.lat, lng = EXCLUDED.lng, legacy_code = EXCLUDED.legacy_code,
-        updated_at = EXCLUDED.updated_at`,
+        city_code = EXCLUDED.city_code, updated_at = EXCLUDED.updated_at`,
     [d.dealerCode, d.name, d.address, d.lat, d.lng, d.numericCode || null,
-      new Date().toISOString()]);
+      d.cityCode || null, new Date().toISOString()]);
     dealerDitulis++;
   }
 
@@ -554,6 +555,11 @@ async function main(config, dealerPosFile, ringFile, noReset) {
     daftarRingkas(dealerSheet.tanpaKoordinat));
   console.log(`  kabupaten tidak dikenal            : ${dealerSheet.kabupatenTakDikenal.length}` +
     daftarRingkas(dealerSheet.kabupatenTakDikenal));
+  // Dealer tanpa kabupaten tidak akan muncul di filter Kota/Karesidenan sama sekali,
+  // jadi jumlahnya wajib terlihat di sini (bukan hilang diam-diam).
+  const tanpaKota = dealerSheet.rows.filter((d) => !d.cityCode).map((d) => d.name);
+  console.log(`  dealer TANPA kota (tak masuk filter Kota/Kares) : ${tanpaKota.length}` +
+    daftarRingkas(tanpaKota));
   console.log('');
   console.log(`  === MASTER POS (Fase B) ===`);
   console.log(`  pos ditulis                       : ${posDitulis}`);
@@ -595,6 +601,9 @@ async function main(config, dealerPosFile, ringFile, noReset) {
 }
 
 module.exports = main;
+// Dipakai scripts/backfill-dealer-city.js: membaca kabupaten dealer dari Excel TANPA
+// menulis apa pun selain dealers.city_code.
+module.exports.readDealerSheet = readDealerSheet;
 
 if (require.main === module) {
   main().catch((error) => {

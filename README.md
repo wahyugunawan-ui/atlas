@@ -167,7 +167,13 @@ npm run export-geo         segarkan berkas peta untuk browser
 npm run demo-excel -- <tujuan.xlsx>   berkas Excel dummy untuk latihan/demo
 npm run seed-regions       isi ulang tabel kelurahan dan poligonnya
 npm run seed-coverage      hitung ulang SEMUA rasio jangkauan
+npm run backfill-dealer-city -- "<Dealer & POS.xlsx>"   isi kota asal dealer (dasar filter Kota/Kares)
 ```
+
+Filter **Kota** dan **Karesidenan** memilih *dealer yang terdaftar* di wilayah itu, bukan
+pelanggan yang tinggal di sana: seluruh penjualan dealer-dealer itu ikut, juga yang
+pelanggannya di luar kota. Dasarnya kolom "Kabupaten" di Excel Dealer & POS, yang disimpan
+di `dealers.city_code`. Dealer yang kotanya tidak terbaca tidak muncul di filter Kota/Kares.
 
 `--konsumen` menyimpan nama dan alamat konsumen ke database `astra_customers`. Tanpa itu,
 tidak ada satu pun PII yang masuk ke server.

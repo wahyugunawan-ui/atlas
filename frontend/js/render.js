@@ -4,10 +4,9 @@
 import {
   COLOR_EMPTY, RAMP, classRanges, dealerColor, percentileBreaks,
 } from './colors.js';
-import { KARESIDENAN } from './config.js';
 import { $, esc, formatNumber, formatPercent, sumBy } from './dom.js';
 import {
-  activeRows, applyScope, clearScope, pageFilters, scopeLabel, scopeValue,
+  activeRows, applyScope, clearScope, dealerCityOf, pageFilters, scopeLabel, scopeValue,
 } from './filters.js';
 import {
   businessReferenceGroup, contributionsByOutlet, contributionsByDistrict,
@@ -838,17 +837,14 @@ export function dealerCardHtml(compact) {
   // dipersempit filter pos. Yang ditanyakan kartu ini memang rekap dealernya
   // (AVG Kontribusi/Posisi Relatif/Acuan Bisnis tetap level dealer walau lagi
   // melihat satu pos tertentu — cuma pecahan ring/coverage di bawah yang beda).
+  // Kota/Karesidenan tidak menyaring di sini: keduanya memilih dealer mana yang masuk,
+  // dan dealer ini sudah dipilih — seluruh penjualannya ikut (lihat openDealerDetail()).
   const f = pageFilters();
-  const city = f.cityCode;
   const rows = S.sales.filter((r) => {
     if (r.dealer !== code) return false;
     if (f.from !== 'ALL' && r.period < f.from) return false;
     if (f.to !== 'ALL' && r.period > f.to) return false;
-    const district = S.districtByCode[r.district];
-    if (!district) return false;
-    if (city !== 'ALL' && district.cityCode !== city) return false;
-    if (f.kares !== 'ALL' && !KARESIDENAN[f.kares].cities.includes(district.cityCode)) return false;
-    return true;
+    return Boolean(S.districtByCode[r.district]);
   });
 
   const name = S.dealerNames[code] || code;
@@ -995,16 +991,23 @@ export const MODES = {
 export function totalsByMode(rows, mode) {
   if (mode === 'dealer') return sumBy(rows, 'dealer');
   if (mode === 'pos') return sumBy(rows, 'outlet');
+  // Peringkat KOTA = kota ASAL DEALER (dealers.city_code), bukan kota pelanggan — sama
+  // dengan arti filter Kota. Dengan begitu total satu blok persis sama dengan angka yang
+  // muncul begitu blok itu diklik (filter Kota = seluruh penjualan dealer di kota itu).
+  // Dealer tanpa kota tercatat dikumpulkan di NO_CITY dan tidak bisa diklik.
   const out = {};
   rows.forEach((r) => {
-    const district = S.districtByCode[r.district];
-    if (district) out[district.cityCode] = (out[district.cityCode] || 0) + r.units;
+    const kota = dealerCityOf(r.dealer) || NO_CITY;
+    out[kota] = (out[kota] || 0) + r.units;
   });
   return out;
 }
 
+/** Kunci blok treemap untuk dealer yang kotanya tidak tercatat. Bukan kode kota sungguhan. */
+export const NO_CITY = '_NO_CITY';
+
 export function entityName(mode, code) {
-  if (mode === 'kota') return S.cityNames[code] || code;
+  if (mode === 'kota') return code === NO_CITY ? 'Dealer tanpa kota' : (S.cityNames[code] || code);
   if (mode === 'dealer') return S.dealerNames[code] || code;
   return (S.outletByCode[code] || {}).name || code;
 }
@@ -1073,7 +1076,12 @@ export function renderTreemap(rows) {
   S.treemapChart.render();
 }
 
-export function selectEntity(mode, code) { applyScope(mode, code); }
+export function selectEntity(mode, code) {
+  // Blok "Dealer tanpa kota" bukan kota sungguhan — memilihnya sebagai filter Kota
+  // menghasilkan layar kosong tanpa penjelasan.
+  if (mode === 'kota' && code === NO_CITY) return;
+  applyScope(mode, code);
+}
 
 /* ==========================================================================
    POPUP TREEMAP

@@ -114,6 +114,13 @@ CREATE TABLE IF NOT EXISTS dealers (
 -- lewat halaman Master Dealer.
 ALTER TABLE dealers ADD COLUMN IF NOT EXISTS legacy_code VARCHAR(32);
 
+-- Kota/kabupaten ASAL dealer (kode BPS bertitik, mis. '34.04'), dari kolom "Kabupaten"
+-- sheet Dealer di Excel Dealer & POS. Ini yang menentukan dealer mana saja yang masuk
+-- filter Kota/Karesidenan: filter itu memilih KUMPULAN DEALER, bukan lokasi pelanggan.
+-- NULL = kabupaten dealer tidak terbaca; dealer itu tidak muncul di filter Kota/Kares
+-- mana pun dan dilaporkan oleh importer, bukan ditebak dari koordinat.
+ALTER TABLE dealers ADD COLUMN IF NOT EXISTS city_code VARCHAR(16);
+
 CREATE TABLE IF NOT EXISTS outlets (
   outlet_code VARCHAR(32) NOT NULL PRIMARY KEY,     -- kode POS fisik ("Kode POS OCEAN"),
                                                      -- ATAU legacy_code dealer kalau

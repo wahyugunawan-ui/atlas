@@ -175,10 +175,12 @@ export function renderAll() {
   // slot per lokasi, tapi label dan aksinya ikut scope yang sedang aktif. Dealer
   // scope menang kalau kebetulan keduanya aktif (tidak akan terjadi sejak scope
   // kota/dealer/pos saling eksklusif, tapi urutan pengecekan tetap eksplisit).
+  // Pos menang atas dealer: memilih pos ikut mengisi dealernya (filter berjenjang), tapi
+  // yang disunting tetap coverage pos itu — sama dengan startGroupEdit() di rings.js.
   const dealerScope = scopeValue('dealer') !== 'ALL';
   const posScope = scopeValue('pos') !== 'ALL';
   const bisaEditGroup = dealerScope || posScope;
-  const labelGroup = dealerScope ? 'Edit ring' : 'Edit coverage';
+  const labelGroup = posScope ? 'Edit coverage' : 'Edit ring';
   $('btn-ring-peta').classList.toggle('hidden', !bisaEditGroup);
   $('btn-ring-peta').querySelector('span').textContent = labelGroup;
 
@@ -201,16 +203,10 @@ export function renderAll() {
   } else if (S.panelView && S.panelView.kind === 'city') {
     openCitySummary(S.panelView.code);
   } else if (S.selectedDistrict) {
-    // Kalau kotanya sendiri berubah dan kecamatan yang sedang dibuka sudah tidak
-    // termasuk kota aktif, panel diganti jadi ringkasan kota itu — bukan tetap
-    // menampilkan kecamatan yang sudah di luar cakupan filter (aturan spek).
-    const district = S.districtByCode[S.selectedDistrict];
-    const cityAktif = scopeValue('kota');
-    if (district && cityAktif !== 'ALL' && district.cityCode !== cityAktif) {
-      openCitySummary(cityAktif);
-    } else {
-      openDistrictDetail(S.selectedDistrict);
-    }
+    // Dulu, kalau kecamatan yang sedang dibuka berada di luar kota aktif, panelnya
+    // diganti ringkasan kota. Sejak 2026-10-11 itu SALAH: filter Kota memilih DEALER
+    // terdaftar di kota itu, dan pelanggan mereka sah berada di kecamatan kota lain.
+    openDistrictDetail(S.selectedDistrict);
   }
 
   // Sejak 2026-09-14: peta ikut "Fit" otomatis (auto=true — animasi 900ms yang

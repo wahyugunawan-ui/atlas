@@ -10,7 +10,7 @@ import {
 } from './api.js';
 import { dealerColor, percentileBreaks } from './colors.js';
 import {
-  CUSTOMER_PANEL_LIMIT, KARESIDENAN, PROVINCE_NAMES, SHOW_ENGINE_NUMBER, SHOW_HOUSE_PHOTO,
+  CUSTOMER_PANEL_LIMIT, PROVINCE_NAMES, SHOW_ENGINE_NUMBER, SHOW_HOUSE_PHOTO,
   TABLE_ROW_LIMIT,
 } from './config.js';
 import {
@@ -18,7 +18,8 @@ import {
 } from './dom.js';
 import { syncFilterBar } from './filter-bar.js';
 import {
-  activeRows, clearScope, dealerBreakdown, pageFilters, scopeValue, setScope,
+  activeRows, clearScope, dealerBreakdown, dealerCityOf, pageFilters, regionCityCodes,
+  regionDealerCodes, scopeValue, setScope,
 } from './filters.js';
 // hentikanLiveFusion IKUT di-import. Sampai 2026-09-18 tidak — switchTab()
 // memanggilnya tanpa pernah mengimpornya, jadi SETIAP pindah ke halaman non-Fusion
@@ -114,18 +115,16 @@ export function openDealerDetail(dealerCode) {
   // Baris dealer ini pada periode dan wilayah aktif — TIDAK dipersempit filter pos,
   // sama seperti kartu dealernya. Kalau berbeda, angka di panel dan di kartu tidak
   // akan bersambung dan tidak ada yang tahu mana yang benar.
+  //
+  // Kota/Karesidenan TIDAK menyaring lagi di sini: keduanya memilih dealer mana yang
+  // masuk, dan dealer ini sudah dipilih. Seluruh penjualannya ikut, juga yang
+  // pelanggannya di luar kota/karesidenan dealer itu.
   const f = pageFilters();
-  const city = f.cityCode;
-  const kares = f.kares;
   const rows = S.sales.filter((r) => {
     if (r.dealer !== dealerCode) return false;
     if (f.from !== 'ALL' && r.period < f.from) return false;
     if (f.to !== 'ALL' && r.period > f.to) return false;
-    const district = S.districtByCode[r.district];
-    if (!district) return false;
-    if (city !== 'ALL' && district.cityCode !== city) return false;
-    if (kares !== 'ALL' && !KARESIDENAN[kares].cities.includes(district.cityCode)) return false;
-    return true;
+    return Boolean(S.districtByCode[r.district]);
   });
 
   const cities = dealerBreakdown(rows);
@@ -195,12 +194,18 @@ export function openCitySummary(cityCode) {
   S.selectedDistrict = null;
   if (S.layersReady) S.map.setFilter('kec-terpilih', ['==', ['get', 'kode'], '']);
 
-  const rows = activeRows().filter((r) => {
-    const district = S.districtByCode[r.district];
-    return district && district.cityCode === cityCode;
+  // Ringkasan KUMPULAN DEALER yang terdaftar di kota ini: seluruh penjualan mereka,
+  // di kecamatan mana pun pelanggannya berada (bukan hanya yang di dalam kota ini).
+  // Karena itu tidak lewat groupByCity(), yang mengelompokkan menurut kota pelanggan.
+  const rows = activeRows().filter((r) => dealerCityOf(r.dealer) === cityCode);
+  const kota = { total: 0, districts: new Map() };
+  const dealerAda = new Set();
+  rows.forEach((r) => {
+    kota.total += r.units;
+    kota.districts.set(r.district, (kota.districts.get(r.district) || 0) + r.units);
+    dealerAda.add(r.dealer);
   });
-  const perCity = groupByCity(rows, S.districtByCode);
-  const kota = perCity.get(cityCode) || { total: 0, districts: new Map() };
+  const dealerTerdaftar = S.dealers.filter((d) => d.cityCode === cityCode).length;
   const districtCount = kota.districts.size;
   const avgContribution = districtCount
     ? [...kota.districts.entries()]
@@ -221,11 +226,14 @@ export function openCitySummary(cityCode) {
 
   $('kelurahanDetailBack').innerHTML = '';
   $('kelurahanDetailTitle').textContent = S.cityNames[cityCode] || cityCode;
-  $('kelurahanDetailMeta').textContent = `${formatNumber(districtCount)} kecamatan berpenjualan · ${cityCode}`;
+  $('kelurahanDetailMeta').textContent =
+    `${formatNumber(dealerTerdaftar)} dealer terdaftar · ${formatNumber(dealerAda.size)} berpenjualan · ` +
+    `${formatNumber(districtCount)} kecamatan · ${cityCode}`;
 
   $('kelurahanDetailList').innerHTML =
     `<div class="grid grid-cols-2 gap-2 pb-3 border-b border-slate-200">` +
-    `<div><div class="text-[10px] uppercase font-bold text-slate-400">Total Penjualan</div>` +
+    `<div><div class="text-[10px] uppercase font-bold text-slate-400" ` +
+    'title="Total penjualan seluruh dealer yang terdaftar di kota ini, di mana pun pelanggannya tinggal.">Total Penjualan Dealer</div>' +
     `<div class="text-lg font-extrabold text-slate-900 mono">${esc(formatNumber(kota.total))}</div></div>` +
     `<div><div class="text-[10px] uppercase font-bold text-slate-400">Jumlah Kecamatan</div>` +
     `<div class="text-lg font-extrabold text-slate-900 mono">${esc(formatNumber(districtCount))}</div></div>` +
@@ -547,10 +555,15 @@ async function loadDistrictCustomers(code) {
 
     const outletFilter = scopeValue('pos');
     const dealerFilter = scopeValue('dealer');
+    // Kota/Karesidenan = kumpulan dealer terdaftar di sana; konsumen dealer lain yang
+    // kebetulan tinggal di kecamatan ini tidak ikut.
+    const wilayah = regionDealerCodes();
+    const dealerWilayah = wilayah ? new Set(wilayah) : null;
     const list = customers.filter((c) => {
       const outlet = S.outletByCode[c.outlet] || {};
       if (outletFilter !== 'ALL' && c.outlet !== outletFilter) return false;
       if (dealerFilter !== 'ALL' && outlet.dealerCode !== dealerFilter) return false;
+      if (dealerWilayah && !dealerWilayah.has(outlet.dealerCode)) return false;
       return true;
     });
 
@@ -990,17 +1003,18 @@ export function renderDistrictTable() {
   const rows = activeRows('kelurahan');
   const perDistrict = sumBy(rows, 'district');
 
-  // Kalau lingkupnya dealer atau pos, yang ditampilkan adalah kecamatan yang BENAR-
-  // BENAR disentuh dealer atau pos itu — bukan seluruh kecamatan dengan angka nol.
-  const disentuh = f.dealerCode !== 'ALL' || f.outletCode !== 'ALL'
+  // Kalau ada filter Karesidenan/Kota/Dealer/Pos, yang ditampilkan adalah kecamatan yang
+  // BENAR-BENAR disentuh penjualan dealer-dealer terpilih — bukan seluruh kecamatan
+  // dengan angka nol, dan bukan kecamatan yang kebetulan berada di kota/karesidenan itu
+  // (Kota/Kares memilih DEALER, bukan lokasi pelanggan; pelanggannya bisa di luar kota).
+  const disentuh = f.kares !== 'ALL' || f.cityCode !== 'ALL'
+    || f.dealerCode !== 'ALL' || f.outletCode !== 'ALL'
     ? new Set(rows.map((r) => r.district)) : null;
 
   // Sudah datang terurut dari server (provinsi -> kabupaten -> kecamatan). Diminta
   // di meeting: urutan menurut volume membuat kabupaten berselang-seling dan tidak
   // bisa ditelusuri.
   const list = S.districts.filter((v) =>
-    (f.cityCode === 'ALL' || v.cityCode === f.cityCode) &&
-    (f.kares === 'ALL' || KARESIDENAN[f.kares].cities.includes(v.cityCode)) &&
     (!disentuh || disentuh.has(v.code)) &&
     (!query || v.name.toLowerCase().includes(query) || v.code.includes(query)));
 
@@ -1466,7 +1480,8 @@ export async function renderCustomerTable(keepOffset) {
   const filters = {
     periodFrom: f.from,
     periodTo: f.to,
-    city: f.cityCode,
+    // Kota/Kares memilih DEALER terdaftar di sana, bukan tempat tinggal konsumen.
+    dealerCities: regionCityCodes(f),
     query: ($('mkon-search').value || '').trim(),
     // DEALER langsung. Halaman ini membaca customer_ktp sejak 2026-09-18, dan tabel
     // itu punya kolom dealer_code sendiri — jadi terjemahan "dealer -> daftar pos

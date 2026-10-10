@@ -311,6 +311,52 @@ cuma perluasan ke Sulawesi ke timur.
 
 ## Selesai
 
+### Filter Kota/Karesidenan = kumpulan dealer terdaftar; filter berjenjang (2026-10-11)
+
+Belum di-commit. **53/53 berkas tes** di laptop ini (dua dari tiga tes baru
+dijalankan penuh; `dealer-region` dan `backfill-dealer-city` butuh PostgreSQL).
+Alasan, alternatif, dan batas keputusan ada di DECISIONS 2026-10-11.
+
+- `dealers.city_code` (kolom baru) diisi importer dari kolom "Kabupaten" Excel Dealer &
+  POS. Dibawa di `/api/summary` (`dealers[].cityCode`), bisa disunting lewat
+  `PUT /api/dealers/:code`.
+- Kota/Kares kini memilih **dealer yang terdaftar** di wilayah itu dan menampilkan seluruh
+  penjualannya, juga yang pelanggannya di luar wilayah: `activeRows()`, titik penjualan
+  di peta, panel dealer/kota/kecamatan, treemap Peringkat Kota, tabel Master Kecamatan,
+  marker dealer/pos, Data Konsumen (`dealerCities`), dan seluruh panel + titik Fusion
+  (`saringFusi` → `dealerCodes` → `addDealerSet()` di tujuh penyusun WHERE).
+- Filter berjenjang kares → kota → dealer → pos, dua arah, dropdown ikut menyempit.
+- Tes baru `dealer-region.test.js`; `filters.test.js` ditulis ulang; `import.test.js` +
+  `dealerCodes`. Diuji mutasi: 5 mutan `filters.js`, 5 mutan `repository.js`, 5 mutan
+  `routes.js`, semuanya merah.
+
+- `npm run backfill-dealer-city -- "<Dealer & POS.xlsx>"` (baru, dengan tes): mengisi
+  HANYA `dealers.city_code`; nama/alamat/koordinat/pos/ring tidak disentuh. Dijalankan di
+  DB laptop ini dengan `C:\astra-data\sumber\Dealer & POS (dgn koordinat dealer).xlsx`:
+  **78 dari 78 dealer terisi**, 14 kota, nol kabupaten tak terbaca.
+- Diverifikasi pada data sungguhan (18.915 unit, Agustus 2026) memakai modul `filters.js`
+  yang sama dengan browser: jumlah unit seluruh kota **= total tanpa filter** (tiap unit
+  terhitung tepat sekali); Kota Yogyakarta 1.621 unit (cara lama 851) dan Sleman 3.554
+  (cara lama 2.868), dengan 1.276 dan 1.517 unit di antaranya pelanggannya di luar kota itu.
+
+**Belum dilakukan / dicatat apa adanya:**
+- **Di VPS (dan DB mana pun yang dealernya sudah ada sebelum kolom ini)**, `city_code`
+  NULL sampai `npm run backfill-dealer-city` dijalankan dengan Excel Dealer & POS. Sebelum
+  itu semua dealer tanpa kota dan filter Kota/Karesidenan menampilkan kosong. **Belum
+  dijalankan di VPS.**
+- **Ditemukan, belum diperbaiki:** membaca Excel Dealer & POS ASLI (21 MB, semua sheet)
+  dengan `exceljs` kehabisan memori di Node bawaan (`heap out of memory` setelah ~60 dtk)
+  — berlaku juga untuk `import-dealer-pos-rings.js`. Jalan keluar yang dipakai di sini:
+  salinan ringan di `C:\astra-data\sumber\`. Alternatif: `node --max-old-space-size=6144`.
+- Master Dealer belum punya kolom/isian kota di layar (hanya lewat API atau impor ulang).
+- Tabel Lokasi Servis dan Pengiriman tetap menyaring menurut lokasi (tidak punya
+  hubungan ke dealer). Kontribusi % di panel kecamatan tetap relatif terhadap total
+  kota-lokasi dari baris tersaring.
+- Tampilan di browser (dropdown berjenjang, marker diredupkan, label panel) **belum
+  dilihat**; yang diuji hanya logika murni, SQL, dan rute HTTP.
+- Entri ROADMAP/DECISIONS yang menyebut "kota/dealer/pos eksklusif" atau "kares mandiri"
+  sengaja tidak ditulis ulang; yang berlaku adalah entri ini.
+
 ### Satuan analisis pindah ke kecamatan; batas desa tinggal referensi (2026-10-10)
 
 Belum di-commit. **51/51 berkas tes**; satu tes baru: `district-shapes.test.js`. Alasan dan

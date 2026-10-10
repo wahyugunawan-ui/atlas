@@ -7,18 +7,32 @@
  */
 import { dealerColor } from './colors.js';
 import { $, esc, formatNumber, sumBy } from './dom.js';
-import { activeRows, applyScope, clearScope, scopeValue, splitByCoverage } from './filters.js';
+import {
+  activeRows, applyScope, clearScope, regionDealerCodes, scopeValue, splitByCoverage,
+} from './filters.js';
 import { S } from './state.js';
+
+/**
+ * Himpunan dealer yang "dalam fokus" di peta, atau null kalau tidak ada filter wilayah
+ * sama sekali. Dealer/pos terpilih -> dealer itu saja; kalau tidak, dealer yang
+ * terdaftar di Kota/Karesidenan terpilih. Selain himpunan ini diredupkan.
+ */
+function focusDealers() {
+  const posFilter = scopeValue('pos');
+  const focusDealer = posFilter !== 'ALL'
+    ? (S.outletByCode[posFilter] || {}).dealerCode : scopeValue('dealer');
+  if (focusDealer && focusDealer !== 'ALL') return new Set([focusDealer]);
+  const wilayah = regionDealerCodes();
+  return wilayah ? new Set(wilayah) : null;
+}
 
 export function drawMarkers() {
   S.markers.forEach((m) => m.remove());
   S.markers = [];
 
   const perOutlet = sumBy(activeRows(), 'outlet');
-  const dealerFilter = scopeValue('dealer');
   const posFilter = scopeValue('pos');
-  const focusDealer = posFilter !== 'ALL'
-    ? (S.outletByCode[posFilter] || {}).dealerCode : dealerFilter;
+  const focus = focusDealers();
 
   S.outlets.forEach((outlet) => {
     if (outlet.lat == null) return;
@@ -26,8 +40,8 @@ export function drawMarkers() {
     // Tiga tingkat, bukan dua: pos terpilih penuh, saudara sedealer tetap berwarna
     // tapi lebih kecil, sisanya abu. Waktu menekan satu pos, pos lain milik dealer
     // yang sama tetap harus kelihatan.
-    const sameDealer = focusDealer !== 'ALL' && outlet.dealerCode === focusDealer;
-    const grey = focusDealer !== 'ALL' && !sameDealer;
+    const sameDealer = Boolean(focus) && focus.has(outlet.dealerCode);
+    const grey = Boolean(focus) && !sameDealer;
     const medium = sameDealer && posFilter !== 'ALL' && !selected;
 
     const el = document.createElement('div');
@@ -62,6 +76,7 @@ export function drawDealerMarkers() {
   S.dealerMarkers = [];
 
   const perDealer = sumBy(activeRows(), 'dealer');
+  const focus = focusDealers();
   const dealerFilter = scopeValue('dealer');
   const posFilter = scopeValue('pos');
   const focusDealer = posFilter !== 'ALL'
@@ -69,8 +84,10 @@ export function drawDealerMarkers() {
 
   S.dealers.forEach((dealer) => {
     if (dealer.lat == null) return;
-    const selected = focusDealer === dealer.code;
-    const grey = focusDealer !== 'ALL' && !selected;
+    // "terpilih" hanya untuk SATU dealer yang dipilih langsung; dealer anggota
+    // kota/karesidenan terpilih tampil berwarna biasa, sisanya diredupkan.
+    const selected = focusDealer !== 'ALL' && focusDealer === dealer.code;
+    const grey = Boolean(focus) && !focus.has(dealer.code);
 
     const el = document.createElement('div');
     el.className = 'marker-outlet dealer' + (grey ? ' abu' : '') + (selected ? ' terpilih' : '');

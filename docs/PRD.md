@@ -224,7 +224,7 @@ halaman. Ditambahkan 2026-08-29 atas permintaan tim menjelang presentasi HO.
 | KF-FILTER-5 | Ujung rentang yang menyilang diseret, bukan ditolak — isian tidak pernah jadi jalan buntu | `test/filters.test.js` |
 | KF-FILTER-11 | Memilih tanda hubung berarti "tanpa batas di sisi itu", bukan hasil kosong | `test/filters.test.js` |
 | KF-FILTER-13 | Daftar tahun tidak dibatasi periode yang sudah diimpor | `test/page.test.js` |
-| KF-FILTER-6 | Periode, provinsi, kabupaten, dealer, dan pos **semuanya independen** dan di-AND-kan — sejak 2026-08-30, bukan lagi hanya satu dari kabupaten/dealer/pos yang aktif | `test/filters.test.js` |
+| KF-FILTER-6 | Karesidenan, kota, dealer, dan pos **berjenjang dua arah** (sejak 2026-10-11): memilih yang kecil mengisi yang besar, memilih yang besar mempersempit yang kecil. Kota/Karesidenan memilih **kumpulan dealer yang terdaftar** di wilayah itu (`dealers.city_code`) dan menampilkan SELURUH penjualan mereka, juga yang pelanggannya di luar wilayah itu | `test/filters.test.js`, `test/dealer-region.test.js` |
 | KF-FILTER-7 | Memilih ulang nilai yang sama mematikan SLOT ITU SAJA, lewat dropdown maupun klik di peta — slot lain tidak ikut terpengaruh | `test/filters.test.js` |
 | KF-FILTER-8 | Rentang periode berlaku sampai ke database untuk halaman Data Konsumen | `test/import.test.js` |
 | KF-FILTER-9 | Rentang periode terbalik ditolak `/api/customers` (400) dan menghasilkan nol baris di `/api/customers/browse` | `test/server-auth.test.js` |
@@ -303,7 +303,7 @@ Business Reference.
 | KF-PANEL-5 | Grafik tren bulanan TIDAK ditampilkan (bukan grafik kosong) kalau data cuma satu bulan | `test/page.test.js` |
 | KF-PANEL-6 | Panel ringkasan kota (baru): total, jumlah kelurahan berpenjualan, rata-rata Kontribusi, distribusi 5 kelompok Posisi Relatif — dipicu memilih kota tanpa kelurahan spesifik aktif | `test/page.test.js` |
 | KF-PANEL-7 | Panel dealer: kartu ringkas gaya sama (total, kelurahan ber-sales, rata-rata Kontribusi) di atas breakdown kota→kelurahan yang sudah ada | `test/page.test.js` |
-| KF-PANEL-8 | Kelurahan yang sedang dibuka jadi di luar filter kota aktif → panel berganti jadi ringkasan kota itu, bukan tetap menampilkan kelurahan di luar cakupan | belum dijaga otomatis (diverifikasi manual) |
+| KF-PANEL-8 | ~~Kelurahan yang sedang dibuka jadi di luar filter kota aktif → panel berganti jadi ringkasan kota~~ **Dicabut 2026-10-11**: filter Kota memilih dealer terdaftar, jadi kecamatan pelanggan di luar kota itu sah dan panelnya dibiarkan terbuka | belum dijaga otomatis (diverifikasi manual) |
 | KF-PANEL-9 | Panel kota/dealer yang ditutup manual TIDAK terbuka lagi sendiri selama filter masih aktif | belum dijaga otomatis (diverifikasi manual) |
 | KF-PANEL-10 | Business Reference: nilai acuan bisa dikonfigurasi lewat `BUSINESS_REFERENCE_PERCENT` di `.env`, default 1% | `test/business-reference.test.js` |
 | KF-PANEL-11 | Reference Gap (selisih poin persentase) dan Reference Ratio (%) dihitung terhadap benchmark AKTIF, bukan hardcode 1% | `test/sales-stats.test.js` |

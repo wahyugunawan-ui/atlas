@@ -643,6 +643,21 @@ async function test() {
       'baris yang kelurahannya gagal dicocokkan hilang dari penyaring kota — padahal ' +
       'baris itulah yang paling perlu dilihat orang');
 
+    // KUMPULAN DEALER (filter Kota/Karesidenan sejak 2026-10-11): `dealerCodes` menyaring
+    // menurut dealer, TANPA melihat kota tempat konsumen tinggal.
+    const satuDealer = await repo.browseCustomers({ dealerCode: '7348' });
+    assert.ok(satuDealer.total > 0, 'fixture tak punya konsumen dealer 7348');
+    const viaHimpunan = await repo.browseCustomers({ dealerCodes: ['7348'] });
+    assert.strictEqual(viaHimpunan.total, satuDealer.total,
+      'dealerCodes berisi satu dealer harus sama dengan dealerCode');
+    const duaDealer = await repo.browseCustomers({ dealerCodes: ['7348', '9999'] });
+    assert.strictEqual(duaDealer.total, satuDealer.total + 1,
+      'dealerCodes tidak menggabungkan dealer-dealernya (gabungan semua dealer terdaftar)');
+    const himpunanKosong = await repo.browseCustomers({ dealerCodes: [] });
+    assert.strictEqual(himpunanKosong.total, 0,
+      'kota tanpa dealer terdaftar harus kosong, BUKAN menampilkan seluruh konsumen (PII)');
+    assert.ok((await repo.browseCustomers({})).total > 0);
+
     // Pencarian mencari apa adanya. Tanda persen yang diketik pengguna TIDAK boleh
     // jadi wildcard yang mencocokkan seluruh tabel.
     const cariNama = await repo.browseCustomers({ query: 'Budi' });

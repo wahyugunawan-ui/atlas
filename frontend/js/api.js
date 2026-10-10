@@ -299,6 +299,12 @@ export function browseCustomers(filters) {
     const value = filters[key];
     if (value && value !== 'ALL') query.set(key, value);
   });
+  // Kota/Karesidenan = KUMPULAN DEALER terdaftar di kota-kota itu (bukan tempat tinggal
+  // konsumen), jadi dikirim sebagai daftar kota ASAL DEALER; server yang menerjemahkannya
+  // jadi daftar dealer.
+  if (filters.dealerCities && filters.dealerCities.length) {
+    query.set('dealerCities', filters.dealerCities.join(','));
+  }
   if (filters.query) query.set('q', filters.query);
   if (filters.offset) query.set('offset', filters.offset);
   return request(`${API}customers/browse?${query}`);

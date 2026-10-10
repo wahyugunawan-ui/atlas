@@ -4503,3 +4503,65 @@ tetap ada sebagai referensi, bukan dihapus.
   tooltip agregat yang tampil, karena menebak urutan berarti nama yang salah.
 - Tab "Master Kelurahan" jadi "Master Kecamatan". Kunci halaman `kelurahan` dan id
   elemen `kelurahanDetail*` sengaja tidak diganti.
+
+## [2026-10-11] Filter Kota/Karesidenan memilih KUMPULAN DEALER, bukan lokasi pelanggan; filter berjenjang dua arah
+
+**Konteks:** sampai kemarin Kota dan Karesidenan menyaring menurut kecamatan tempat
+penjualan terjadi (`district.cityCode`). Permintaan tim: filter itu harus menampilkan
+kinerja KELOMPOK DEALER yang terdaftar di wilayah tersebut, seluruh penjualannya, juga
+yang pelanggannya tinggal di kota/karesidenan lain. Dua konsep dibedakan: *wilayah asal
+dealer* (menentukan dealer mana yang masuk) dan *wilayah lokasi penjualan* (di mana
+pelanggannya sebenarnya berada). Filter Dealer dan Pos tidak berubah.
+
+**Keputusan:**
+- **Kota asal dealer disimpan:** kolom `dealers.city_code` (kode BPS bertitik), diisi
+  `scripts/import-dealer-pos-rings.js` dari kolom "Kabupaten" sheet Dealer di Excel
+  Dealer & POS. Dipilih dibanding menurunkannya dari koordinat (cuma 55 dari 78 dealer
+  punya koordinat) atau dari kota pembeli terbanyak (hanya perkiraan; sudah ditolak
+  2026-09-17 karena dominasinya 42–94%). Dealer yang kotanya tidak terbaca TIDAK masuk
+  filter Kota/Kares mana pun, dan importer melaporkan jumlah dan namanya.
+- **Filter berjenjang, dua arah** — kares → kota → dealer → pos. Memilih yang kecil
+  mengisi yang besar (pilih pos → dealer, kota, kares terisi). Memilih yang besar
+  mempersempit: dealer/pos yang tidak cocok dilepas, dan dropdown di bawahnya hanya
+  menawarkan yang cocok (`scopeOptions()` di `filters.js`). Membuka ("Semua") satu
+  tingkat membuka semua tingkat di bawahnya. Ini MEMBALIKKAN keputusan 2026-08-31
+  (kota/dealer/pos eksklusif) dan 2026-08-30 (kares mandiri).
+- **`activeRows()` menyaring menurut dealer.** `regionDealerCodes()` mengembalikan
+  `null` ("tidak membatasi") atau daftar dealer; daftar kosong berarti tidak ada
+  penjualan, BUKAN semua penjualan.
+- **Server ikut:** `saringFusi` (routes.js) menerjemahkan `kota` (satu kode atau daftar
+  karesidenan) menjadi `dealerCodes` — kode numerik `legacy_code` dealer terdaftar di
+  kota itu — yang disaring `addDealerSet()` di ketujuh penyusun WHERE Fusion.
+  `segment_rollup.city_code` (kota PELANGGAN) tidak lagi dipakai untuk saringan ini,
+  tapi tetap menjadi sumbu pengelompokan Matriks/Peringkat Kota, jadi panel itu kini
+  menunjukkan DI MANA pelanggan dealer-dealer terpilih tinggal. Dealer terpilih menang
+  atas kota; pos tetap memakai mekanismenya sendiri (kecamatan jangkauan) dan tidak
+  dikalikan dealer/kota. Halaman Data Konsumen mengirim `dealerCities`, diterjemahkan
+  server menjadi daftar dealer.
+- **Treemap "Peringkat Kota"** dikelompokkan menurut kota asal dealer, supaya total satu
+  blok sama dengan angka setelah blok itu diklik. Dealer tanpa kota masuk blok
+  "Dealer tanpa kota" yang tidak bisa diklik.
+- **Heatmap memakai unit mutlak** juga saat Kota/Kares aktif (sebelumnya hanya dealer/
+  pos): penjualan dealer terpilih ke kota lain cuma beberapa unit, dan kontribusi %
+  terhadap total kota-pelanggan dari baris tersaring akan menjadikannya 100%.
+- **Pos menang atas dealer** untuk kontrol ring/coverage, karena memilih pos kini ikut
+  mengisi dealernya.
+
+**Yang sengaja TIDAK diubah, dan harus dibaca sebagai batas keputusan ini:**
+- Tabel Lokasi Servis dan Lokasi Pengiriman tetap menyaring menurut lokasi (tabel itu
+  memang data lokasi dan tidak punya hubungan ke dealer).
+- Kontribusi % di panel kecamatan tetap relatif terhadap total kota-lokasi dari baris
+  tersaring (sama seperti perilaku dealer/pos sebelumnya).
+- Klik poligon kecamatan menyetel kota kecamatan itu; artinya kini "dealer yang
+  terdaftar di kabupaten ini", bukan "penjualan yang jatuh di kabupaten ini".
+
+**Konsekuensi:**
+- `dealers.city_code` kosong untuk dealer yang sudah ada sampai `npm run
+  backfill-dealer-city -- "<Dealer & POS.xlsx>"` dijalankan (skrip baru: hanya mengisi
+  kolom itu). Importer penuh sengaja tidak dipakai untuk ini — `--no-reset` pun menimpa
+  nama, alamat, koordinat, pos, dan ring. Sebelum diisi, filter Kota/Karesidenan kosong
+  untuk semua dealer.
+- Master Dealer belum punya kolom kota di layar; kota baru bisa diubah lewat API
+  (`PUT /api/dealers/:code` dengan `cityCode`) atau impor ulang.
+- Tes: `test/filters.test.js` (ditulis ulang), `test/dealer-region.test.js` (baru),
+  `test/import.test.js` (`dealerCodes` di `browseCustomers`). Semuanya diuji mutasi.

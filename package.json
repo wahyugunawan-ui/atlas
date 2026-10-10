@@ -21,6 +21,7 @@
     "import": "node scripts/import-cli.js",
     "seed-outlets": "node scripts/seed-outlets.js",
     "backfill-dealers": "node scripts/backfill-dealers.js",
+    "backfill-dealer-city": "node scripts/backfill-dealer-city.js",
     "seed-coverage": "node scripts/seed-coverage.js",
     "fetch-boundaries": "node scripts/fetch-boundaries.js",
     "seed-boundaries": "node scripts/seed-boundaries.js",
