@@ -2,7 +2,9 @@
  * Uji silang: hitungan PostGIS lawan sampling di backend/core/coverage.js.
  *
  * Dua cara yang sepenuhnya berbeda menjawab pertanyaan yang sama — irisan luas
- * kelurahan dengan lingkaran radius. PostGIS memakai geometri tepat di proyeksi meter
+ * wilayah dengan lingkaran radius. Sejak 2026-10-10 wilayahnya KECAMATAN (view
+ * district_shapes); di sini tiap petak adalah satu kecamatan berisi satu desa, jadi
+ * poligon yang dibaca sampling dan PostGIS tetap persis sama. PostGIS memakai geometri tepat di proyeksi meter
  * (UTM 49S); backend/core memakai Monte Carlo di ruang derajat dengan jarak haversine.
  * Tidak ada satu baris kode pun yang dipakai bersama.
  *
@@ -24,7 +26,10 @@ const { openTestDb, closeTestDb } = require('./helpers/db');
 const OUTLET_LNG = 110.00;
 const OUTLET_LAT = -7.80;
 
-/** Bujur sangkar di sekitar satu titik, ukuran dalam derajat. */
+/**
+ * Bujur sangkar di sekitar satu titik, ukuran dalam derajat. `code` = kode KECAMATAN
+ * (kunci rasio jangkauan); desa tunggalnya berkode `${code}.2001`.
+ */
 function square(code, name, lng, lat, size) {
   const h = size / 2;
   return {
@@ -52,14 +57,14 @@ function buildVillages() {
     for (let j = 0; j < 3; j++) {
       const n = features.length;
       features.push(square(
-        `34.04.01.${String(2001 + n).padStart(4, '0')}`, `Petak ${n}`,
+        `34.04.${String(10 + n).padStart(2, '0')}`, `Petak ${n}`,
         OUTLET_LNG + i * SIZE, OUTLET_LAT + j * SIZE, SIZE));
     }
   }
   // Satu petak besar yang menelan seluruh lingkaran 5 km. Dipakai menguji kehalusan
   // ST_Buffer: irisannya adalah lingkaran itu sendiri, jadi rasionya = luas lingkaran
   // dibagi luas petak, dan tiap penyimpangan bentuk lingkaran langsung kelihatan.
-  features.push(square('34.04.09.9999', 'Petak Besar', OUTLET_LNG, OUTLET_LAT, 0.5));
+  features.push(square('34.04.99', 'Petak Besar', OUTLET_LNG, OUTLET_LAT, 0.5));
   return { type: 'FeatureCollection', features };
 }
 
@@ -69,10 +74,10 @@ async function seed(geo) {
     await store.run(db, `
       INSERT INTO villages (village_code, village_name, district_code, district_name,
                             city_code, city_name, province_code, lat, lng, geom, geom_m)
-      VALUES (?, ?, '34.04.01', 'Mlati', '34.04', 'Sleman', '34', ?, ?,
+      VALUES (?, ?, ?, ?, '34.04', 'Sleman', '34', ?, ?,
               ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)),
               ST_Transform(ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)), 32749))`,
-    [f.properties.kode, f.properties.nama,
+    [`${f.properties.kode}.2001`, f.properties.nama, f.properties.kode, f.properties.nama,
       f.geometry.coordinates[0][0][1], f.geometry.coordinates[0][0][0],
       JSON.stringify(f.geometry), JSON.stringify(f.geometry)]);
   }
@@ -107,10 +112,10 @@ async function test() {
       }
     }
 
-    // Kelurahan tempat pos berdiri, radius 10 km: petak 2,2 km itu masuk seluruhnya.
-    const dalam = exact[10000].O1['34.04.01.2001'];
+    // Kecamatan tempat pos berdiri, radius 10 km: petak 2,2 km itu masuk seluruhnya.
+    const dalam = exact[10000].O1['34.04.10'];
     assert.ok(Math.abs(dalam - 1) < 1e-9,
-      `kelurahan yang seluruhnya di dalam harus tepat 1,0 — dapat ${dalam}`);
+      `kecamatan yang seluruhnya di dalam harus tepat 1,0 — dapat ${dalam}`);
 
     // --- kehalusan lingkaran ST_Buffer ---
     //
@@ -118,9 +123,9 @@ async function test() {
     // sama dengan pi*r^2 dibagi luas petak. Kalau quad_segs dilepas, ST_Buffer jadi
     // segi-32 dan rasionya 0,65% terlalu kecil — tes ini yang menangkapnya.
     const luasPetak = (await store.one(store.db(),
-      "SELECT ST_Area(geom_m) AS a FROM villages WHERE village_code = '34.04.09.9999'")).a;
+      "SELECT ST_Area(geom_m) AS a FROM district_shapes WHERE district_code = '34.04.99'")).a;
     const seharusnya = (Math.PI * 5000 * 5000) / luasPetak;
-    const didapat = exact[5000].O1['34.04.09.9999'];
+    const didapat = exact[5000].O1['34.04.99'];
     const meleset = Math.abs(didapat - seharusnya) / seharusnya;
     assert.ok(meleset < 0.002,
       `lingkaran radius menyimpang ${(meleset * 100).toFixed(2)}% dari pi*r^2 — ` +

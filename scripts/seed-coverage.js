@@ -48,7 +48,7 @@ async function main() {
     let inside = 0;
     let total = 0;
     perOutlet[code].forEach((r) => {
-      inside += r.units * ((data[coverage.DEFAULT_RADIUS_M][code] || {})[r.village] || 0);
+      inside += r.units * ((data[coverage.DEFAULT_RADIUS_M][code] || {})[r.district] || 0);
       total += r.units;
     });
     return { code, pct: total ? (inside / total) * 100 : 0, total };
@@ -58,7 +58,7 @@ async function main() {
     let inside = 0;
     let total = 0;
     sales.forEach((row) => {
-      inside += row.units * ((data[r][row.outlet] || {})[row.village] || 0);
+      inside += row.units * ((data[r][row.outlet] || {})[row.district] || 0);
       total += row.units;
     });
     console.log(`  ${String(r / 1000).padStart(2)} km: ` +

@@ -657,16 +657,26 @@ function test() {
   assert.ok(!/addRingVillageLayers|ringVillagesLoaded/.test(mapSource),
     'layer batas desa untuk edit ring (kel-ring-*) masih ada — seharusnya digantikan kec-isi');
 
-  // Batas kecamatan dimuat SAAT DIMINTA, bukan saat halaman dibuka — berkasnya
-  // beberapa MB dan sebagian besar sesi tidak pernah membukanya sama sekali.
-  // Dipakai BERTIGA: referensi visual (Opsi Peta), target klik + sorotan mode
-  // edit/lihat ring dealer & coverage pos.
-  assert.ok(!/kecamatan\.geojson/.test(source['app.js']),
-    'batas kecamatan ikut dimuat saat halaman dibuka — tempatnya di toggle Opsi Peta/mode edit');
-  assert.match(ringSource, /addDistrictLayers\(\)/,
-    'editor ring/coverage tidak lagi memuat batas kecamatan lewat addDistrictLayers()');
-  assert.match(mapSource, /fetchGeo\('kecamatan\.geojson'\)/,
-    'batas kecamatan tidak lagi diambil dari berkas geo');
+  // KEBALIKAN dari keputusan 2026-08-31 (dulu: dimuat saat diminta). Sejak 2026-10-10
+  // KECAMATAN satuan analisis peta — yang diwarnai, diklik, dan disorot — jadi
+  // berkasnya WAJIB dimuat di boot, dan yang diwarnai harus source `kec`, bukan `kel`.
+  // Berkasnya 0,6 MB sejak lubang sliver ditutup (bukan 3 MB lagi).
+  assert.match(source['app.js'], /fetchGeo\('kecamatan\.geojson'\)/,
+    'batas kecamatan tidak dimuat di boot — padahal itu yang diwarnai heatmap');
+  assert.match(mapSource, /id: 'kec-warna', type: 'fill', source: 'kec'/,
+    'isian heatmap kecamatan (kec-warna) hilang');
+  assert.match(mapSource, /setFeatureState\(\{ source: 'kec', id: f\.properties\.kode \}/,
+    'paintChoropleth tidak mewarnai source kecamatan');
+  assert.ok(!/id: 'kel-isi'/.test(mapSource),
+    'isian per DESA (kel-isi) muncul lagi — analisis berhenti di kecamatan, desa ' +
+    'tinggal garis referensi');
+  assert.ok(!/addDistrictLayers\(\)/.test(ringSource),
+    'editor ring masih memuat kecamatan sendiri — lapisannya sudah dipasang di boot');
+  // Lapisan desa disimpan (permintaan user: jangan dihapus), tapi MATI bawaan.
+  assert.match(html, /id="opt-kelurahan" onchange=/,
+    'sakelar Batas Desa harus ada dan TIDAK tercentang bawaan');
+  assert.match(mapSource, /id: 'kel-garis', type: 'line', source: 'kel',\s*layout: \{ visibility: 'none' \}/,
+    'garis desa tidak mati bawaan');
 
   // kec-isi: satu layer fill dipakai BERGANTIAN oleh editor ring dealer dan editor
   // coverage pos (tidak pernah aktif bersamaan) — beda dari kel-ring-isi lama yang
@@ -827,10 +837,12 @@ function test() {
     'tinggi tabel kembali dipatok angka ajaib (calc(100vh-...)) — sekali ada yang ' +
     'ditambah di atasnya, akan ada sisa ruang kosong di bawah tabel lagi');
 
-  // Nama kecamatan bisa dinyalakan sendiri lewat Opsi Peta (KF-PETA-17) — toggle
-  // referensi visual (kec-garis/kec-nama), independen dari kec-isi (target klik +
-  // sorotan ring dealer/coverage pos, dikendalikan setGroupPaint()/paintGroupView()).
-  assert.ok(html.includes('id="opt-kecamatan"'), 'sakelar Nama Kecamatan hilang dari Opsi Peta');
+  // Nama kecamatan bisa dinyalakan/dimatikan lewat Opsi Peta (KF-PETA-17) — toggle
+  // garis + label (kec-garis/kec-nama), NYALA bawaan sejak kecamatan jadi satuan
+  // analisis (2026-10-10), independen dari kec-isi (target klik + sorotan ring
+  // dealer/coverage pos, dikendalikan setGroupPaint()/paintGroupView()).
+  assert.ok(html.includes('id="opt-kecamatan" checked'),
+    'sakelar Nama Kecamatan hilang dari Opsi Peta, atau tidak nyala bawaan');
   const redrawBody = mapSource.slice(mapSource.indexOf('export function redrawMap'));
   const redrawPotong = redrawBody.slice(0, redrawBody.indexOf('\nexport '));
   assert.match(redrawPotong, /on\('opt-kecamatan'\)/,
@@ -1028,14 +1040,15 @@ function test() {
   assert.ok(clientCalls.length, 'tidak ada satu pun pemanggilan fetchCustomers');
   clientCalls.forEach((args) => {
     assert.ok(args && !args.startsWith(','),
-      `fetchCustomers dipanggil tanpa kode kelurahan: fetchCustomers(${args})`);
+      `fetchCustomers dipanggil tanpa kode kecamatan: fetchCustomers(${args})`);
   });
-  // fetchCustomers harus SELALU menyertakan kode kelurahan di query-nya.
+  // fetchCustomers harus SELALU menyertakan kode kecamatan di query-nya (sejak
+  // 2026-10-10; sebelumnya kelurahan). Rutenya menolak `village`.
   const fetchBody = source['api.js'].slice(
     source['api.js'].indexOf('export function fetchCustomers'));
   const bodyEnd = fetchBody.indexOf('\n}');
-  assert.ok(/village['"]?\s*[:,]\s*villageCode/.test(fetchBody.slice(0, bodyEnd)),
-    'fetchCustomers tidak menyertakan kode kelurahan di permintaannya');
+  assert.ok(/district['"]?\s*[:,]\s*districtCode/.test(fetchBody.slice(0, bodyEnd)),
+    'fetchCustomers tidak menyertakan kode kecamatan di permintaannya');
 
   // Pintu KEDUA: halaman Data Konsumen. Penyaringnya bebas — tidak wajib menyebut
   // kelurahan — jadi yang menjaganya bukan bentuk permintaan tapi batas di server.
@@ -1251,20 +1264,20 @@ function test() {
      dealer. Dua angka yang bertentangan di layar yang sama, tanpa satu pun error.
      ------------------------------------------------------------------------ */
 
-  assert.ok(/villageTooltipData/.test(source['outlets.js']),
-    'fungsi data tooltip kelurahan hilang dari outlets.js');
+  assert.ok(/districtTooltipData/.test(source['outlets.js']),
+    'fungsi data tooltip kecamatan hilang dari outlets.js');
   assert.ok(!/S\.sales/.test(source['outlets.js']),
     'outlets.js membaca S.sales langsung. Tooltip harus lewat activeRows() supaya ' +
     'angkanya mengikuti filter yang sama dengan warna poligon di bawahnya');
   assert.ok(source['outlets.js'].includes('const rows = activeRows();'),
-    'tooltip kelurahan tidak memakai activeRows()');
+    'tooltip kecamatan tidak memakai activeRows()');
 
   // Dan tooltipnya harus benar-benar terpasang ke gerakan kursor, bukan cuma ada.
-  assert.ok(source['app.js'].includes("S.map.on('mousemove', 'kel-isi'"),
-    'tooltip kelurahan tidak terpasang ke mousemove — fungsinya ada tapi tidak pernah ' +
+  assert.ok(source['app.js'].includes("S.map.on('mousemove', 'kec-warna'"),
+    'tooltip kecamatan tidak terpasang ke mousemove — fungsinya ada tapi tidak pernah ' +
     'dipanggil, dan itu tidak membuat apa pun gagal');
-  assert.ok(/showVillageTooltip/.test(source['app.js']),
-    'app.js tidak memanggil showVillageTooltip');
+  assert.ok(/showDistrictTooltip/.test(source['app.js']),
+    'app.js tidak memanggil showDistrictTooltip');
 
   const totalLines = files.reduce((sum, f) => sum + source[f].split('\n').length, 0);
   console.log(`OK page — ${files.length} modul (${totalLines} baris), ` +

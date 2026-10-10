@@ -171,8 +171,8 @@ function testRutePii() {
   // membaca database astra_customers dan mengembalikan nama/alamat orang.
   const FUNGSI_PII = [
     'fusionEngineDetail',
-    'fusionVillageCustomers',
-    'customersInVillage',
+    'fusionDistrictCustomers',
+    'customersInDistrict',
     'browseCustomers',
   ];
 

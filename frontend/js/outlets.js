@@ -158,74 +158,72 @@ export function closeSelectionInfo() {
 }
 
 /* ==========================================================================
-   TOOLTIP KELURAHAN DI PETA
+   TOOLTIP KECAMATAN DI PETA
    ==========================================================================
-   Sebaran per kelurahan dan kabupaten terbaca TANPA mengklik apa pun — arahkan kursor,
+   Satuannya KECAMATAN sejak 2026-10-10 (sebelumnya kelurahan, docs/DECISIONS.md).
+   Sebaran per kecamatan dan kabupaten terbaca TANPA mengklik apa pun — arahkan kursor,
    angkanya muncul. Panel rincian tetap ada untuk menelusuri berurutan; ini untuk
    pertanyaan yang muncul sambil melihat peta: "yang gelap di sini berapa?".
 
    Mengikuti ruang lingkup yang sedang aktif. Kalau satu dealer sedang dipilih, yang
-   ditampilkan penjualan DEALER ITU di kelurahan tersebut — bukan total semua dealer.
+   ditampilkan penjualan DEALER ITU di kecamatan tersebut — bukan total semua dealer.
    Kalau tidak ada yang dipilih, ya totalnya. Angka di tooltip tidak boleh menghitung
    hal yang berbeda dari peta yang sedang diwarnai di bawahnya.
    ========================================================================== */
 
 /**
- * Ringkasan satu kelurahan beserta kabupatennya, dari baris yang sedang aktif.
+ * Ringkasan satu kecamatan beserta kabupatennya, dari baris yang sedang aktif.
  *
- * Dihitung saat kursor lewat, bukan disiapkan di awal. 4.003 kelurahan x tiap perubahan
- * filter berarti pekerjaan yang hampir seluruhnya terbuang — yang dilihat orang cuma
- * satu per satu.
+ * Dihitung saat kursor lewat, bukan disiapkan di awal: yang dilihat orang cuma satu
+ * per satu, jadi menyiapkan semuanya tiap perubahan filter hampir seluruhnya terbuang.
  */
-export function villageTooltipData(villageCode) {
-  const village = S.villageByCode[villageCode];
-  if (!village) return null;
+export function districtTooltipData(districtCode) {
+  const district = S.districtByCode[districtCode];
+  if (!district) return null;
 
   const rows = activeRows();
-  const diKelurahan = rows.filter((r) => r.village === villageCode);
+  const diKecamatan = rows.filter((r) => r.district === districtCode);
   const diKabupaten = rows.filter((r) => {
-    const v = S.villageByCode[r.village];
-    return v && v.cityCode === village.cityCode;
+    const d = S.districtByCode[r.district];
+    return d && d.cityCode === district.cityCode;
   });
 
-  const kel = splitByCoverage(diKelurahan);
+  const kec = splitByCoverage(diKecamatan);
   const kab = splitByCoverage(diKabupaten);
-  const kabVillages = new Set(diKabupaten.map((r) => r.village));
+  const kabDistricts = new Set(diKabupaten.map((r) => r.district));
 
   return {
-    name: village.name,
-    district: village.district,
-    cityName: village.cityName,
-    units: diKelurahan.reduce((sum, r) => sum + r.units, 0),
-    inside: kel.inside,
-    covered: kel.total,
-    hasGeom: village.hasGeom !== false,
+    name: district.name,
+    cityName: district.cityName,
+    units: diKecamatan.reduce((sum, r) => sum + r.units, 0),
+    inside: kec.inside,
+    covered: kec.total,
+    hasGeom: district.hasGeom !== false,
     city: {
       units: diKabupaten.reduce((sum, r) => sum + r.units, 0),
       inside: kab.inside,
       covered: kab.total,
-      villages: kabVillages.size,
+      districts: kabDistricts.size,
     },
   };
 }
 
-export function showVillageTooltip(villageCode, event) {
-  const d = villageTooltipData(villageCode);
+export function showDistrictTooltip(districtCode, event) {
+  const d = districtTooltipData(districtCode);
   const tip = $('tooltip');
   if (!d) { tip.classList.remove('show'); return; }
 
   const persen = (inside, covered) =>
     covered ? `${(inside / covered * 100).toFixed(0)}% dalam jangkauan` : null;
-  const kelPersen = persen(d.inside, d.covered);
+  const kecPersen = persen(d.inside, d.covered);
   const kabPersen = persen(d.city.inside, d.city.covered);
 
   tip.innerHTML =
-    `<div class="font-bold text-white">${esc(d.name)}</div>` +
-    `<div class="text-[11px] text-slate-300">${esc(d.district || '')}</div>` +
+    `<div class="font-bold text-white">Kec. ${esc(d.name)}</div>` +
     `<div class="text-[11px] text-slate-200 mt-1.5">` +
     `<b>${esc(formatNumber(d.units))}</b> penjualan` +
-    (kelPersen ? ` · ${esc(kelPersen)}` : '') + `</div>` +
-    // Kelurahan tanpa batas wilayah disebut apa adanya, bukan ditampilkan 0%. Nol yang
+    (kecPersen ? ` · ${esc(kecPersen)}` : '') + `</div>` +
+    // Kecamatan tanpa batas wilayah disebut apa adanya, bukan ditampilkan 0%. Nol yang
     // sebenarnya "belum bisa dihitung" adalah cara tercepat membuat orang salah simpul.
     (d.hasGeom ? '' :
       `<div class="text-[10px] text-amber-300 mt-0.5">belum ada batas wilayah — ` +
@@ -233,7 +231,7 @@ export function showVillageTooltip(villageCode, event) {
     `<div class="text-[11px] text-slate-400 mt-1.5 pt-1.5 border-t border-slate-600">` +
     `${esc(d.cityName || '')}<br>` +
     `<b class="text-slate-300">${esc(formatNumber(d.city.units))}</b> penjualan di ` +
-    `${esc(formatNumber(d.city.villages))} kelurahan` +
+    `${esc(formatNumber(d.city.districts))} kecamatan` +
     (kabPersen ? ` · ${esc(kabPersen)}` : '') + `</div>`;
 
   tip.classList.add('show');

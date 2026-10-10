@@ -41,6 +41,49 @@ CREATE INDEX IF NOT EXISTS idx_villages_city ON villages (city_code);
 -- poligon penuh 78 x 3.466 kali, dan yang tadinya detik jadi menit.
 CREATE INDEX IF NOT EXISTS idx_villages_geom_m ON villages USING GIST (geom_m);
 
+-- Kecamatan: SATUAN ANALISIS seluruh aplikasi sejak 2026-10-10 (docs/DECISIONS.md).
+--
+-- Materialized view, BUKAN tabel: kecamatan itu kumpulan kelurahan, dan menyimpan
+-- batasnya sendiri berarti dua sumber yang bisa menyimpang. View ini diturunkan dari
+-- `villages` dan disegarkan oleh seed-boundaries / seed-regions.
+--
+-- Lubang di dalam gabungan. ST_Union kelurahan meninggalkan 29.823 lubang sliver karena
+-- tepi kelurahan bersebelahan tidak berimpit. Buffer +/-5 m masih menyisakan 1.407,
+-- jadi aturannya lain: lubang DIPERTAHANKAN hanya kalau titik di dalamnya jatuh di
+-- kelurahan kecamatan LAIN (enclave sah, mis. di Pancur dan Mlonggo), sisanya ditutup.
+-- Hasil 2026-10-10: tinggal 38 lubang, semuanya enclave.
+CREATE MATERIALIZED VIEW IF NOT EXISTS district_shapes AS
+WITH parts AS (
+  SELECT district_code, (ST_Dump(ST_Union(geom_m))).geom AS p
+  FROM villages
+  WHERE district_code IS NOT NULL AND geom_m IS NOT NULL
+  GROUP BY district_code
+),
+rebuilt AS (
+  SELECT district_code, ST_MakePolygon(ST_ExteriorRing(p), ARRAY(
+    SELECT ST_ExteriorRing(h.geom) FROM ST_DumpRings(p) h
+    WHERE h.path[1] > 0 AND EXISTS (
+      SELECT 1 FROM villages o
+      WHERE o.district_code <> parts.district_code
+        AND ST_Intersects(o.geom_m, ST_PointOnSurface(h.geom))))) AS q
+  FROM parts
+),
+shapes AS (
+  SELECT district_code, ST_Multi(ST_Union(q))::geometry(MultiPolygon, 32749) AS geom_m
+  FROM rebuilt GROUP BY district_code
+)
+SELECT s.district_code, n.district_name, n.city_code, n.city_name,
+       ST_Y(ST_Transform(ST_PointOnSurface(s.geom_m), 4326)) AS lat,
+       ST_X(ST_Transform(ST_PointOnSurface(s.geom_m), 4326)) AS lng,
+       s.geom_m
+FROM shapes s
+JOIN (SELECT district_code, MIN(district_name) AS district_name,
+             MIN(city_code) AS city_code, MIN(city_name) AS city_name
+      FROM villages GROUP BY district_code) n USING (district_code);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_district_shapes_code ON district_shapes (district_code);
+CREATE INDEX IF NOT EXISTS idx_district_shapes_geom_m ON district_shapes USING GIST (geom_m);
+
 -- Dealer: perusahaan yang menaungi satu atau lebih pos (outlet).
 --
 -- Dulu cuma dua kolom yang DIDUPLIKASI di tiap baris outlets yang sama dealernya —
@@ -217,7 +260,18 @@ CREATE TABLE IF NOT EXISTS imports (
 
 CREATE INDEX IF NOT EXISTS idx_imports_started ON imports (started_at DESC);
 
--- Rasio jangkauan: berapa bagian tiap kelurahan yang masuk radius tiap outlet.
+-- Sejak 2026-10-10 rasio dihitung per KECAMATAN, bukan kelurahan. Isinya turunan
+-- (seed-coverage), jadi tabel versi lama yang masih berkunci village_code dibuang saja
+-- lalu dibuat ulang di bawah — tidak ada yang hilang yang tidak bisa dihitung lagi.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'coverage' AND column_name = 'village_code') THEN
+    DROP TABLE coverage;
+  END IF;
+END $$;
+
+-- Rasio jangkauan: berapa bagian tiap kecamatan yang masuk radius tiap outlet.
 --
 -- Dihitung PostGIS lewat ST_Intersection/ST_Area — eksak terhadap poligon yang ada,
 -- bukan diperkirakan dengan menyebar titik. Tetap disimpan, bukan dihitung tiap
@@ -230,9 +284,9 @@ CREATE INDEX IF NOT EXISTS idx_imports_started ON imports (started_at DESC);
 CREATE TABLE IF NOT EXISTS coverage (
   radius_m     INTEGER NOT NULL,
   outlet_code  VARCHAR(32) NOT NULL,
-  village_code VARCHAR(16) NOT NULL,
+  district_code VARCHAR(16) NOT NULL,
   ratio        DOUBLE PRECISION NOT NULL,
-  PRIMARY KEY (radius_m, outlet_code, village_code),
+  PRIMARY KEY (radius_m, outlet_code, district_code),
   CONSTRAINT fk_coverage_outlet FOREIGN KEY (outlet_code)
     REFERENCES outlets(outlet_code) ON DELETE CASCADE
 );

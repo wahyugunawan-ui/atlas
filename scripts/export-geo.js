@@ -5,13 +5,12 @@
  * semuanya — MapLibre memuat berkas ini sekaligus di awal, dan 8.999 kelurahan detail
  * penuh berarti puluhan MB yang harus diunduh dan diurai tiap kali halaman dibuka.
  *
- * YANG DIKIRIM: kelurahan yang punya penjualan, ATAU yang masuk radius jangkauan
- * sebuah pos. 4.003 dari 8.999.
+ * Sejak 2026-10-10 satuan analisis peta adalah KECAMATAN (kecamatan.geojson, seluruh
+ * 654). Berkas kelurahan tinggal dua guna: wadah sebaran titik penjualan/fusi (supaya
+ * sebarannya mengikuti desa asli konsumen) dan lapisan "Batas desa" yang mati bawaan.
  *
- * Kriteria itu bukan sekadar yang paling kecil, tapi yang paling berarti. Kelurahan
- * berpenjualan diwarnai menurut volume; kelurahan dalam radius dipakai menggambar
- * jangkauan. Sisanya kelurahan tanpa penjualan yang juga di luar semua radius —
- * menggambarnya tidak menjawab satu pun pertanyaan yang ditanyakan dashboard ini.
+ * YANG DIKIRIM: kelurahan yang punya penjualan ATAU baris fusion — yaitu kelurahan
+ * yang bisa punya titik. Sisanya tidak pernah menampung satu titik pun.
  *
  * Penyaring "kota yang punya penjualan" sempat dipertimbangkan dan DITOLAK setelah
  * diukur: 38 dari 40 kota punya setidaknya satu penjualan, jadi penyaringnya cuma
@@ -51,11 +50,11 @@ function tulisAman(file, isi) {
 }
 
 /**
- * Batas kecamatan, diturunkan dari poligon kelurahan.
+ * Batas kecamatan — SATUAN ANALISIS peta sejak 2026-10-10, dimuat sejak awal.
  *
- * Tidak ada tabel kecamatan dan tidak perlu ada: kecamatan itu kumpulan kelurahan, dan
- * menyimpan batasnya sendiri berarti dua sumber yang bisa menyimpang. ST_Union
- * menghapus batas kelurahan di dalamnya, jadi yang keluar satu poligon per kecamatan.
+ * Dibaca dari view `district_shapes` (schema.sql), yang diturunkan dari poligon
+ * kelurahan dan sudah menutup lubang sliver hasil ST_Union. Bukan tabel sendiri:
+ * menyimpan batasnya sendiri berarti dua sumber yang bisa menyimpang.
  *
  * SELURUH 654 kecamatan diekspor, bukan cuma yang punya penjualan. Ring justru dipakai
  * untuk menandai wilayah yang BELUM digarap — menyaringnya ke yang sudah ada penjualan
@@ -67,16 +66,13 @@ function tulisAman(file, isi) {
  */
 async function tulisKecamatan(db, dir) {
   const rows = await store.all(db, `
-    SELECT district_code AS code, MIN(district_name) AS name,
-           city_code AS "cityCode", MIN(city_name) AS "cityName",
+    SELECT district_code AS code, district_name AS name,
+           city_code AS "cityCode", city_name AS "cityName",
            ST_AsGeoJSON(
-             ST_Transform(
-               ST_SimplifyPreserveTopology(ST_Union(geom_m), $1), 4326), 5
+             ST_Transform(ST_SimplifyPreserveTopology(geom_m, $1), 4326), 5
            ) AS geometry
-    FROM villages
-    WHERE geom_m IS NOT NULL
-    GROUP BY district_code, city_code
-    ORDER BY MIN(city_name), MIN(district_name)`, [TOLERANSI_KEC_M]);
+    FROM district_shapes
+    ORDER BY city_name, district_name`, [TOLERANSI_KEC_M]);
 
   const features = rows.map((r) => ({
     type: 'Feature',
@@ -86,9 +82,15 @@ async function tulisKecamatan(db, dir) {
     geometry: JSON.parse(r.geometry),
   }));
 
+  // Lubang yang tersisa harus enclave sah saja (schema.sql, district_shapes). Kalau
+  // angka ini melonjak ke ribuan, penutup sliver-nya rusak dan peta jadi berbintik.
+  const lubang = features.reduce((n, f) => n + (f.geometry.type === 'Polygon'
+    ? f.geometry.coordinates.length - 1
+    : f.geometry.coordinates.reduce((m, p) => m + p.length - 1, 0)), 0);
+
   const isi = JSON.stringify({ type: 'FeatureCollection', features });
   tulisAman(path.join(dir, 'kecamatan.geojson'), isi);
-  return { jumlah: features.length, bytes: isi.length };
+  return { jumlah: features.length, bytes: isi.length, lubang };
 }
 
 /**
@@ -106,8 +108,7 @@ async function tulisKota(db, dir) {
              ST_Transform(
                ST_SimplifyPreserveTopology(ST_Union(geom_m), $1), 4326), 5
            ) AS geometry
-    FROM villages
-    WHERE geom_m IS NOT NULL
+    FROM district_shapes
     GROUP BY city_code
     ORDER BY MIN(city_name)`, [TOLERANSI_KEC_M]);
 
@@ -143,12 +144,12 @@ async function main() {
     FROM villages
     WHERE geom_m IS NOT NULL
       AND (village_code IN (SELECT village_code FROM sales)
-           OR village_code IN (SELECT DISTINCT village_code FROM coverage))
+           OR village_code IN (SELECT DISTINCT village_code FROM segment_rollup))
     ORDER BY province_code, city_name, district_name, village_name`, [TOLERANSI_M]);
 
   if (!rows.length) {
-    console.error('\n  Tidak ada kelurahan yang punya penjualan maupun jangkauan.');
-    console.error('  Jalankan impor dan seed-coverage dulu.\n');
+    console.error('\n  Tidak ada kelurahan yang punya penjualan maupun data fusion.');
+    console.error('  Jalankan impor dulu.\n');
     await store.close();
     process.exit(1);
   }
@@ -183,8 +184,8 @@ async function main() {
   console.log(`  berkas                : ${(kota.bytes / 1048576).toFixed(2)} MB`);
   console.log(`                          ${path.join(dir, 'kota.geojson')}`);
   console.log('');
-  console.log(`  kecamatan             : ${kec.jumlah}  (referensi visual, batas & nama;`);
-  console.log(`                          juga target klik editor ring dealer/coverage pos)`);
+  console.log(`  kecamatan             : ${kec.jumlah}  (satuan analisis peta, dimuat sejak awal)`);
+  console.log(`  lubang tersisa        : ${kec.lubang}  (harus enclave saja, puluhan — bukan ribuan)`);
   console.log(`  penyederhanaan        : ${TOLERANSI_KEC_M} m`);
   console.log(`  berkas                : ${(kec.bytes / 1048576).toFixed(2)} MB`);
   console.log(`                          ${path.join(dir, 'kecamatan.geojson')}`);

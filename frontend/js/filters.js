@@ -244,10 +244,10 @@ export function activeRows(page) {
     if (f.to !== 'ALL' && row.period > f.to) return false;
     if (f.dealerCode !== 'ALL' && row.dealer !== f.dealerCode) return false;
     if (f.outletCode !== 'ALL' && row.outlet !== f.outletCode) return false;
-    const village = S.villageByCode[row.village];
-    if (!village) return false;
-    if (f.cityCode !== 'ALL' && village.cityCode !== f.cityCode) return false;
-    if (f.kares !== 'ALL' && !KARESIDENAN[f.kares].cities.includes(village.cityCode)) return false;
+    const district = S.districtByCode[row.district];
+    if (!district) return false;
+    if (f.cityCode !== 'ALL' && district.cityCode !== f.cityCode) return false;
+    if (f.kares !== 'ALL' && !KARESIDENAN[f.kares].cities.includes(district.cityCode)) return false;
     return true;
   });
 }
@@ -256,7 +256,7 @@ export function activeRows(page) {
  * Satu pintu untuk semua cara memilih ruang lingkup.
  *
  * Marker di peta, blok treemap, baris panel performa, chip kartu dealer, poligon
- * kelurahan, dan dropdown semuanya lewat sini. Itu yang membuat "klik di peta langsung
+ * kecamatan, dan dropdown semuanya lewat sini. Itu yang membuat "klik di peta langsung
  * berpindah" otomatis benar: tidak ada jalur kedua yang bisa lupa diperbarui, dan titik
  * penjualan, KPI, heatmap, serta panel performa selalu berpindah bersamaan.
  *
@@ -264,14 +264,14 @@ export function activeRows(page) {
  * aktif TIDAK membuang dealernya lagi — keduanya di-AND-kan (lihat scopeValue()).
  */
 export function applyScope(kind, code) {
-  if (kind === 'kelurahan') {
-    // Menyetel kotanya, bukan kelurahannya: filter kelurahan tidak ada, dan
-    // menyempitkan ke satu kelurahan akan mengosongkan hampir semua panel.
+  if (kind === 'kecamatan') {
+    // Menyetel kotanya, bukan kecamatannya: filter kecamatan tidak ada, dan
+    // menyempitkan ke satu kecamatan akan mengosongkan hampir semua panel.
     //
     // Dipaksa, bukan di-toggle: mengklik poligon berarti "lihat kabupaten ini", dan
-    // mengklik kelurahan kedua di kabupaten yang sama tidak boleh mematikannya.
-    const village = S.villageByCode[code];
-    if (village) setScope('kota', village.cityCode, true);
+    // mengklik kecamatan kedua di kabupaten yang sama tidak boleh mematikannya.
+    const district = S.districtByCode[code];
+    if (district) setScope('kota', district.cityCode, true);
   } else {
     setScope(kind, code);
   }
@@ -288,10 +288,11 @@ export function applyScope(kind, code) {
 /**
  * Bagi penjualan jadi dalam dan luar radius jangkauan.
  *
- * Rasio jangkauan datang dari server, dihitung dari luas kelurahan yang beririsan
- * dengan lingkaran radius. Alamat konsumen tidak punya koordinat, jadi ini TIDAK bisa
- * dihitung per orang — asumsinya konsumen tersebar merata di dalam kelurahannya, dan
- * asumsi itu ditulis di layar, bukan cuma di sini.
+ * Rasio jangkauan datang dari server, dihitung dari luas KECAMATAN yang beririsan
+ * dengan lingkaran radius (sejak 2026-10-10; sebelumnya kelurahan). Alamat konsumen
+ * tidak punya koordinat, jadi ini TIDAK bisa dihitung per orang — asumsinya konsumen
+ * tersebar merata di dalam kecamatannya, dan asumsi itu ditulis di layar, bukan cuma
+ * di sini.
  */
 export function splitByCoverage(rows) {
   let inside = 0;
@@ -299,21 +300,21 @@ export function splitByCoverage(rows) {
   let noBoundary = 0;
 
   rows.forEach((row) => {
-    // Kelurahan yang belum punya batas wilayah DIKELUARKAN dari hitungan, bukan
+    // Kecamatan yang belum punya batas wilayah DIKELUARKAN dari hitungan, bukan
     // dihitung sebagai "di luar jangkauan".
     //
     // Bedanya besar dan halus. Tanpa poligon, rasio jangkauannya selalu 0 — bukan
     // karena posnya jauh, tapi karena belum ada yang bisa dihitung. Memasukkannya ke
-    // penyebut membuat persentase turun tiap kali ada kelurahan baru ditambahkan,
+    // penyebut membuat persentase turun tiap kali ada wilayah baru ditambahkan,
     // dan turunnya terlihat seperti temuan padahal cuma data yang belum lengkap.
     //
     // Jumlahnya dilaporkan terpisah supaya yang belum lengkap TERLIHAT, bukan hilang.
-    const village = S.villageByCode[row.village];
-    if (village && village.hasGeom === false) {
+    const district = S.districtByCode[row.district];
+    if (district && district.hasGeom === false) {
       noBoundary += row.units;
       return;
     }
-    inside += row.units * ((S.coverage[row.outlet] || {})[row.village] || 0);
+    inside += row.units * ((S.coverage[row.outlet] || {})[row.district] || 0);
     total += row.units;
   });
 
@@ -321,49 +322,46 @@ export function splitByCoverage(rows) {
 }
 
 /**
- * Sebaran penjualan satu dealer: kabupaten -> kelurahan.
+ * Sebaran penjualan satu dealer: kabupaten -> kecamatan.
  *
- * DUA TINGKAT, dan itu hasil pengukuran bukan selera. Dealer terbesar menyentuh 1.157
- * kelurahan, dan 677 di antaranya (59%) cuma satu unit. Daftar datar sepanjang itu
- * isinya hampir seluruhnya "1 unit" — panjang, tapi tidak menjawab apa pun. Kabupaten
- * memampatkannya jadi 25 baris yang terbaca sekali lihat, dan kelurahannya menyusul
- * waktu diklik.
+ * DUA TINGKAT, dan itu hasil pengukuran bukan selera (waktu satuannya masih kelurahan,
+ * dealer terbesar menyentuh 1.157 kelurahan). Kabupaten memampatkannya jadi baris
+ * yang terbaca sekali lihat, dan kecamatannya menyusul waktu diklik.
  *
- * Jangkauan tiap kelurahan dihitung lewat splitByCoverage() yang sama dengan seluruh
- * aplikasi, BUKAN disalin ulang di sini. Aturan "kelurahan tanpa poligon dikeluarkan
+ * Jangkauan tiap kecamatan dihitung lewat splitByCoverage() yang sama dengan seluruh
+ * aplikasi, BUKAN disalin ulang di sini. Aturan "wilayah tanpa poligon dikeluarkan
  * dari persentase dan dilaporkan terpisah" itu halus dan sudah pernah salah; satu-
  * satunya cara memastikan dia tidak menyimpang adalah tidak punya salinan keduanya.
  *
  * @param {Array} rows  baris penjualan yang SUDAH disaring ke satu dealer
- * @return {Array} kabupaten urut unit terbanyak, kelurahan di dalamnya juga
+ * @return {Array} kabupaten urut unit terbanyak, kecamatan di dalamnya juga
  */
 export function dealerBreakdown(rows) {
   const perKota = {};
 
   rows.forEach((row) => {
-    const village = S.villageByCode[row.village];
-    if (!village) return;
-    const kota = perKota[village.cityCode] || (perKota[village.cityCode] = {
-      cityCode: village.cityCode,
-      cityName: village.cityName || village.cityCode,
+    const district = S.districtByCode[row.district];
+    if (!district) return;
+    const kota = perKota[district.cityCode] || (perKota[district.cityCode] = {
+      cityCode: district.cityCode,
+      cityName: district.cityName || district.cityCode,
       units: 0,
-      byVillage: {},
+      byDistrict: {},
     });
     kota.units += row.units;
-    (kota.byVillage[row.village] || (kota.byVillage[row.village] = [])).push(row);
+    (kota.byDistrict[row.district] || (kota.byDistrict[row.district] = [])).push(row);
   });
 
   return Object.values(perKota).map((kota) => {
-    const villages = Object.entries(kota.byVillage).map(([code, barisnya]) => {
-      // splitByCoverage dipanggil dengan baris KELURAHAN INI saja. Memanggilnya dengan
+    const districts = Object.entries(kota.byDistrict).map(([code, barisnya]) => {
+      // splitByCoverage dipanggil dengan baris KECAMATAN INI saja. Memanggilnya dengan
       // seluruh baris dealer akan menghasilkan angka yang sama di tiap baris — masuk
       // akal dilihat sekilas, dan salah di semuanya.
       const split = splitByCoverage(barisnya);
-      const village = S.villageByCode[code] || {};
+      const district = S.districtByCode[code] || {};
       return {
         code,
-        name: village.name || code,
-        district: village.district || '',
+        name: district.name || code,
         units: barisnya.reduce((sum, r) => sum + r.units, 0),
         inside: split.inside,
         covered: split.total,
@@ -375,12 +373,12 @@ export function dealerBreakdown(rows) {
       cityCode: kota.cityCode,
       cityName: kota.cityName,
       units: kota.units,
-      // Dijumlahkan dari kelurahannya, bukan dihitung ulang dari baris kabupaten.
+      // Dijumlahkan dari kecamatannya, bukan dihitung ulang dari baris kabupaten.
       // Kalau dihitung terpisah, dua angka di layar bisa tidak bersambung dan tidak
       // ada yang tahu mana yang benar.
-      inside: villages.reduce((sum, v) => sum + v.inside, 0),
-      covered: villages.reduce((sum, v) => sum + v.covered, 0),
-      villages,
+      inside: districts.reduce((sum, v) => sum + v.inside, 0),
+      covered: districts.reduce((sum, v) => sum + v.covered, 0),
+      districts,
     };
   }).sort((a, b) => b.units - a.units || a.cityName.localeCompare(b.cityName));
 }

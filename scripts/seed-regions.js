@@ -137,6 +137,12 @@ async function main() {
   console.log('  poligon tidak sah :', stats.invalid,
     stats.invalid ? '<- ST_MakeValid gagal, periksa sumbernya' : '');
   console.log('  luas total        :', stats.area_km2, 'km²');
+
+  // Poligon kecamatan diturunkan dari kelurahan (schema.sql). Tanpa penyegaran ini
+  // jangkauan dan peta tetap memakai batas kecamatan versi sebelum seed.
+  await db.query('REFRESH MATERIALIZED VIEW district_shapes');
+  const kec = await store.one(db, 'SELECT COUNT(*) AS n FROM district_shapes');
+  console.log(`  kecamatan         : ${kec.n}`);
   console.log('');
   await store.close();
 }

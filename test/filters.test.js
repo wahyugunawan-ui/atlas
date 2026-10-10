@@ -26,20 +26,22 @@ const url = (name) => pathToFileURL(
   path.join(__dirname, '..', 'frontend', 'js', name)).href;
 
 /**
- * Kelurahan uji: dua kota di dua Kares berbeda — '34.04' (Sleman) masuk
- * KARESIDENAN.yogyakarta, '33.01' (Cilacap) masuk KARESIDENAN.banyumas.
+ * Kecamatan uji (satuan analisis sejak 2026-10-10): dua kota di dua Kares berbeda —
+ * '34.04' (Sleman) masuk KARESIDENAN.yogyakarta, '33.01' (Cilacap) masuk
+ * KARESIDENAN.banyumas. Baris penjualan tetap membawa `village` (untuk sebaran titik),
+ * tapi penyaringnya membaca `district`.
  */
-const VILLAGES = {
-  '33.01.01.1001': { code: '33.01.01.1001', cityCode: '33.01' },
-  '34.04.01.2001': { code: '34.04.01.2001', cityCode: '34.04' },
-  '34.04.02.2002': { code: '34.04.02.2002', cityCode: '34.04' },
+const DISTRICTS = {
+  '33.01.01': { code: '33.01.01', cityCode: '33.01' },
+  '34.04.01': { code: '34.04.01', cityCode: '34.04' },
+  '34.04.02': { code: '34.04.02', cityCode: '34.04' },
 };
 
 const SALES = [
-  { period: '2026-07', village: '34.04.01.2001', outlet: 'O01', dealer: 'D1', units: 1 },
-  { period: '2026-08', village: '34.04.01.2001', outlet: 'O01', dealer: 'D1', units: 2 },
-  { period: '2026-08', village: '34.04.02.2002', outlet: 'O02', dealer: 'D2', units: 4 },
-  { period: '2026-09', village: '33.01.01.1001', outlet: 'O03', dealer: 'D2', units: 8 },
+  { period: '2026-07', district: '34.04.01', village: '34.04.01.2001', outlet: 'O01', dealer: 'D1', units: 1 },
+  { period: '2026-08', district: '34.04.01', village: '34.04.01.2001', outlet: 'O01', dealer: 'D1', units: 2 },
+  { period: '2026-08', district: '34.04.02', village: '34.04.02.2002', outlet: 'O02', dealer: 'D2', units: 4 },
+  { period: '2026-09', district: '33.01.01', village: '33.01.01.1001', outlet: 'O03', dealer: 'D2', units: 8 },
 ];
 
 /** Jumlah unit yang lolos filter — satu angka, gampang dibandingkan. */
@@ -54,7 +56,7 @@ async function test() {
 
   // Dunia uji: tanpa DOM, tanpa peta, tanpa server.
   S.sales = SALES;
-  S.villageByCode = VILLAGES;
+  S.districtByCode = DISTRICTS;
   S.outletByCode = { O01: { code: 'O01', name: 'Pos Satu', dealerCode: 'D1' } };
   S.dealerNames = { D1: 'Dealer Satu', D2: 'Dealer Dua' };
   S.cityNames = { '34.04': 'Kebumen', '33.01': 'Cilacap' };
@@ -120,16 +122,16 @@ async function test() {
     'klik pos di peta tidak membuang dealer — jalur peta harus eksklusif, sama seperti dropdown');
   assert.ok(repaints > 0, 'applyScope tidak menggambar ulang apa pun');
 
-  // Klik poligon kelurahan menyetel KOTA-nya, dan dipaksa: mengklik kelurahan kedua
+  // Klik poligon kecamatan menyetel KOTA-nya, dan dipaksa: mengklik kecamatan kedua
   // di kabupaten yang sama tidak boleh mematikan kabupatennya. Dealer yang sempat
   // aktif sebelumnya (baris di atas) harus ikut terbuang — eksklusif.
   setScope('dealer', 'D2');
-  applyScope('kelurahan', '34.04.01.2001');
+  applyScope('kecamatan', '34.04.01');
   assert.strictEqual(scopeValue('kota'), '34.04');
-  assert.strictEqual(scopeValue('dealer'), 'ALL', 'klik kelurahan tidak membuang dealer aktif');
-  applyScope('kelurahan', '34.04.02.2002');
+  assert.strictEqual(scopeValue('dealer'), 'ALL', 'klik kecamatan tidak membuang dealer aktif');
+  applyScope('kecamatan', '34.04.02');
   assert.strictEqual(scopeValue('kota'), '34.04',
-    'kelurahan kedua di kabupaten yang sama justru mematikan filter kabupatennya');
+    'kecamatan kedua di kabupaten yang sama justru mematikan filter kabupatennya');
 
   /* ------------------------------------------------------------------
      1b. clearScope(kind) TERTARGET, dan tidak menyentuh Kares

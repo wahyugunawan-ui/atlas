@@ -9,6 +9,9 @@
  * 3. Kelas interval tetap tidak tumpang tindih di titik batas.
  * 4. Selisih/Rasio terhadap Acuan benar terhadap benchmark yang DIBERIKAN, bukan
  *    hardcode 1%.
+ * 5. Satuan wilayahnya KECAMATAN (sejak 2026-10-10): dua baris dari DESA berbeda di
+ *    kecamatan yang sama harus jatuh ke satu kecamatan. `village` di baris hanya
+ *    untuk sebaran titik di peta dan tidak boleh ikut menentukan angka.
  */
 const assert = require('assert');
 const path = require('path');
@@ -21,7 +24,8 @@ async function test() {
   const {
     groupByCity, contributionPercent, contributionsForRows, relativePosition,
     fixedContributionClass, referenceGap, referenceRatio, KONTRIBUSI_TETAP,
-    contributionsByOutlet, contributionsByVillage, businessReferenceGroup, groupSplit,
+    contributionsByOutlet, contributionsByDistrict, businessReferenceGroup, groupSplit,
+    unitsForRows,
     dealerRingSplit,
   } = await import(url('sales-stats.js'));
   const { percentileBreaks } = await import(url('colors.js'));
@@ -29,25 +33,40 @@ async function test() {
   /* ------------------------------------------------------------------
      1. groupByCity — per kota, bukan global
      ------------------------------------------------------------------ */
-  const villageByCode = {
+  const districtByCode = {
     V1: { cityCode: 'KOTA-A' },
     V2: { cityCode: 'KOTA-A' },
     V3: { cityCode: 'KOTA-B' },
     V4: { cityCode: 'KOTA-C' },
   };
   const rows = [
-    { village: 'V1', units: 8 },
-    { village: 'V2', units: 92 },
-    { village: 'V3', units: 5 },
-    { village: 'V4', units: 0 }, // kota totalnya nol -- kontribusinya tidak terdefinisi
-    { village: 'TIDAK-DIKENAL', units: 999 }, // kelurahan tak dikenal, harus dilewati
+    { district: 'V1', units: 8 },
+    { district: 'V2', units: 92 },
+    { district: 'V3', units: 5 },
+    { district: 'V4', units: 0 }, // kota totalnya nol -- kontribusinya tidak terdefinisi
+    { district: 'TIDAK-DIKENAL', units: 999 }, // kecamatan tak dikenal, harus dilewati
   ];
-  const perCity = groupByCity(rows, villageByCode);
-  assert.strictEqual(perCity.size, 3, 'kelurahan tak dikenal ikut membuat kota baru');
+  const perCity = groupByCity(rows, districtByCode);
+  assert.strictEqual(perCity.size, 3, 'kecamatan tak dikenal ikut membuat kota baru');
   assert.strictEqual(perCity.get('KOTA-A').total, 100);
   assert.strictEqual(perCity.get('KOTA-B').total, 5);
-  assert.strictEqual(perCity.get('KOTA-A').villages.get('V1'), 8);
-  assert.strictEqual(perCity.get('KOTA-A').villages.get('V2'), 92);
+  assert.strictEqual(perCity.get('KOTA-A').districts.get('V1'), 8);
+  assert.strictEqual(perCity.get('KOTA-A').districts.get('V2'), 92);
+
+  // SATUAN = KECAMATAN. Dua baris dari desa BERBEDA di kecamatan yang sama harus jatuh
+  // ke SATU kecamatan, dan kode desanya tidak boleh muncul sebagai kunci apa pun.
+  // Kalau suatu saat ada yang kembali membaca `row.village`, ini yang merah.
+  const rowsDuaDesa = [
+    { district: 'V1', village: 'V1.0001', units: 3 },
+    { district: 'V1', village: 'V1.0002', units: 7 },
+    { district: 'V2', village: 'V2.0001', units: 10 },
+  ];
+  const unitKec = unitsForRows(rowsDuaDesa, districtByCode);
+  assert.strictEqual(unitKec.get('V1'), 10, 'dua desa satu kecamatan tidak dijumlahkan');
+  assert.strictEqual(unitKec.has('V1.0001'), false, 'kode desa bocor jadi kunci analisis');
+  const kontribusiKec = contributionsForRows(rowsDuaDesa, districtByCode);
+  assert.strictEqual(kontribusiKec.get('V1'), 50, 'kontribusi kecamatan bukan gabungan desanya');
+  assert.strictEqual(kontribusiKec.size, 2, 'satu kunci per kecamatan, bukan per desa');
 
   /* ------------------------------------------------------------------
      2. contributionPercent — per kota, dan aman terhadap total nol
@@ -63,8 +82,8 @@ async function test() {
   assert.strictEqual(contributionPercent(0, 0), null);
 
   // contributionsForRows() = groupByCity() + contributionPercent() sekaligus, untuk
-  // seluruh kelurahan yang muncul di rows — dipakai bersama panel DAN pewarnaan peta.
-  const kontribusi = contributionsForRows(rows, villageByCode);
+  // seluruh kecamatan yang muncul di rows — dipakai bersama panel DAN pewarnaan peta.
+  const kontribusi = contributionsForRows(rows, districtByCode);
   assert.strictEqual(kontribusi.get('V1'), 8);
   assert.strictEqual(kontribusi.get('V2'), 92);
   assert.strictEqual(kontribusi.get('V3'), 100, 'V3 satu-satunya di KOTA-B, harus 100%');
@@ -127,20 +146,22 @@ async function test() {
     'tidak ada baris seharusnya tidak menghasilkan NaN/Infinity di mana pun');
 
   /* ------------------------------------------------------------------
-     6b. contributionsByVillage — sama seperti contributionsByOutlet tapi per desa,
-         relatif terhadap TOTAL rows yang dioper (bukan kotanya sendiri) — dipakai
-         blok Analisis Penjualan Wilayah, basisnya SENGAJA beda dari villageStats()
+     6b. contributionsByDistrict — sama seperti contributionsByOutlet tapi per
+         kecamatan, relatif terhadap TOTAL rows yang dioper (bukan kotanya sendiri) —
+         dipakai blok Analisis Penjualan Wilayah, basisnya SENGAJA beda dari
+         districtStats()
      ------------------------------------------------------------------ */
-  const rowsDesa = [
-    { village: 'DESA-X', units: 30 },
-    { village: 'DESA-Y', units: 70 },
-    { village: 'DESA-Z', units: 0 },
+  const rowsKec = [
+    { district: 'KEC-X', village: 'KEC-X.1', units: 10 },
+    { district: 'KEC-X', village: 'KEC-X.2', units: 20 },
+    { district: 'KEC-Y', village: 'KEC-Y.1', units: 70 },
+    { district: 'KEC-Z', village: 'KEC-Z.1', units: 0 },
   ];
-  const kontribusiDesa = contributionsByVillage(rowsDesa);
-  assert.strictEqual(kontribusiDesa.get('DESA-X'), 30);
-  assert.strictEqual(kontribusiDesa.get('DESA-Y'), 70);
-  assert.strictEqual(kontribusiDesa.get('DESA-Z'), 0);
-  assert.strictEqual(contributionsByVillage([]).size, 0);
+  const kontribusiKecTotal = contributionsByDistrict(rowsKec);
+  assert.strictEqual(kontribusiKecTotal.get('KEC-X'), 30, 'dua desa KEC-X tidak digabung');
+  assert.strictEqual(kontribusiKecTotal.get('KEC-Y'), 70);
+  assert.strictEqual(kontribusiKecTotal.get('KEC-Z'), 0);
+  assert.strictEqual(contributionsByDistrict([]).size, 0);
 
   /* ------------------------------------------------------------------
      7. businessReferenceGroup — kelompok dari TANDA gap, bukan ambang baru
@@ -151,32 +172,27 @@ async function test() {
   assert.strictEqual(businessReferenceGroup(null), null);
 
   /* ------------------------------------------------------------------
-     8. groupSplit — %coverage 1..N per KECAMATAN desanya (sejak 2026-08-31 sore,
-        ring pindah ke dealer & coverage pos jadi per kecamatan, bukan per desa)
+     8. groupSplit — %coverage 1..N per KECAMATAN (sejak 2026-08-31 sore, ring
+        pindah ke dealer & coverage pos jadi per kecamatan; sejak 2026-10-10 baris
+        penjualan langsung membawa kecamatannya)
      ------------------------------------------------------------------ */
-  const villageDistrictByCode = {
-    'DESA-A': { districtCode: 'KEC-1' },
-    'DESA-B': { districtCode: 'KEC-2' },
-    'DESA-C': { districtCode: 'KEC-3' },
-    'DESA-TANPA-GRUP': { districtCode: 'KEC-X' },
-  };
   const groupMap = { 'KEC-1': 1, 'KEC-2': 2, 'KEC-3': 3 };
   const rowsGrup = [
-    { village: 'DESA-A', units: 10 },
-    { village: 'DESA-B', units: 20 },
-    { village: 'DESA-C', units: 30 },
-    { village: 'DESA-TANPA-GRUP', units: 40 },
+    { district: 'KEC-1', units: 10 },
+    { district: 'KEC-2', units: 20 },
+    { district: 'KEC-3', units: 30 },
+    { district: 'KEC-X', units: 40 },
   ];
-  const split = groupSplit(rowsGrup, groupMap, villageDistrictByCode, 3);
+  const split = groupSplit(rowsGrup, groupMap, 3);
   assert.strictEqual(split.total, 100, 'desa tanpa grup tetap ikut masuk total');
   assert.deepStrictEqual(split.percents, [10, 20, 30],
     'percents[0..2] harus persis kelompok 1/2/3');
   assert.strictEqual(100 - split.percents.reduce((a, b) => a + b, 0), 40,
     '%di luar semua kelompok harus sama dengan porsi desa tanpa grup');
-  assert.deepStrictEqual(groupSplit([], groupMap, villageDistrictByCode, 3),
+  assert.deepStrictEqual(groupSplit([], groupMap, 3),
     { total: 0, percents: [0, 0, 0] },
     'tanpa baris seharusnya nol rapi, bukan NaN dari pembagian 0/0');
-  assert.deepStrictEqual(groupSplit(rowsGrup, undefined, villageDistrictByCode, 3),
+  assert.deepStrictEqual(groupSplit(rowsGrup, undefined, 3),
     { total: 100, percents: [0, 0, 0] },
     'entitas tanpa grup sama sekali (groupMap undefined) seharusnya semua di luar grup');
 
@@ -187,12 +203,12 @@ async function test() {
   const dealerRingMap = { 'KEC-1': 1, 'KEC-2': 2 }; // KEC-3 sengaja TIDAK di ring manapun
   const coverageDistricts = new Set(['KEC-2', 'KEC-3']); // KEC-2 tumpang tindih dgn ring 2
   const rowsDealer = [
-    { village: 'DESA-A', units: 10 },              // KEC-1 -> ring 1
-    { village: 'DESA-B', units: 20 },              // KEC-2 -> ring 2 (menang atas coverage)
-    { village: 'DESA-C', units: 30 },              // KEC-3 -> tidak di ring, tapi di coverage
-    { village: 'DESA-TANPA-GRUP', units: 40 },     // KEC-X -> tidak masuk manapun
+    { district: 'KEC-1', units: 10 },              // ring 1
+    { district: 'KEC-2', units: 20 },              // ring 2 (menang atas coverage)
+    { district: 'KEC-3', units: 30 },              // tidak di ring, tapi di coverage
+    { district: 'KEC-X', units: 40 },              // tidak masuk manapun
   ];
-  const dsplit = dealerRingSplit(rowsDealer, dealerRingMap, coverageDistricts, villageDistrictByCode);
+  const dsplit = dealerRingSplit(rowsDealer, dealerRingMap, coverageDistricts);
   assert.strictEqual(dsplit.total, 100);
   assert.strictEqual(dsplit.percent1, 10);
   assert.strictEqual(dsplit.percent2, 20,

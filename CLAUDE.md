@@ -40,9 +40,14 @@ Istilah wilayah memakai terjemahan resmi BPS: kelurahan/desa → `village`, keca
 - **PII terkurung.** Nama dan alamat konsumen hanya boleh ada di database
   `astra_customers`. `DROP DATABASE astra_customers` harus mematikan fiturnya dan
   meninggalkan sisanya jalan penuh — tanpa menyunting satu baris kode.
-- **`/api/customers` wajib punya parameter `village`.** Tanpa itu 400, bukan
-  dikembalikan semuanya. Ini satu-satunya hal yang mencegah satu akun bersama menyedot
-  seluruh basis data konsumen dalam satu permintaan.
+- **Satuan analisis = KECAMATAN** (sejak 2026-10-10). Angka, warna peta, rasio
+  jangkauan, dan kantong PII berhenti di kecamatan. Data tetap disimpan dan dicocokkan
+  per kelurahan, dan titik peta tetap disebar di poligon desa, tapi tidak ada angka
+  per desa yang boleh tampil. Poligon kecamatan = view `district_shapes`
+  (turunan `villages`); segarkan sesudah `villages` berubah.
+- **`/api/customers` wajib punya parameter `district`.** Tanpa itu 400, bukan
+  dikembalikan semuanya, dan `village` lama juga ditolak. Ini satu-satunya hal yang
+  mencegah satu akun bersama menyedot seluruh basis data konsumen dalam satu permintaan.
 - **`backend/core/` tidak boleh meng-`require('fs')`, `pg`, atau apa pun yang
   menyentuh dunia luar.** Kemurnian itu yang membuat fungsi yang sama bisa dipakai
   server, CLI, dan tes tanpa duplikasi.

@@ -4446,3 +4446,60 @@ Astra.
 
 **Konsekuensi:** Mulai 2026-10-09 VPS adalah sumber data utama. Backup harian masih di
 disk VPS yang sama; menyalinnya keluar tercatat di ROADMAP sebagai utang.
+
+## [2026-10-10] Satuan analisis pindah dari kelurahan ke kecamatan
+
+**Konteks:** User meminta analisis hanya sampai kecamatan, di seluruh aplikasi: warna
+peta, tabel, rasio jangkauan, fusion, dan daftar konsumen. Lapisan batas desa diminta
+tetap ada sebagai referensi, bukan dihapus.
+
+**Keputusan:**
+- **Data tetap disimpan per kelurahan; yang naik ke kecamatan cara membacanya.** Impor
+  dan pencocokan tiga tingkat tetap sampai kelurahan (kualitas data masukan). Tabel
+  `sales`, `segment_rollup`, `source_overlap`, dan `customer_*` tidak berubah. Semua
+  pembacaan untuk analisis dijumlahkan per `district_code`.
+- **Poligon kecamatan = materialized view `district_shapes`**, diturunkan dari
+  `villages`, bukan tabel sendiri. Dengan begitu tidak ada dua sumber batas yang bisa
+  menyimpang. Disegarkan oleh seed-boundaries, seed-regions, dan `coverage.rebuild()`
+  penuh. Hitung ulang satu outlet tidak menyegarkan view (~5 detik), karena batas tidak
+  berubah waktu pin digeser.
+- **Lubang sliver ditutup, enclave dipertahankan.** ST_Union kelurahan menyisakan 29.823
+  lubang karena tepi kelurahan tidak berimpit. Lubang tidak terlihat sebagai garis,
+  tapi jadi bintik begitu diwarnai. Buffer ±5 m masih menyisakan 1.407 lubang, jadi
+  aturannya diganti: lubang dipertahankan hanya kalau titik di dalamnya jatuh di
+  kelurahan kecamatan lain. Hasilnya tinggal 38 lubang, semuanya enclave sah (Pancur,
+  Mlonggo, dll.). Tumpang tindih >1 ha tetap 51, sama dengan data sumber; penutupan
+  tidak menambah satu pun. `kecamatan.geojson` turun dari 3 MB ke 0,6 MB.
+- **Rasio jangkauan per kecamatan:** luas(kecamatan ∩ lingkaran) ÷ luas(kecamatan).
+  Kunci tabel `coverage` jadi `district_code`; tabel lama dibuang otomatis oleh
+  schema.sql karena isinya turunan. Asumsinya ikut berubah: dari "konsumen merata di
+  dalam kelurahannya" menjadi "merata di dalam kecamatannya". Ini lebih kasar, dan
+  memang itu yang diminta (opsi "rasio tetap per desa, dijumlahkan berbobot unit"
+  ditolak user). Hasil 5 km di data 2026-10-10: 18,9% penjualan dalam jangkauan.
+- **PII per kecamatan** (`/api/customers?district=`, `/v1/kecamatan/:district/pelanggan`).
+  Ini keputusan user, dan aturan wajib di CLAUDE.md ikut diubah. Satu permintaan kini
+  bisa memuat 10–15× lebih banyak orang. Batasnya (500 / 200) sengaja TIDAK dinaikkan.
+  Sebagai gantinya server mengirim `total`, dan layar menulis "N dari M".
+  `piiLimiter` + `access_log` tetap dipakai; kolom `access_log.village_code` dipakai
+  untuk kode kecamatan, karena kolom itu sejak awal "subjek" bebas.
+- **Titik peta tetap disebar di poligon DESA** (keputusan user, supaya sebarannya
+  lebih aktual). Tooltip dan kantongnya menyebut kecamatan, tanpa nama desa. Daftar
+  konsumen tetap menyebut desa tiap orang: yang berhenti di kecamatan adalah
+  analisisnya, bukan keterangan orangnya.
+- **Jarak KTP–servis di `fuseEngine` tetap memakai titik tengah desa.** Itu pengukuran
+  masukan; memakai titik tengah kecamatan akan menggeser golongan semua orang. Yang
+  tampil hanya hasilnya per kecamatan. **Belum dikonfirmasi user.**
+
+**Alternatif yang ditolak:**
+- Tabel `districts` berisi poligon sendiri: dua sumber batas yang bisa menyimpang.
+- Buffer ±N m untuk menutup sliver: tidak cukup (1.407 lubang tersisa di 5 m) dan
+  menggeser luas sampai 0,2%.
+- Menyebar titik di poligon kecamatan: lebih konsisten, tapi user memilih sebaran
+  per desa.
+
+**Konsekuensi:**
+- Satu titik → satu orang kini butuh kantong kecamatan yang **tidak terpotong**. Kalau
+  kantong (kecamatan+dealer) melewati 200 baris, kartu orang tidak muncul dan hanya
+  tooltip agregat yang tampil, karena menebak urutan berarti nama yang salah.
+- Tab "Master Kelurahan" jadi "Master Kecamatan". Kunci halaman `kelurahan` dan id
+  elemen `kelurahanDetail*` sengaja tidak diganti.

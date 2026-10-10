@@ -1,15 +1,20 @@
 /**
- * Kontribusi penjualan kelurahan/pos terhadap basisnya, posisi relatif, dan acuan
+ * Kontribusi penjualan kecamatan/pos terhadap basisnya, posisi relatif, dan acuan
  * bisnis.
  *
+ * Satuan wilayahnya KECAMATAN sejak 2026-10-10 (docs/DECISIONS.md): tiap baris
+ * penjualan membawa `district`, dan itu satu-satunya kunci wilayah yang dibaca di sini.
+ * `village` di baris yang sama cuma untuk menyebar titik di peta — tidak pernah
+ * dipakai menghitung.
+ *
  * Murni: tidak menyentuh DOM, tidak membaca S langsung — pemanggilnya yang menyaring
- * baris penjualan lewat activeRows() dan mengoper villageByCode. Diuji oleh
+ * baris penjualan lewat activeRows() dan mengoper districtByCode. Diuji oleh
  * test/sales-stats.test.js.
  *
  * Posisi relatif memakai ULANG percentileBreaks()/classOf() dari colors.js — mesin
  * yang sama yang sudah dipakai heatmap sejak awal, cuma inputnya beda tergantung
- * pemanggilnya: kontribusi % per kelurahan (relatif terhadap kotanya sendiri) untuk
- * panel kelurahan, atau kontribusi % per outlet (relatif terhadap TOTAL SELURUH pos
+ * pemanggilnya: kontribusi % per kecamatan (relatif terhadap kotanya sendiri) untuk
+ * panel kecamatan, atau kontribusi % per outlet (relatif terhadap TOTAL SELURUH pos
  * yang tampil) untuk blok Performa Pos Dealer — lihat bagian PERFORMA POS DEALER di
  * bawah.
  */
@@ -35,59 +40,59 @@ export const KONTRIBUSI_LABEL = [
 ];
 
 /**
- * Kelompokkan baris penjualan per kota, lalu per kelurahan di dalamnya.
+ * Kelompokkan baris penjualan per kota, lalu per kecamatan di dalamnya.
  *
- * @param {Array<{village, units}>} rows        baris penjualan yang SUDAH difilter
- * @param {Object} villageByCode                 kode -> {cityCode, ...}
- * @return {Map<string, {total: number, villages: Map<string, number>}>}
+ * @param {Array<{district, units}>} rows       baris penjualan yang SUDAH difilter
+ * @param {Object} districtByCode                kode -> {cityCode, ...}
+ * @return {Map<string, {total: number, districts: Map<string, number>}>}
  */
-export function groupByCity(rows, villageByCode) {
+export function groupByCity(rows, districtByCode) {
   const perCity = new Map();
   (rows || []).forEach((row) => {
-    const village = villageByCode[row.village];
-    if (!village) return;
-    if (!perCity.has(village.cityCode)) {
-      perCity.set(village.cityCode, { total: 0, villages: new Map() });
+    const district = districtByCode[row.district];
+    if (!district) return;
+    if (!perCity.has(district.cityCode)) {
+      perCity.set(district.cityCode, { total: 0, districts: new Map() });
     }
-    const kota = perCity.get(village.cityCode);
+    const kota = perCity.get(district.cityCode);
     kota.total += row.units;
-    kota.villages.set(row.village, (kota.villages.get(row.village) || 0) + row.units);
+    kota.districts.set(row.district, (kota.districts.get(row.district) || 0) + row.units);
   });
   return perCity;
 }
 
 /**
- * % unit kelurahan terhadap total kotanya. `null` kalau kotanya belum punya
+ * % unit kecamatan terhadap total kotanya. `null` kalau kotanya belum punya
  * penjualan sama sekali (dibagi nol) — dilaporkan sebagai "Data belum tersedia",
  * bukan dipaksa jadi 0 atau NaN.
  */
-export function contributionPercent(villageUnits, cityTotal) {
+export function contributionPercent(units, cityTotal) {
   if (!cityTotal) return null;
-  return (villageUnits / cityTotal) * 100;
+  return (units / cityTotal) * 100;
 }
 
 /**
- * Kontribusi % tiap kelurahan yang muncul di `rows`, terhadap total KOTANYA SENDIRI.
+ * Kontribusi % tiap kecamatan yang muncul di `rows`, terhadap total KOTANYA SENDIRI.
  * Dipakai bersama: panel wilayah (Rank/City Average) DAN pewarnaan peta — satu
  * hitungan, dua pemakai, supaya angka di panel dan di peta tidak pernah menyimpang.
  *
- * @return {Map<string, number>} kode kelurahan -> kontribusi %. Kelurahan dari kota
+ * @return {Map<string, number>} kode kecamatan -> kontribusi %. Kecamatan dari kota
  *   yang totalnya nol TIDAK ikut masuk (bukan NaN).
  */
-export function contributionsForRows(rows, villageByCode) {
-  const perCity = groupByCity(rows, villageByCode);
+export function contributionsForRows(rows, districtByCode) {
+  const perCity = groupByCity(rows, districtByCode);
   const result = new Map();
   perCity.forEach((kota) => {
-    kota.villages.forEach((units, villageCode) => {
+    kota.districts.forEach((units, districtCode) => {
       const pct = contributionPercent(units, kota.total);
-      if (pct != null) result.set(villageCode, pct);
+      if (pct != null) result.set(districtCode, pct);
     });
   });
   return result;
 }
 
 /**
- * Unit MUTLAK per kelurahan dari baris yang sedang tampil.
+ * Unit MUTLAK per kecamatan dari baris yang sedang tampil.
  *
  * Pasangan contributionsForRows() di atas, dan dipakai waktu penyebut "% terhadap
  * kota" justru merusak artinya: saat filter DEALER aktif, satu dealer yang punya 1
@@ -100,14 +105,14 @@ export function contributionsForRows(rows, villageByCode) {
  * kecil yang dominan di kotanya sendiri tidak tenggelam di bawah kelurahan bervolume
  * besar dari kota lain.
  *
- * @return {Map<string, number>} kode kelurahan -> jumlah unit. Kelurahan yang tidak
- *   dikenal di villageByCode TIDAK ikut — sama seperti groupByCity().
+ * @return {Map<string, number>} kode kecamatan -> jumlah unit. Kecamatan yang tidak
+ *   dikenal di districtByCode TIDAK ikut — sama seperti groupByCity().
  */
-export function unitsForRows(rows, villageByCode) {
+export function unitsForRows(rows, districtByCode) {
   const hasil = new Map();
   (rows || []).forEach((row) => {
-    if (!villageByCode[row.village]) return;
-    hasil.set(row.village, (hasil.get(row.village) || 0) + row.units);
+    if (!districtByCode[row.district]) return;
+    hasil.set(row.district, (hasil.get(row.district) || 0) + row.units);
   });
   return hasil;
 }
@@ -145,8 +150,8 @@ export function referenceRatio(contributionPct, benchmarkPct) {
 /* ==========================================================================
    PERFORMA POS DEALER — kontribusi, posisi relatif, dan acuan bisnis PER POS
    ==========================================================================
-   Sejak 2026-08-31 (permintaan Pakbos). Basisnya beda dari kelurahan: kontribusi
-   kelurahan relatif terhadap KOTANYA SENDIRI (groupByCity), kontribusi pos relatif
+   Sejak 2026-08-31 (permintaan Pakbos). Basisnya beda dari kecamatan: kontribusi
+   kecamatan relatif terhadap KOTANYA SENDIRI (groupByCity), kontribusi pos relatif
    terhadap TOTAL SELURUH POS yang tampil di filter aktif — dikonfirmasi user waktu
    perencanaan. Posisi relatif dan acuan bisnis TETAP memakai mesin yang sama
    (percentileBreaks/classOf lewat relativePosition(), referenceGap()) — tidak ada
@@ -154,12 +159,12 @@ export function referenceRatio(contributionPct, benchmarkPct) {
    ========================================================================== */
 
 /**
- * Kontribusi % tiap nilai `field` (mis. `outlet` atau `village`) yang muncul di
- * `rows`, terhadap total SELURUH `rows` itu — bukan per kota seperti kelurahan biasa
+ * Kontribusi % tiap nilai `field` (mis. `outlet` atau `district`) yang muncul di
+ * `rows`, terhadap total SELURUH `rows` itu — bukan per kota seperti kecamatan biasa
  * (groupByCity). Nilai dari total yang nol TIDAK ikut masuk.
  *
  * @param {Array<Object>} rows   baris penjualan yang SUDAH difilter
- * @param {string} field         nama field pengelompok, mis. 'outlet' atau 'village'
+ * @param {string} field         nama field pengelompok, mis. 'outlet' atau 'district'
  * @return {Map<string, number>} nilai field -> kontribusi %
  */
 function contributionsByField(rows, field) {
@@ -185,16 +190,16 @@ function contributionsByField(rows, field) {
 export function contributionsByOutlet(rows) { return contributionsByField(rows, 'outlet'); }
 
 /**
- * Kontribusi % tiap desa yang muncul di `rows`, terhadap total SELURUH `rows` itu —
- * dipakai blok "Analisis Penjualan Wilayah". Basisnya SENGAJA bukan kotanya sendiri
- * (beda dari contributionsForRows/villageStats yang sudah ada untuk panel
- * kelurahan): `rows` di sini biasanya sudah dipersempit ke satu dealer/pos lewat
- * activeRows(), jadi "relatif terhadap dealer/pos yang difilter" otomatis terjadi
- * tanpa percabangan khusus — dikonfirmasi user waktu perencanaan.
- * @param {Array<{village, units}>} rows  baris penjualan yang SUDAH difilter
- * @return {Map<string, number>} kode desa -> kontribusi %
+ * Kontribusi % tiap kecamatan yang muncul di `rows`, terhadap total SELURUH `rows`
+ * itu — dipakai blok "Analisis Penjualan Wilayah". Basisnya SENGAJA bukan kotanya
+ * sendiri (beda dari contributionsForRows/districtStats untuk panel kecamatan):
+ * `rows` di sini biasanya sudah dipersempit ke satu dealer/pos lewat activeRows(),
+ * jadi "relatif terhadap dealer/pos yang difilter" otomatis terjadi tanpa
+ * percabangan khusus — dikonfirmasi user waktu perencanaan.
+ * @param {Array<{district, units}>} rows  baris penjualan yang SUDAH difilter
+ * @return {Map<string, number>} kode kecamatan -> kontribusi %
  */
-export function contributionsByVillage(rows) { return contributionsByField(rows, 'village'); }
+export function contributionsByDistrict(rows) { return contributionsByField(rows, 'district'); }
 
 /**
  * Kelompok Business Reference dari selisih (referenceGap()) — cuma tandanya yang
@@ -220,20 +225,18 @@ export function businessReferenceGroup(gap) {
  * prioritas) cukup besar untuk dipisah sebagai dealerRingSplit() sendiri di bawah,
  * bukan dipaksa satu fungsi dengan banyak cabang.
  *
- * @param {Array<{village, units}>} rows  baris SATU pos, sudah difilter
+ * @param {Array<{district, units}>} rows  baris SATU pos, sudah difilter
  * @param {Object} groupMap  S.posCoverage[outletCode] — {districtCode: 1..groupCount}
- * @param {Object} villageByCode  S.villageByCode — {villageCode: {districtCode, ...}}
  * @param {number} groupCount  jumlah slot, 8 untuk coverage pos
  * @return {{total: number, percents: number[]}}  percents[0] = kelompok 1, dst.
  */
-export function groupSplit(rows, groupMap, villageByCode, groupCount) {
+export function groupSplit(rows, groupMap, groupCount) {
   const units = {};
   for (let i = 1; i <= groupCount; i++) units[i] = 0;
   let total = 0;
   (rows || []).forEach((row) => {
     total += row.units;
-    const district = villageByCode ? (villageByCode[row.village] || {}).districtCode : undefined;
-    const group = district && groupMap ? groupMap[district] : undefined;
+    const group = row.district && groupMap ? groupMap[row.district] : undefined;
     if (group >= 1 && group <= groupCount) units[group] += row.units;
   });
   const percents = [];
@@ -250,20 +253,19 @@ export function groupSplit(rows, groupMap, villageByCode, groupCount) {
  * user waktu perencanaan (2026-08-31). Kecamatan yang tidak masuk keduanya TIDAK
  * dihitung ke kelompok manapun, tapi TETAP masuk `total`.
  *
- * @param {Array<{village, units}>} rows  baris SATU dealer, sudah difilter
+ * @param {Array<{district, units}>} rows  baris SATU dealer, sudah difilter
  * @param {Object} ringMap  S.dealerRings[dealerCode] — {districtCode: 1|2|3}
  * @param {Set<string>} coverageDistricts  union kecamatan dari S.posCoverage milik
  *   seluruh pos dealer ini — dibangun pemanggilnya (butuh S.outletByCode)
- * @param {Object} villageByCode  S.villageByCode — {villageCode: {districtCode, ...}}
  * @return {{total: number, percent1: number, percent2: number, percent3: number,
  *   percentCoverage: number}}
  */
-export function dealerRingSplit(rows, ringMap, coverageDistricts, villageByCode) {
+export function dealerRingSplit(rows, ringMap, coverageDistricts) {
   const units = { 1: 0, 2: 0, 3: 0, coverage: 0 };
   let total = 0;
   (rows || []).forEach((row) => {
     total += row.units;
-    const district = villageByCode ? (villageByCode[row.village] || {}).districtCode : undefined;
+    const district = row.district;
     const ring = district && ringMap ? ringMap[district] : undefined;
     if (ring === 1 || ring === 2 || ring === 3) {
       units[ring] += row.units;

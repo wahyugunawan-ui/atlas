@@ -464,7 +464,7 @@
       <div id="master-panel" class="pilih-panel" hidden style="width:220px; z-index:300">
         <button onclick="switchTab('dealer')" id="nav-dealer" class="pilih-opsi"><i class="ph ph-buildings mr-2"></i>Master Dealer</button>
         <button onclick="switchTab('pos')" id="nav-pos" class="pilih-opsi"><i class="ph ph-storefront mr-2"></i>Master Pos Dealer</button>
-        <button onclick="switchTab('kelurahan')" id="nav-kelurahan" class="pilih-opsi"><i class="ph ph-map-pin-line mr-2"></i>Master Kelurahan</button>
+        <button onclick="switchTab('kelurahan')" id="nav-kelurahan" class="pilih-opsi"><i class="ph ph-map-pin-line mr-2"></i>Master Kecamatan</button>
       </div>
     </div>
   </div>
@@ -655,8 +655,11 @@
       <details class="mt-2 pt-2 border-t border-slate-200">
         <summary class="text-[10px] font-bold text-slate-400 uppercase mb-1 cursor-pointer select-none">Batas Wilayah</summary>
         <div class="mt-1">
-          <label class="toggle-row"><span class="text-xs font-semibold text-slate-600">Batas dan Nama Kelurahan/Desa</span><span class="switch"><input type="checkbox" id="opt-kelurahan" checked onchange="redrawMap()"><span class="track"></span></span></label>
-          <label class="toggle-row"><span class="text-xs font-semibold text-slate-600">Batas dan Nama Kecamatan</span><span class="switch"><input type="checkbox" id="opt-kecamatan" onchange="toggleDistrictNames()"><span class="track"></span></span></label>
+          <!-- Sejak 2026-10-10 KECAMATAN satuan analisis peta: batas & namanya nyala
+               bawaan. Batas desa disimpan sebagai referensi, MATI bawaan — tidak ada
+               angka per desa di mana pun, jadi garisnya cuma orientasi. -->
+          <label class="toggle-row"><span class="text-xs font-semibold text-slate-600">Batas dan Nama Kecamatan</span><span class="switch"><input type="checkbox" id="opt-kecamatan" checked onchange="redrawMap()"><span class="track"></span></span></label>
+          <label class="toggle-row"><span class="text-xs font-semibold text-slate-600">Batas dan Nama Desa</span><span class="switch"><input type="checkbox" id="opt-kelurahan" onchange="redrawMap()"><span class="track"></span></span></label>
           <label class="toggle-row"><span class="text-xs font-semibold text-slate-600">Batas dan Nama Kota</span><span class="switch"><input type="checkbox" id="opt-kota" onchange="redrawMap()"><span class="track"></span></span></label>
         </div>
       </details>
@@ -671,7 +674,7 @@
       </details>
 
       <!-- Tiga sumber yang disatukan lewat Nomor Mesin (docs/FUSION.md 3.1). Titiknya
-           DISEBAR di dalam kelurahan, bukan alamat sebenarnya — keterangan itu ikut
+           DISEBAR di dalam desa asalnya, bukan alamat sebenarnya — keterangan itu ikut
            ditulis di layar supaya tidak ada yang membacanya sebagai lokasi rumah. -->
       <details class="mt-2 pt-2 border-t border-slate-200" open>
         <summary class="text-[10px] font-bold text-slate-400 uppercase mb-1 cursor-pointer select-none">Titik Tiga Sumber</summary>
@@ -684,7 +687,7 @@
           <label class="toggle-row"><span class="text-xs font-semibold text-slate-600"><span class="inline-block w-2 h-2 align-middle mr-1.5" style="background:#ec4899"></span>Titik Servis</span><span class="switch"><input type="checkbox" id="opt-titik-servis" onchange="toggleFusionPoints()"><span class="track"></span></span></label>
           <label class="toggle-row"><span class="text-xs font-semibold text-slate-600"><span class="inline-block w-2 h-2 rounded-full align-middle mr-1.5 border-2" style="border-color:#f59e0b"></span>Titik Pengiriman</span><span class="switch"><input type="checkbox" id="opt-titik-kirim" onchange="toggleFusionPoints()"><span class="track"></span></span></label>
           <label class="toggle-row"><span class="text-xs font-semibold text-slate-600">Lingkaran Radius KPI Jarak</span><span class="switch"><input type="checkbox" id="opt-kpi-jarak" onchange="redrawMap()"><span class="track"></span></span></label>
-          <p class="text-[10px] text-slate-400 leading-snug mt-1 px-0.5">Titik disebar merata di dalam kelurahannya, bukan alamat sebenarnya. Radius KPI dipusatkan di pos atau dealer yang sedang dipilih.</p>
+          <p class="text-[10px] text-slate-400 leading-snug mt-1 px-0.5">Titik disebar merata di dalam desa asalnya, bukan alamat sebenarnya. Angkanya dibaca per kecamatan. Radius KPI dipusatkan di pos atau dealer yang sedang dipilih.</p>
         </div>
       </details>
 
@@ -744,15 +747,15 @@
     </div>
 
     <div id="map-note" class="hidden absolute bottom-6 left-6 z-10 bg-amber-50 border border-amber-200 text-amber-900 text-[11px] px-3 py-2 rounded-xl max-w-xs shadow-sm">
-      <b>Titik penjualan diacak di dalam kelurahannya.</b> Alamat konsumen belum punya
+      <b>Titik penjualan diacak di dalam desa asalnya.</b> Alamat konsumen belum punya
       koordinat, jadi titik ini menunjukkan sebaran, bukan lokasi rumah.
     </div>
 
     <div id="kelurahanDetailPanel" class="hidden translate-x-full absolute top-20 left-6 bottom-6 w-96 map-panel p-5 z-20 overflow-y-auto">
-      <button onclick="closeVillageDetail()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-700"><i class="ph ph-x text-lg"></i></button>
+      <button onclick="closeDistrictDetail()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-700"><i class="ph ph-x text-lg"></i></button>
       <div id="kelurahanDetailBack" class="mb-1"></div>
       <!-- Ringkasan dealer (dealerCardHtml compact) — DIISI HANYA oleh openDealerDetail(),
-           dikosongkan lagi waktu drill-down kelurahan biasa supaya tidak nyasar
+           dikosongkan lagi waktu drill-down kecamatan biasa supaya tidak nyasar
            tampil di konteks yang salah. Sejak 2026-09-14: klik marker dealer di
            mode biasa langsung mengisi ini + kelurahanDetailList sekaligus. -->
       <div id="kelurahanDetailSummary" class="mb-3 pb-3 border-b border-slate-100"></div>
@@ -794,13 +797,14 @@
     <div id="panel-performa" class="flex-1 overflow-y-auto min-h-0 space-y-2 pr-1"></div>
     <p class="text-[10px] text-slate-400 leading-snug mt-3 pt-2 border-t border-slate-100 shrink-0">
       Ringkasan di atas berganti isi mengikuti filter yang aktif: Kota/Semua
-      menampilkan jumlah desa dan rata-rata kontribusi/posisi relatif, Dealer
+      menampilkan jumlah kecamatan dan rata-rata kontribusi/posisi relatif, Dealer
       menambahkan jumlah pos dan rata-rata acuan bisnis, Pos menampilkan bagian
       penjualan per ring layanan (ditetapkan manual, lihat Edit ring).
     </p>
   </div>
 
-  <!-- Blok baru (permintaan Pakbos, putaran ketiga): satu baris satu DESA, SELALU
+  <!-- Blok baru (permintaan Pakbos, putaran ketiga): satu baris satu KECAMATAN (sejak
+       2026-10-10; sebelumnya desa), SELALU
        tampil (tidak bergantung filter). Auto-loop sendiri begitu ada isinya, tombol
        Pause bukan Live — beda dari blok Performa Pos Dealer di atas. -->
   <div class="xl:col-span-3 bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
@@ -809,7 +813,7 @@
       <button id="btn-live-wilayah" onclick="toggleLiveWilayah()" title="Jeda gulir otomatis"
               class="live-nyala flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50 whitespace-nowrap"><i class="ph ph-pause"></i><span>Pause</span></button>
     </div>
-    <p class="text-xs text-slate-400 mt-0.5 mb-3">Total sales, %kontribusi, dan kelompok posisi relatif per desa — relatif terhadap dealer/pos yang sedang difilter (atau seluruh yang tampil kalau tidak ada filter dealer/pos). Diurutkan dari penjualan terendah.</p>
+    <p class="text-xs text-slate-400 mt-0.5 mb-3">Total sales, %kontribusi, dan kelompok posisi relatif per kecamatan — relatif terhadap dealer/pos yang sedang difilter (atau seluruh yang tampil kalau tidak ada filter dealer/pos). Diurutkan dari penjualan terendah.</p>
     <div id="panel-wilayah" class="overflow-y-auto space-y-2 pr-1" style="max-height:460px"></div>
   </div>
   </div>
@@ -1005,12 +1009,12 @@
 <section id="tab-kelurahan" class="hidden p-4 md:p-6 h-full flex flex-col gap-4">
   <div class="flex flex-col md:flex-row md:items-end justify-between gap-3">
     <div>
-      <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900">Master Kelurahan</h1>
-      <p class="text-sm text-slate-500 mt-0.5">Urut provinsi &rarr; kabupaten &rarr; kecamatan &rarr; kelurahan</p>
+      <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900">Master Kecamatan</h1>
+      <p class="text-sm text-slate-500 mt-0.5">Urut provinsi &rarr; kabupaten &rarr; kecamatan. Nama desa dari Excel tetap dicocokkan lewat <b>Cocokkan Nama</b>.</p>
     </div>
     <div class="flex gap-2">
       <button onclick="openMatchNames()" class="px-4 py-2 rounded-xl text-white text-sm font-semibold hover:opacity-90 whitespace-nowrap btn-primary"><i class="ph ph-link mr-1"></i>Cocokkan Nama<span id="mkel-pending" class="hidden ml-1.5 px-1.5 py-0.5 rounded-md bg-white/25 text-[11px] mono"></span></button>
-      <input id="mkel-search" oninput="renderVillageTable()" type="text" placeholder="Cari kelurahan atau kode..." class="px-3 py-2 rounded-xl border border-slate-200 text-sm w-56">
+      <input id="mkel-search" oninput="renderDistrictTable()" type="text" placeholder="Cari kecamatan atau kode..." class="px-3 py-2 rounded-xl border border-slate-200 text-sm w-56">
     </div>
   </div>
   <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex-1 min-h-0 flex flex-col">
@@ -1018,8 +1022,7 @@
       <table class="w-full">
         <thead class="sticky top-0 z-10 shadow-sm" style="background:#eef1f7"><tr>
           <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Kode</th>
-          <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Kelurahan &amp; Koordinat</th>
-          <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Kecamatan</th>
+          <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Kecamatan &amp; Koordinat</th>
           <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Kota</th>
           <th class="px-3 py-2.5 text-left text-[11px] font-bold text-slate-500 uppercase">Provinsi</th>
           <th class="px-3 py-2.5 text-right text-[11px] font-bold text-slate-500 uppercase">Total Pelanggan</th>

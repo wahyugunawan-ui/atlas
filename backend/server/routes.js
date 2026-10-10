@@ -335,7 +335,7 @@ function build(config) {
    * Telusuri konsumen untuk halaman Data Konsumen.
    *
    * Rute TERPISAH dari /customers, bukan penambahan parameter di sana. /customers
-   * tetap mewajibkan satu kode kelurahan dan tetap diuji begitu — jaminan itu tidak
+   * tetap mewajibkan satu kode kecamatan dan tetap diuji begitu — jaminan itu tidak
    * dilonggarkan, cuma didampingi jalur kedua yang batasnya berbeda dan tertulis.
    *
    * Di sini penyaringnya bebas, tapi hasilnya selalu dipotong repo.BROWSE_LIMIT dan
@@ -398,11 +398,15 @@ function build(config) {
   });
 
   /**
-   * Konsumen di SATU kelurahan.
+   * Konsumen di SATU kecamatan.
    *
-   * Parameter `village` WAJIB. Tanpa itu 400, bukan dikembalikan semuanya — ini
+   * Parameter `district` WAJIB. Tanpa itu 400, bukan dikembalikan semuanya — ini
    * satu-satunya hal yang mencegah satu akun bersama menyedot seluruh basis data
    * konsumen dalam satu permintaan. Tiap akses dicatat.
+   *
+   * Sampai 2026-10-10 parameternya `village`; satuan analisis pindah ke kecamatan
+   * (docs/DECISIONS.md). `village` lama sengaja TIDAK diterima lagi sebagai pengganti —
+   * dua pintu masuk berarti dua pagar yang harus dijaga.
    */
   api.get('/customers', async (req, res) => {
     if (!piiLimiter.allow(req.ip || 'tidak diketahui')) {
@@ -410,15 +414,15 @@ function build(config) {
         error: 'Terlalu banyak permintaan data konsumen. Tunggu sebentar lalu coba lagi.',
       });
     }
-    const village = String(req.query.village || '');
-    if (!VILLAGE.test(village)) {
+    const district = String(req.query.district || '');
+    if (!DISTRICT.test(district)) {
       return res.status(400).json({
-        error: 'Sebutkan satu kode kelurahan, misalnya village=34.04.01.2001.',
+        error: 'Sebutkan satu kode kecamatan, misalnya district=34.04.01.',
       });
     }
     // Berbeda dari /customers/browse yang mengabaikan penyaring cacat: di sini bentuk
     // yang salah DITOLAK. Mengabaikannya berarti permintaannya melebar diam-diam jadi
-    // seluruh riwayat kelurahan itu, dan rute ini yang mengeluarkan nama dan alamat.
+    // seluruh riwayat kecamatan itu, dan rute ini yang mengeluarkan nama dan alamat.
     const period = String(req.query.period || '');
     const periodFrom = String(req.query.periodFrom || period);
     const periodTo = String(req.query.periodTo || period);
@@ -430,13 +434,13 @@ function build(config) {
         error: 'Rentang periode terbalik: bulan "dari" lebih akhir daripada bulan "sampai".',
       });
     }
-    const rows = await repo.customersInVillage(village,
+    const hasil = await repo.customersInDistrict(district,
       { from: periodFrom || null, to: periodTo || null });
-    if (rows === null) {
+    if (hasil === null) {
       return res.status(404).json({ error: 'Data konsumen tidak tersedia di server ini.' });
     }
-    await repo.logCustomerAccess(req.ip, village, rows.length);
-    res.json({ village, customers: rows });
+    await repo.logCustomerAccess(req.ip, district, hasil.rows.length);
+    res.json({ district, customers: hasil.rows, total: hasil.total });
   });
 
   /**
@@ -1294,7 +1298,7 @@ function build(config) {
   });
 
   /**
-   * Daftar pelanggan satu kantong (kelurahan, dealer) — RUTE PII.
+   * Daftar pelanggan satu kantong (kecamatan, dealer) — RUTE PII.
    *
    * Dipakai panel yang terbuka saat orang MENGKLIK, atau berhenti 3 detik di atas,
    * satu titik KTP/Servis/Pengiriman di peta. Titiknya sendiri anonim (cuma membawa
@@ -1305,21 +1309,21 @@ function build(config) {
    * hitungan detik dan access_log penuh oleh lewatan yang tidak pernah diminta siapa
    * pun — dua hal yang membuat pagar PII berhenti berarti apa-apa.
    *
-   * `village` sebagai parameter PATH, bukan query: dengan begitu ia tidak mungkin
-   * dihilangkan. Tanpa kelurahan, rutenya bahkan tidak cocok. Sejalan dengan aturan
-   * proyek "/api/customers wajib punya village" — satu permintaan tidak boleh bisa
-   * menyapu lebih dari satu kelurahan.
+   * `district` sebagai parameter PATH, bukan query: dengan begitu ia tidak mungkin
+   * dihilangkan. Tanpa kecamatan, rutenya bahkan tidak cocok. Sejalan dengan aturan
+   * proyek "/api/customers wajib punya district" — satu permintaan tidak boleh bisa
+   * menyapu lebih dari satu kecamatan. (Sampai 2026-10-10: /v1/kelurahan/:village.)
    */
-  api.get('/v1/kelurahan/:village/pelanggan', async (req, res) => {
+  api.get('/v1/kecamatan/:district/pelanggan', async (req, res) => {
     if (!piiLimiter.allow(req.ip || 'tidak diketahui')) {
       return res.status(429).json({
         error: 'Terlalu banyak permintaan data konsumen. Tunggu sebentar lalu coba lagi.',
       });
     }
 
-    const village = String(req.params.village || '').trim();
-    if (!VILLAGE.test(village)) {
-      return res.status(400).json({ error: 'Kode kelurahan tidak sah.' });
+    const district = String(req.params.district || '').trim();
+    if (!DISTRICT.test(district)) {
+      return res.status(400).json({ error: 'Kode kecamatan tidak sah.' });
     }
 
     const periode = String(req.query.periode || '').trim();
@@ -1337,13 +1341,17 @@ function build(config) {
     }
     const dealerCode = dealerMinta ? await repo.legacyDealerCode(dealerMinta) : null;
 
-    const rows = await repo.fusionVillageCustomers(village, { dealerCode, period: periode || null });
-    if (rows === null) {
+    const hasil = await repo.fusionDistrictCustomers(district,
+      { dealerCode, period: periode || null });
+    if (hasil === null) {
       return res.status(404).json({ error: 'Data konsumen tidak tersedia di server ini.' });
     }
 
-    repo.logCustomerAccess(req.ip, village, rows.length);
-    res.json({ village, dealer: dealerMinta || null, periode: periode || null, rows });
+    repo.logCustomerAccess(req.ip, district, hasil.rows.length);
+    res.json({
+      district, dealer: dealerMinta || null, periode: periode || null,
+      rows: hasil.rows, total: hasil.total,
+    });
   });
 
   /* ------------------------------------------------------------------------

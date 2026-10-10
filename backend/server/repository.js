@@ -29,13 +29,13 @@ const { distanceMeters } = require('../core/geo');
 async function summary() {
   const db = store.db();
 
-  // hasGeom: kelurahan yang ditambah manual belum punya batas wilayah, dan tanpa itu
+  // hasGeom: wilayah yang ditambah manual belum punya batas wilayah, dan tanpa itu
   // dia tidak bisa punya rasio jangkauan sama sekali. Halaman WAJIB tahu bedanya
   // "0% terjangkau" dan "belum bisa dihitung" — kalau tidak, penjualannya diam-diam
   // masuk hitungan sebagai "di luar jangkauan" dan menurunkan persentase tanpa sebab
   // yang terlihat.
-  // Yang dikirim ke halaman: kelurahan yang punya penjualan, ATAU yang masuk radius
-  // jangkauan sebuah pos. 4.003 dari 8.999 yang ada di database.
+  // Yang dikirim ke halaman: wilayah yang punya penjualan, ATAU yang masuk radius
+  // jangkauan sebuah pos. (Waktu satuannya kelurahan: 4.003 dari 8.999.)
   //
   // Penyaring ini bukan soal ukuran payload — itu cuma 1,6 MB dan halaman tetap siap
   // dalam 1,5 detik tanpanya. Alasannya ARTI ANGKANYA.
@@ -56,19 +56,25 @@ async function summary() {
   // mana pun, dia MUNCUL di layar dan ditandai `hasGeom: false`, bukan hilang diam-diam.
   // Kebenarannya tidak boleh bergantung pada fitur mana yang kebetulan sedang ada.
   //
-  // Kriterianya sama dengan scripts/export-geo.js, KECUALI bagian ini: yang tanpa
-  // poligon memang tidak bisa digambar di peta. Perbedaan yang disengaja dan satu-satunya.
-  const villages = await store.all(db, `
-    SELECT village_code AS code, village_name AS name,
-           district_name AS district, district_code AS "districtCode",
-           city_code AS "cityCode", city_name AS "cityName",
-           province_code AS "provinceCode", lat, lng,
-           (geom_m IS NOT NULL) AS "hasGeom"
-    FROM villages
-    WHERE village_code IN (SELECT village_code FROM sales)
-       OR village_code IN (SELECT DISTINCT village_code FROM coverage)
-       OR geom_m IS NULL
-    ORDER BY province_code, city_name, district_name, village_name`);
+  // SATUAN ANALISIS = KECAMATAN sejak 2026-10-10 (docs/DECISIONS.md). Penjualan tetap
+  // tersimpan per kelurahan (impor mencocokkan sampai kelurahan), tapi yang menyeberang
+  // ke halaman sudah dijumlahkan per kecamatan. Penyaring dan alasannya sama, tinggal
+  // satuannya: "Kecamatan Kosong" harus berarti kecamatan di wilayah kita yang belum
+  // ada penjualan, bukan kecamatan se-Jateng+DIY yang tidak kita jual.
+  const districtsInScope = await store.all(db, `
+    SELECT n.district_code AS code, n.district_name AS name,
+           n.city_code AS "cityCode", n.city_name AS "cityName",
+           d.lat, d.lng, (d.geom_m IS NOT NULL) AS "hasGeom"
+    FROM (SELECT district_code, MIN(district_name) AS district_name,
+                 MIN(city_code) AS city_code, MIN(city_name) AS city_name,
+                 MIN(province_code) AS province_code
+          FROM villages WHERE district_code IS NOT NULL GROUP BY district_code) n
+    LEFT JOIN district_shapes d USING (district_code)
+    WHERE n.district_code IN (SELECT v.district_code FROM sales s
+                              JOIN villages v USING (village_code))
+       OR n.district_code IN (SELECT DISTINCT district_code FROM coverage)
+       OR d.geom_m IS NULL
+    ORDER BY n.province_code, n.city_name, n.district_name`);
 
   // is_dealer_proxy dikirim (bukan disaring di sini) supaya S.outletByCode di
   // frontend tetap punya nama dealer yang benar untuk baris level-dealer lama
@@ -83,11 +89,18 @@ async function summary() {
 
   // dealer_code diambil lewat JOIN, bukan disimpan di tabel sales. Memperbaiki satu
   // pengelompokan outlet langsung terlihat di seluruh dashboard tanpa impor ulang.
+  //
+  // `district` = kunci SEMUA analisis di halaman sejak 2026-10-10. `village` tetap
+  // ikut HANYA untuk menyebar titik penjualan di desa asalnya (map.js
+  // buildSalePoints) — sebarannya jadi aktual, tapi tidak satu angka pun dihitung
+  // per desa. JOIN villages, bukan LEFT JOIN: tabel sales berkunci kode kelurahan
+  // yang sudah dicocokkan (diukur 2026-10-10: 0 baris yatim).
   const sales = await store.all(db, `
-    SELECT s.period, s.village_code AS village, s.outlet_code AS outlet,
-           o.dealer_code AS dealer, s.quantity AS units
+    SELECT s.period, v.district_code AS district, s.village_code AS village,
+           s.outlet_code AS outlet, o.dealer_code AS dealer, s.quantity AS units
     FROM sales s
-    JOIN outlets o ON o.outlet_code = s.outlet_code`);
+    JOIN outlets o ON o.outlet_code = s.outlet_code
+    JOIN villages v ON v.village_code = s.village_code`);
 
   const periodRows = await store.all(db,
     'SELECT DISTINCT period FROM sales ORDER BY period');
@@ -98,7 +111,7 @@ async function summary() {
     FROM imports WHERE result = 'ok' ORDER BY id DESC LIMIT 1`);
 
   return {
-    villages,
+    districts: districtsInScope,
     outlets,
     dealers: await listDealers(),
     sales,
@@ -109,11 +122,11 @@ async function summary() {
     // sore, lihat komentar di schema.sql dan docs/DECISIONS.md.
     dealerRings: await allDealerRings(),
     posCoverage: await allPosCoverage(),
-    // Daftar kecamatan ikut dikirim supaya halaman bisa menyebut NAMANYA, bukan cuma
-    // kodenya. Tidak bisa diturunkan dari daftar kelurahan: kelurahan yang dikirim
-    // sudah disaring ke yang punya penjualan, sementara ring/coverage justru sering
-    // menandai kecamatan yang belum ada penjualannya sama sekali. 654 baris, ~40 KB.
-    districts: await districts(),
+    // SELURUH 654 kecamatan, supaya halaman bisa menyebut NAMANYA. Tidak bisa diambil
+    // dari `districts` di atas: itu sudah disaring ke yang punya penjualan/jangkauan,
+    // sementara ring/coverage justru sering menandai kecamatan yang belum ada
+    // penjualannya sama sekali. ~40 KB.
+    allDistricts: await districts(),
     radiiM: coverage.RADII_M,
     radiusM: coverage.DEFAULT_RADIUS_M,
     // Halaman perlu tahu bedanya "jangkauan 0%" dan "jangkauan belum pernah dihitung".
@@ -155,12 +168,13 @@ function periodSummary() {
   return store.all(store.db(), `
     SELECT s.period,
            SUM(s.quantity) AS units,
-           COUNT(DISTINCT s.village_code) AS villages,
+           COUNT(DISTINCT v.district_code) AS districts,
            COUNT(DISTINCT s.outlet_code) AS outlets,
            (SELECT i.finished_at FROM imports i
              WHERE i.period = s.period AND i.result = 'ok'
              ORDER BY i.id DESC LIMIT 1) AS "importedAt"
-    FROM sales s GROUP BY s.period ORDER BY s.period DESC`);
+    FROM sales s JOIN villages v ON v.village_code = s.village_code
+    GROUP BY s.period ORDER BY s.period DESC`);
 }
 
 /**
@@ -181,7 +195,7 @@ function periodSummary() {
  * `null` — BUKAN nol. Nol berarti "diperiksa, memang kosong"; null berarti "tidak
  * bisa diperiksa". Menyamakan keduanya membuat layar berkata data tidak ada padahal
  * yang benar adalah kita tidak tahu. Mengikuti pola `if (!db) return null` yang sudah
- * dipakai customersInVillage().
+ * dipakai customersInDistrict().
  *
  * Data Pengiriman BELUM ikut, dan alasannya sudah berubah. Dulu: `delivery_ping` tidak
  * punya kolom periode. Sejak 2026-09-17 kolomnya ada (periode pembelian), tapi belum
@@ -216,7 +230,7 @@ async function periodDataSummary() {
 
   return [...semua].sort().reverse().map((period) => {
     const dasar = perPeriode[period] || {
-      period, units: 0, villages: 0, outlets: 0, importedAt: null,
+      period, units: 0, districts: 0, outlets: 0, importedAt: null,
     };
     return {
       ...dasar,
@@ -229,38 +243,59 @@ async function periodDataSummary() {
 }
 
 /**
- * Konsumen di SATU kelurahan.
+ * Kode kelurahan + namanya untuk satu kecamatan, dari database UTAMA.
  *
- * Wajib pakai kode kelurahan — tidak ada jalan mengambil semuanya sekaligus. Ini
+ * Data PII ada di database lain (astra_customers), jadi JOIN ke `villages` tidak
+ * mungkin; kecamatan diterjemahkan jadi daftar kelurahan dulu, lalu dipakai sebagai
+ * `village_code = ANY(?)` di sana. Nama kelurahan ikut dikembalikan supaya daftar
+ * konsumen tetap menyebut desanya — ANALISIS berhenti di kecamatan, tapi keterangan
+ * orangnya tidak dipotong.
+ */
+async function villagesOfDistrict(districtCode) {
+  const rows = await store.all(store.db(),
+    'SELECT village_code AS code, village_name AS name FROM villages WHERE district_code = ?',
+    [districtCode]);
+  return new Map(rows.map((r) => [r.code, r.name]));
+}
+
+/**
+ * Konsumen di SATU kecamatan.
+ *
+ * Wajib pakai kode kecamatan — tidak ada jalan mengambil semuanya sekaligus. Ini
  * satu-satunya hal yang mencegah satu akun bersama menyedot seluruh basis data
  * konsumen dalam satu permintaan.
  *
- * Periodenya berupa RENTANG, dan opsinya sengaja dioper sebagai objek — bukan
- * argumen berurutan. Dengan `(village, from, to)`, pemanggil lama
- * `customersInVillage(v, '2026-08')` tetap jalan dan diam-diam berarti "Agustus dan
- * seterusnya": hasilnya melebar tanpa error dan tanpa tes yang merah. Objek membuat
- * panggilan lama gagal keras, dan itu memang yang diinginkan.
+ * Sampai 2026-10-10 satuannya kelurahan. Satu kecamatan rata-rata 10-15 kelurahan,
+ * jadi batas baris lebih sering tersentuh — `total` ikut dikembalikan supaya layar
+ * berkata "menampilkan N dari M", bukan memotong diam-diam.
  *
- * @param {string} villageCode
+ * Periodenya berupa RENTANG, dan opsinya sengaja dioper sebagai objek — bukan
+ * argumen berurutan. Dengan `(district, from, to)`, panggilan
+ * `customersInDistrict(d, '2026-08')` tetap jalan dan diam-diam berarti "Agustus dan
+ * seterusnya": hasilnya melebar tanpa error dan tanpa tes yang merah. Objek membuat
+ * panggilan seperti itu gagal keras, dan itu memang yang diinginkan.
+ *
+ * @param {string} districtCode
  * @param {{from?: string, to?: string, limit?: number}} [opsi] batas periode 'YYYY-MM'
- * @return {Array|null} null berarti database konsumen tidak ada — bukan error.
+ * @return {{rows: Array, total: number}|null} null = database konsumen tidak ada.
  */
-async function customersInVillage(villageCode, opsi) {
-  // Panggilan gaya lama gagal KERAS, bukan diam. `customersInVillage(v, '2026-08')`
-  // akan lolos begitu saja dan berarti "seluruh riwayat kelurahan itu" — lebih luas
-  // dari yang diminta, tanpa error dan tanpa tes merah. Di rute yang mengeluarkan
-  // nama dan alamat, pelebaran senyap tidak boleh mungkin.
+async function customersInDistrict(districtCode, opsi) {
+  // Panggilan gaya lama gagal KERAS, bukan diam. Di rute yang mengeluarkan nama dan
+  // alamat, pelebaran senyap tidak boleh mungkin.
   if (typeof opsi === 'string') {
-    throw new TypeError('customersInVillage(village, {from, to}): periode dioper sebagai ' +
+    throw new TypeError('customersInDistrict(district, {from, to}): periode dioper sebagai ' +
       'objek, bukan argumen berurutan.');
   }
   const db = store.customers();
   if (!db) return null;
 
+  const desa = await villagesOfDistrict(districtCode);
+  if (!desa.size) return { rows: [], total: 0 };
+
   const o = opsi || {};
   const max = Number(o.limit) || 500;
-  const where = ['village_code = ?'];
-  const params = [villageCode];
+  const where = ['village_code = ANY(?)'];
+  const params = [[...desa.keys()]];
   // Periode dibandingkan sebagai TEKS, bukan tanggal. Kolomnya lebar-tetap 'YYYY-MM'
   // dengan bulan ber-nol depan, jadi urutan leksikografisnya identik dengan urutan
   // kronologis. Ini hanya benar selama nol depannya ada — dijaga regex PERIOD di
@@ -269,13 +304,11 @@ async function customersInVillage(villageCode, opsi) {
   if (o.to) { where.push('period <= ?'); params.push(o.to); }
 
   // SUMBERNYA customer_ktp sejak 2026-09-19, sama seperti browseCustomers() di bawah.
-  // Sebelumnya fungsi ini membaca `customers` sementara browseCustomers() sudah pindah
-  // — dua pintu ke "data konsumen" menunjuk dua tabel berbeda, dan angkanya bisa
-  // berbeda untuk pertanyaan yang sama. Sejak impor Data KTP yang mengisi penjualan,
-  // `customers` tidak pernah bertambah lagi, jadi membiarkannya di sini berarti panel
-  // kelurahan di peta kosong untuk tiap bulan baru — tanpa satu pun galat.
+  // Dua pintu ke "data konsumen" yang menunjuk dua tabel berbeda pernah membuat panel
+  // di peta kosong untuk tiap bulan baru — tanpa satu pun galat.
   const rows = await store.all(db, `
-    SELECT engine_no AS "engineNo", name, address, dealer_code AS outlet, period
+    SELECT engine_no AS "engineNo", name, address, dealer_code AS outlet, period,
+           village_code AS "villageCode", COUNT(*) OVER () AS total
     FROM customer_ktp WHERE ${where.join(' AND ')}
     ORDER BY period DESC, name, row_no LIMIT ?`, params.concat([max]));
 
@@ -290,7 +323,17 @@ async function customersInVillage(villageCode, opsi) {
       .map((d) => [d.legacyCode, d.dealerCode]));
     rows.forEach((r) => { r.outlet = peta.get(r.outlet) || r.outlet; });
   }
-  return rows;
+  return withVillageNames(rows, desa);
+}
+
+/** Pindahkan `total` (COUNT(*) OVER ()) keluar dari baris, dan tempelkan nama desanya. */
+function withVillageNames(rows, desa) {
+  const total = rows.length ? Number(rows[0].total) : 0;
+  rows.forEach((r) => {
+    delete r.total;
+    r.villageName = desa.get(r.villageCode) || '';
+  });
+  return { rows, total };
 }
 
 /**
@@ -328,7 +371,7 @@ function escapeLike(text) {
  *     Lebih tepat: baris yang alamatnya gagal dicocokkan (village_code NULL) tetap
  *     terhitung di kotanya, dan baris seperti itu justru yang paling perlu dilihat.
  *
- * Berbeda dari customersInVillage() yang mewajibkan satu kelurahan: di sini
+ * Berbeda dari customersInDistrict() yang mewajibkan satu kecamatan: di sini
  * penyaringnya bebas, tapi hasilnya selalu dipotong BROWSE_LIMIT dan jumlah
  * sebenarnya dilaporkan terpisah supaya halaman bisa bilang "menampilkan 500 dari
  * 19.598" — bukan diam-diam memotong.
@@ -345,7 +388,7 @@ async function browseCustomers(filters) {
   const params = [];
 
   // Periode dibandingkan sebagai teks — alasannya sama persis dengan
-  // customersInVillage() di atas, dan sengaja tidak diulang panjang di sini.
+  // customersInDistrict() di atas, dan sengaja tidak diulang panjang di sini.
   if (f.periodFrom) { where.push('period >= ?'); params.push(f.periodFrom); }
   if (f.periodTo) { where.push('period <= ?'); params.push(f.periodTo); }
   // Provinsi TIDAK ikut rebutan dengan kota dan kelurahan di bawah: dia penyaring
@@ -938,7 +981,7 @@ function jepitOffset(total, diminta, limit) {
  *
  * PII: tabelnya memuat alamat konsumen. Rutenya WAJIB lewat piiLimiter dan mencatat
  * aksesnya — lihat routes.js. Mengembalikan `null` kalau database konsumen tidak ada,
- * mengikuti pola customersInVillage(): aplikasinya harus tetap jalan penuh tanpa PII.
+ * mengikuti pola customersInDistrict(): aplikasinya harus tetap jalan penuh tanpa PII.
  */
 async function serviceVisits(filter) {
   const db = store.customers();
@@ -1483,10 +1526,12 @@ async function latestFusionPeriod() {
  * satu pos melayani BANYAK kelurahan, dan daftar kelurahannya bisa berubah kapan saja
  * lewat halaman Pos. Menyalin daftar itu ke rollup berarti angka penggolongan jadi
  * basi diam-diam begitu cakupan pos disunting. Jadi yang disimpan tetap kelurahan,
- * dan pos diterjemahkan jadi daftar kelurahan SAAT DITANYA.
+ * dan pos diterjemahkan SAAT DITANYA: pos -> kecamatan dalam jangkauannya (tabel
+ * `coverage`, per kecamatan sejak 2026-10-10) -> kelurahan di kecamatan itu.
  */
-const POS_FILTER =
-  'r.village_code IN (SELECT village_code FROM coverage WHERE outlet_code = ?)';
+const POS_FILTER = `r.village_code IN (
+  SELECT village_code FROM villages WHERE district_code IN (
+    SELECT district_code FROM coverage WHERE outlet_code = ?))`;
 
 /** Susun WHERE dari penyaring yang benar-benar diisi. */
 function fusionWhere(filter) {
@@ -1541,12 +1586,16 @@ async function fusionRows(filter) {
   const offset = Math.max(Number(filter.offset) || 0, 0);
 
   return store.all(store.db(), `
-    SELECT r.village_code AS "villageCode", v.village_name AS "villageName",
+    SELECT COALESCE(v.district_code, '') AS "districtCode",
+           MIN(v.district_name) AS "districtName",
            r.city_code AS "cityCode",
            (SELECT MIN(city_name) FROM villages c WHERE c.city_code = r.city_code) AS "cityName",
-           r.dealer_code AS "dealerCode", d.dealer_name AS "dealerName",
-           r.segment, r.customer_count AS "customerCount", r.weight_sum AS "weightSum"
+           r.dealer_code AS "dealerCode", MIN(d.dealer_name) AS "dealerName",
+           r.segment, SUM(r.customer_count) AS "customerCount",
+           SUM(r.weight_sum) AS "weightSum"
     FROM segment_rollup r
+    -- Dijumlahkan per KECAMATAN, satuan analisis sejak 2026-10-10. Kelurahan tak
+    -- diketahui ('') jatuh ke kecamatan '' — tetap terhitung, bukan dibuang.
     LEFT JOIN villages v ON v.village_code = r.village_code
     -- legacy_code, BUKAN dealer_code. Data KTP menyebut dealer dengan kode numerik
     -- Excel ('7348'), sedangkan dealers.dealer_code adalah kode turunan nama
@@ -1555,7 +1604,8 @@ async function fusionRows(filter) {
     -- cocok 0 dari 78 — seluruh nama dealer kosong di layar sampai ini diperbaiki.
     LEFT JOIN dealers d ON d.legacy_code = r.dealer_code
     WHERE ${w.text}
-    ORDER BY r.customer_count DESC, r.village_code
+    GROUP BY COALESCE(v.district_code, ''), r.city_code, r.dealer_code, r.segment
+    ORDER BY SUM(r.customer_count) DESC, COALESCE(v.district_code, '')
     LIMIT ? OFFSET ?`, [...w.params, limit + 1, offset])
     .then((rows) => ({
       rows: rows.slice(0, limit),
@@ -1744,8 +1794,11 @@ async function fusionVillagePoints(period, filter) {
   // Kelurahan tidak diketahui tidak bisa digambar di peta sama sekali.
   where.push("r.village_code <> ''");
 
+  // districtCode ikut supaya halaman bisa menyebut KECAMATAN titik itu (satuan analisis
+  // sejak 2026-10-10) dan meminta daftar pelanggannya per kecamatan. villageCode tetap
+  // ada karena titiknya disebar di poligon kelurahan asalnya.
   return store.all(store.db(), `
-    SELECT r.village_code AS "villageCode",
+    SELECT r.village_code AS "villageCode", MIN(v.district_code) AS "districtCode",
            -- Kode dealer TURUNAN NAMA, bukan kode numerik Excel yang tersimpan di
            -- source_overlap. Peta mewarnai titik lewat dealerColor(S.registry, ...),
            -- dan registry itu berkunci kode turunan nama; tanpa terjemahan di sini
@@ -1759,6 +1812,7 @@ async function fusionVillagePoints(period, filter) {
            COALESCE(SUM(r.customer_count) FILTER (WHERE r.has_delivery), 0) AS kirim
     FROM source_overlap r
     LEFT JOIN dealers d ON d.legacy_code = r.dealer_code
+    LEFT JOIN villages v ON v.village_code = r.village_code
     WHERE ${where.join(' AND ')}
     GROUP BY r.village_code, r.dealer_code, d.dealer_code`, params);
 }
@@ -1919,7 +1973,11 @@ async function fusionEngineDetail(engineNo) {
 }
 
 /**
- * Daftar pelanggan satu kantong (kelurahan, dealer) — RUTE PII, bahan panel titik peta.
+ * Daftar pelanggan satu kantong (KECAMATAN, dealer) — RUTE PII, bahan panel titik peta.
+ *
+ * Kantongnya kecamatan sejak 2026-10-10. Titik tetap disebar di kelurahan asalnya
+ * supaya sebarannya aktual, tapi yang diklik orang dibaca sebagai kecamatan; daftarnya
+ * tetap menyebut desa tiap orang (villageName) — keterangan orang tidak dipotong.
  *
  * KENAPA ADA. Titik di peta sengaja TIDAK membawa nomor mesin (docs/FUSION.md 3.1):
  * muatan petanya melintasi seluruh wilayah cakupan sekaligus, dan menaruh pengenal
@@ -1933,28 +1991,33 @@ async function fusionEngineDetail(engineNo) {
  * mengembalikan nama KOSONG untuk orang yang datanya justru lengkap, tanpa galat
  * apa pun. Ini menyamakan perilakunya dengan fusionEngineDetail() di atas.
  *
- * Batas 200 keras: satu kelurahan+dealer yang besar pun tidak sampai segitu, dan
+ * Batas 200 keras, dan SENGAJA tidak dinaikkan waktu kantongnya melebar ke kecamatan:
  * batas yang longgar di rute PII adalah jalan penyedotan yang menunggu dipakai.
+ * Gantinya `total`, supaya layar berkata "menampilkan 200 dari M", bukan diam.
  *
- * @returns {Array|null} null kalau database PII tidak ada — fiturnya mati, sisanya
+ * @returns {{rows: Array, total: number}|null} null kalau database PII tidak ada — fiturnya mati, sisanya
  *   jalan penuh (aturan DROP DATABASE astra_customers).
  */
-async function fusionVillageCustomers(villageCode, opsi) {
+async function fusionDistrictCustomers(districtCode, opsi) {
   const pii = store.customers();
   if (!pii) return null;
 
+  const desa = await villagesOfDistrict(districtCode);
+  if (!desa.size) return { rows: [], total: 0 };
+
   const o = opsi || {};
-  const where = ['f.village_code = ?'];
-  const params = [villageCode];
+  const where = ['f.village_code = ANY(?)'];
+  const params = [[...desa.keys()]];
   // Kode dealer di SINI kosakata numerik lama (fusion-store.js menulis r.dealerCode
   // yang sama ke customer_fusion dan source_overlap). Penerjemahan dari kode turunan
   // nama yang dibawa titik peta dilakukan pemanggilnya lewat legacyDealerCode().
   if (o.dealerCode) { where.push('f.dealer_code = ?'); params.push(o.dealerCode); }
   if (o.period) { where.push('f.period = ?'); params.push(o.period); }
 
-  return store.all(pii, `
+  const rows = await store.all(pii, `
     SELECT f.engine_no AS "engineNo", f.period, f.segment,
-           f.dealer_code AS "dealerCode",
+           f.dealer_code AS "dealerCode", f.village_code AS "villageCode",
+           COUNT(*) OVER () AS total,
            f.service_count AS "serviceCount",
            f.delivery_count AS "deliveryCount",
            k.name
@@ -1966,17 +2029,18 @@ async function fusionVillageCustomers(villageCode, opsi) {
     WHERE ${where.join(' AND ')}
     ORDER BY k.name NULLS LAST, f.engine_no
     LIMIT ?`, params.concat([Math.min(Number(o.limit) || 200, 200)]));
+  return withVillageNames(rows, desa);
 }
 
 module.exports = {
   resolveVillageByName,
-  fusionVillageCustomers,
+  fusionDistrictCustomers,
   latestFusionPeriod, fusionTotals, fusionRows, fusionByCity, fusionByDealer,
   fusionEngineDetail, setAppConfig, fusionMatrix, fusionOverlap, legacyDealerCode,
   fusionSourceCoverage, fusionVillagePoints,
   summary, unmatched, imports, periodSummary, periodDataSummary,
   serviceVisits, deliveryPings, deleteSourcePeriod,
-  customersInVillage, browseCustomers, hasCustomers, logCustomerAccess, updateOutlet,
+  customersInDistrict, browseCustomers, hasCustomers, logCustomerAccess, updateOutlet,
   resetOutlets, allDealerRings, allPosCoverage, districts, saveDealerRings, savePosCoverage,
   resolveDealer, createOutlet, deletePeriod,
   listDealers, createDealer, updateDealer, deleteDealer, listOutletsForImport,

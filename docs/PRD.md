@@ -84,10 +84,27 @@ Sejak 2026-08-30, dealer punya tabelnya sendiri (`dealers`) dan halamannya sendi
 pos. `outlets.dealer_code` menunjuk ke sana lewat FOREIGN KEY sungguhan, bukan lagi
 kolom string yang kebetulan konsisten.
 
+### satuan analisis = kecamatan (sejak 2026-10-10)
+
+Setiap angka di layar berhenti di **kecamatan**: warna peta, kontribusi, peringkat,
+jangkauan, ringkasan fusion, dan daftar konsumen per wilayah. Data tetap disimpan dan
+dicocokkan per kelurahan, karena Excel menyebut kelurahan dan pencocokan tiga
+tingkatnya justru menjaga mutu data. Kelurahan masih muncul di tiga tempat, dan di
+ketiganya tidak pernah sebagai angka:
+
+1. garis referensi "Batas dan Nama Desa" (mati bawaan),
+2. tempat titik peta disebar (titik digambar di desa asal konsumen supaya sebarannya
+   aktual),
+3. keterangan desa tiap orang di daftar konsumen.
+
+Bagian di bawah yang masih menyebut "kelurahan" berlaku sama untuk kecamatan, kecuali
+disebut lain. Rinciannya ada di DECISIONS 2026-10-10.
+
 ### jangkauan (coverage)
 
-**Berapa bagian LUAS sebuah kelurahan yang masuk lingkaran radius sebuah pos.** Bukan
-jarak titik-tengah kelurahan ke pos.
+**Berapa bagian LUAS sebuah kecamatan (sebelum 2026-10-10: kelurahan) yang masuk
+lingkaran radius sebuah pos.** Bukan jarak titik-tengah ke pos. Asumsinya ikut
+melebar: konsumen dianggap tersebar merata di dalam kecamatannya.
 
 Bedanya besar dan disengaja: kelurahan yang luas dan memanjang bisa titik tengahnya di
 luar radius padahal separuh wilayahnya di dalam. Dihitung PostGIS dengan
@@ -232,7 +249,7 @@ menjawab pertanyaan yang sama dengan angka yang berbeda.
 
 | ID | Kebutuhan | Dijaga |
 |---|---|---|
-| KF-PETA-1 | Peta choropleth kelurahan diwarnai menurut **Kontribusi Penjualan** (% terhadap total kotanya sendiri) — sejak 2026-08-30, bukan lagi unit mentah | `test/sales-stats.test.js`, `test/colors.test.js` |
+| KF-PETA-1 | Peta choropleth KECAMATAN (sejak 2026-10-10; sebelumnya kelurahan) diwarnai menurut **Kontribusi Penjualan** (% terhadap total kotanya sendiri) — sejak 2026-08-30, bukan lagi unit mentah | `test/sales-stats.test.js`, `test/colors.test.js` |
 | KF-PETA-2 | Empat KPI: Dealer Aktif, Total Penjualan, Kelurahan Terlayani, Kelurahan Kosong | `test/page.test.js` |
 | KF-PETA-3 | Penyaring periode, kabupaten, dealer, dan pos; seluruh panel ikut berubah (aturannya di KF-FILTER) | `test/colors.test.js` |
 | KF-PETA-4 | Warna dealer **stabil terhadap penyaring** — dealer yang bertahan tidak berganti warna | `test/colors.test.js` |
@@ -240,11 +257,11 @@ menjawab pertanyaan yang sama dengan angka yang berbeda.
 | KF-PETA-6 | Radius bisa diganti antara 3/5/7/10 km tanpa hitung ulang | `test/coverage-store.test.js` |
 | KF-PETA-7 | Penjualan di kelurahan tanpa poligon dikeluarkan dari persentase DAN dilaporkan terpisah | `test/coverage-split.test.js` |
 | KF-PETA-8 | Halaman bisa membedakan "0% terjangkau" dari "jangkauan belum pernah dihitung" | `test/coverage-split.test.js` |
-| KF-PETA-9 | Klik kelurahan membuka rincian: daftar pos dan porsinya | `test/page.test.js` |
+| KF-PETA-9 | Klik kecamatan membuka rincian: daftar pos dan porsinya, plus konsumen (desa tiap orang tetap disebut) | `test/page.test.js` |
 | KF-PETA-10 | Treemap kontribusi dealer dan pos | belum dijaga |
 | KF-PETA-11 | Basemap bisa diganti antara peta lokal, citra satelit, dan polos | `test/page.test.js` |
 | KF-PETA-12 | Basemap yang tidak dipilih dimatikan **seluruhnya**, termasuk lapisan yang tidak punya `source` | `test/page.test.js` |
-| KF-PETA-13 | Klik dealer bisa dibuka jadi sebaran per kabupaten lalu per kelurahan, lengkap dengan unit dan % jangkauannya | `test/coverage-split.test.js` |
+| KF-PETA-13 | Klik dealer bisa dibuka jadi sebaran per kabupaten lalu per kecamatan, lengkap dengan unit dan % jangkauannya | `test/coverage-split.test.js` |
 | KF-PETA-14 | Sebaran itu dihitung di browser — nol permintaan ke server sampai satu kelurahan diklik | `test/coverage-split.test.js` |
 | KF-PETA-15 | Kursor di atas kelurahan menampilkan unit dan % jangkauannya, plus angka kabupatennya — tanpa klik | `test/page.test.js` |
 | KF-PETA-16 | Lingkaran radius di peta mengikuti radius yang dipilih (3/5/7/10 km), bukan nilai tetap | `test/page.test.js` |

@@ -86,7 +86,7 @@ async function test() {
 
     // Rute yang belum ada pun harus dijaga. Ini bukti bahwa penjaganya "tolak semua
     // kecuali yang terdaftar" — kalau sebaliknya, rute baru akan otomatis terbuka.
-    const unknown = await request(port, 'GET', '/api/customers?village=34.04.01.2001');
+    const unknown = await request(port, 'GET', '/api/customers?district=34.04.01');
     assert.strictEqual(unknown.status, 401,
       'rute yang belum ada tidak terjaga — penjaganya berbasis daftar putih?');
 
@@ -205,21 +205,43 @@ async function test() {
     // Dua rute PII memakai NAMA PARAMETER YANG SAMA dengan aturan yang sengaja
     // berbeda, dan itu undangan untuk salin-tempel. /customers/browse dipakai sambil
     // mengetik, jadi penyaring cacat diabaikan; /customers mengeluarkan nama dan
-    // alamat satu kelurahan, jadi bentuk yang salah DITOLAK — mengabaikannya berarti
-    // permintaannya melebar diam-diam jadi seluruh riwayat kelurahan itu.
+    // alamat satu kecamatan, jadi bentuk yang salah DITOLAK — mengabaikannya berarti
+    // permintaannya melebar diam-diam jadi seluruh riwayat kecamatan itu.
     //
     // Ditaruh SEBELUM blok pembatas di bawah: blok itu sengaja menghabiskan jatah
     // 30/menit, dan permintaan apa pun sesudahnya cuma dapat 429 lalu ikut hijau.
     const sesiPeriode = `${COOKIE_NAME}=${createSession(config.sessionSecret)}`;
 
+    // --- /api/customers WAJIB satu kecamatan (aturan CLAUDE.md, 2026-10-10) ---
+    //
+    // Satu-satunya pagar yang mencegah satu akun bersama menyedot seluruh basis data
+    // konsumen dalam satu permintaan. Parameter lama `village` sengaja TIDAK diterima
+    // lagi: dua pintu masuk berarti dua pagar yang harus dijaga.
+    for (const [tanya, kenapa] of [
+      ['', 'tanpa parameter sama sekali'],
+      ['?village=34.04.01.2001', 'parameter lama `village` saja'],
+      ['?district=34.04', 'kode KOTA disamarkan jadi kecamatan'],
+      ['?district=34.04.01.2001', 'kode DESA di parameter kecamatan'],
+      ['?district=34.04.01%25', 'karakter wildcard di kode'],
+    ]) {
+      const ditolak = await request(port, 'GET', `/api/customers${tanya}`,
+        { cookie: sesiPeriode });
+      assert.strictEqual(ditolak.status, 400,
+        `/api/customers harus menolak (400) permintaan ${kenapa}, dapat ${ditolak.status}`);
+    }
+    const kantongCacat = await request(port, 'GET', '/api/v1/kecamatan/34.04/pelanggan',
+      { cookie: sesiPeriode });
+    assert.strictEqual(kantongCacat.status, 400,
+      'rute kantong titik peta menerima kode yang bukan kecamatan');
+
     const periodeCacat = await request(port, 'GET',
-      '/api/customers?village=34.04.01.2001&periodFrom=2026-13', { cookie: sesiPeriode });
+      '/api/customers?district=34.04.01&periodFrom=2026-13', { cookie: sesiPeriode });
     assert.strictEqual(periodeCacat.status, 400,
       '/api/customers menerima periode yang bentuknya salah lalu mengabaikannya — ' +
-      'hasilnya seluruh riwayat kelurahan itu, bukan bulan yang diminta');
+      'hasilnya seluruh riwayat kecamatan itu, bukan bulan yang diminta');
 
     const terbalik = await request(port, 'GET',
-      '/api/customers?village=34.04.01.2001&periodFrom=2026-09&periodTo=2026-07',
+      '/api/customers?district=34.04.01&periodFrom=2026-09&periodTo=2026-07',
       { cookie: sesiPeriode });
     assert.strictEqual(terbalik.status, 400,
       'rentang terbalik di /api/customers tidak ditolak');
@@ -256,10 +278,10 @@ async function test() {
     assert.ok(piiLimited.hit.text.includes('Tunggu'),
       'pesan pembatas harus memberi tahu apa yang harus dilakukan');
 
-    // Rute per-kelurahan ikut dibatasi oleh pembatas yang sama.
-    const perKelurahan = await request(port, 'GET',
-      '/api/customers?village=34.04.01.2001', { cookie: sesi });
-    assert.strictEqual(perKelurahan.status, 429,
+    // Rute per-kecamatan ikut dibatasi oleh pembatas yang sama.
+    const perKecamatan = await request(port, 'GET',
+      '/api/customers?district=34.04.01', { cookie: sesi });
+    assert.strictEqual(perKecamatan.status, 429,
       '/api/customers tidak ikut dibatasi — pembatasnya cuma dipasang di satu rute');
 
     /* --------------------------------------------------------------------

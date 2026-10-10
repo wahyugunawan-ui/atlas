@@ -1,13 +1,16 @@
 /**
  * Hitung dan simpan rasio jangkauan — dikerjakan PostGIS, di dalam database.
  *
- * Rasionya: berapa bagian LUAS tiap kelurahan yang masuk lingkaran radius sebuah pos.
+ * Rasionya: berapa bagian LUAS tiap KECAMATAN yang masuk lingkaran radius sebuah pos.
+ * Sejak 2026-10-10 satuannya kecamatan (view `district_shapes`), bukan kelurahan —
+ * seluruh analisis berhenti di kecamatan, lihat docs/DECISIONS.md.
  * Dihitung dengan ST_Intersection/ST_Area, jadi eksak terhadap poligon yang ada —
  * bukan diperkirakan dengan menyebar titik seperti sebelumnya.
  *
  * "Eksak" ada batasnya, dan batas itu harus disebut: poligonnya sudah disederhanakan
  * di pipeline Python, dan asumsi "konsumen tersebar merata di dalam kelurahannya"
- * tetap berlaku. Yang hilang cuma derau hitungan, bukan galat model — dan galat model
+ * sekarang berbunyi "merata di dalam kecamatannya" — lebih kasar,
+ * dan memang itu yang diminta. Yang hilang cuma derau hitungan, bukan galat model — dan galat model
  * itulah yang paling besar. Kalimat asumsinya tetap dipasang di panel.
  *
  * backend/core/coverage.js (sampling) TIDAK dibuang. Dia dipakai prototipe proposal yang
@@ -28,7 +31,7 @@ const DEFAULT_RADIUS_M = 5000;
 /**
  * Rasio di bawah ini tidak disimpan.
  *
- * Tanpa ambang, tiap pos punya baris untuk tiap kelurahan yang lingkarannya sempat
+ * Tanpa ambang, tiap pos punya baris untuk tiap kecamatan yang lingkarannya sempat
  * menyentuh — 0,0001 pun ikut — dan tabelnya membengkak oleh angka yang tidak pernah
  * mengubah kesimpulan apa pun.
  */
@@ -55,15 +58,15 @@ const QUAD_SEGS = 32;
  * kalau ditulis dua kali di SELECT dan WHERE, ST_Intersection-nya jalan dua kali.
  */
 const REBUILD_SQL = `
-  INSERT INTO coverage (radius_m, outlet_code, village_code, ratio)
-  SELECT r.radius_m, o.outlet_code, v.village_code, x.ratio
+  INSERT INTO coverage (radius_m, outlet_code, district_code, ratio)
+  SELECT r.radius_m, o.outlet_code, v.district_code, x.ratio
   FROM outlets o
   CROSS JOIN unnest($1::int[]) AS r(radius_m)
-  JOIN villages v
+  JOIN district_shapes v
     ON v.geom_m IS NOT NULL
    AND ST_DWithin(v.geom_m, o.geom_m, r.radius_m)
   CROSS JOIN LATERAL (
-    -- LEAST(..., 1) menjepit galat pembulatan. Kelurahan yang seluruhnya di dalam
+    -- LEAST(..., 1) menjepit galat pembulatan. Kecamatan yang seluruhnya di dalam
     -- lingkaran bisa menghasilkan 1,0000000000000002, dan angka itu berujung jadi
     -- "100,0000000000000002% dalam jangkauan" di layar — omong kosong yang lolos
     -- karena bentuknya wajar.
@@ -100,6 +103,14 @@ async function rebuild(config, codes, onProgress) {
 
   log(`menghitung ${counted.n} outlet × ${RADII_M.length} radius dengan PostGIS...`);
 
+  // Hitung ulang PENUH menyegarkan poligon kecamatan dulu (view turunan `villages`,
+  // schema.sql). Tanpa ini, seed-coverage sesudah seed-boundaries bisa menghitung
+  // terhadap batas kecamatan versi lama — atau terhadap view kosong, dan semua rasio
+  // jadi nol tanpa satu pun galat. Hitung ulang satu outlet (pin dipindah) TIDAK
+  // menyegarkan: batas wilayah tidak berubah karena pin digeser, dan penyegaran
+  // seluruh Jateng+DIY makan ~5 detik.
+  if (!only) await db.query('REFRESH MATERIALIZED VIEW district_shapes');
+
   const rows = await store.transaction(db, async (conn) => {
     // Baris lama outlet ini dibuang dulu. Tanpa itu, memindahkan pin ke tempat lain
     // meninggalkan jangkauan di lokasi yang sudah tidak dipakai — dan angkanya akan
@@ -123,17 +134,17 @@ async function rebuild(config, codes, onProgress) {
 
 /**
  * Seluruh isi tabel, dikelompokkan untuk dikirim ke browser:
- *   coverage[radius][outlet_code][village_code] = ratio
+ *   coverage[radius][outlet_code][district_code] = ratio
  */
 async function all() {
   const out = {};
   RADII_M.forEach((r) => { out[r] = {}; });
 
   const rows = await store.all(store.db(),
-    'SELECT radius_m, outlet_code, village_code, ratio FROM coverage');
+    'SELECT radius_m, outlet_code, district_code, ratio FROM coverage');
   rows.forEach((row) => {
     const byRadius = (out[row.radius_m] ||= {});
-    (byRadius[row.outlet_code] ||= {})[row.village_code] = row.ratio;
+    (byRadius[row.outlet_code] ||= {})[row.district_code] = row.ratio;
   });
   return out;
 }

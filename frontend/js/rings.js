@@ -19,7 +19,7 @@
 import { saveDealerRings, savePosCoverage } from './api.js';
 import { $, esc, toast } from './dom.js';
 import { scopeValue } from './filters.js';
-import { addDistrictLayers, districtsLoaded, setGroupPaint } from './map.js';
+import { districtsLoaded, setGroupPaint } from './map.js';
 import { S } from './state.js';
 
 /** Warna tiap ring dealer. Satu keluarga, makin jauh makin pudar — jaraknya terbaca. */
@@ -84,14 +84,11 @@ function createGroupEditor({ entityType, groupCount, colors, saveFn, savedLabel,
     $('ring-bar').classList.remove('hidden');
     renderBar();
 
+    // Lapisan kecamatan dipasang di boot sejak 2026-10-10 (satuan analisis peta),
+    // jadi tidak ada lagi yang dimuat di sini — cukup dijaga kalau peta belum siap.
     if (!districtsLoaded()) {
-      $('ring-pesan').textContent = 'Memuat batas kecamatan...';
-      try {
-        await addDistrictLayers();
-      } catch (error) {
-        $('ring-pesan').textContent = 'Batas kecamatan tidak bisa dimuat: ' + error.message;
-        return undefined;
-      }
+      $('ring-pesan').textContent = 'Peta belum siap, coba lagi sebentar.';
+      return undefined;
     }
     $('ring-pesan').textContent = '';
     setGroupPaint(draft, colors);

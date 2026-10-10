@@ -6,7 +6,7 @@ import {
 } from './config.js';
 import { classOf, dealerColor, percentileBreaks, RAMP, COLOR_EMPTY } from './colors.js';
 import { $, bbox, displayCityName, esc, formatNumber, sumBy, toast } from './dom.js';
-import { fetchGeo, fetchKpiJarak, fetchTitikPeta, fetchVillageCustomers } from './api.js';
+import { fetchDistrictCustomers, fetchKpiJarak, fetchTitikPeta } from './api.js';
 import { activeRows, fusionFilterPeta, pageFilters, scopeValue } from './filters.js';
 import { circle, EMPTY_COLLECTION } from './geo.js';
 import {
@@ -195,10 +195,15 @@ export function setBasemap(which) {
 }
 
 export function addLayers() {
-  S.map.addSource('kel', { type: 'geojson', data: S.geo, promoteId: 'kode' });
+  // KECAMATAN = satuan analisis peta sejak 2026-10-10 (docs/DECISIONS.md): ini yang
+  // diwarnai, diklik, dan disorot. Kelurahan di bawahnya tinggal garis referensi
+  // "Batas dan Nama Desa" (mati bawaan) — tidak ada isian per desa lagi, karena tidak
+  // ada angka per desa yang boleh tampil.
+  S.map.addSource('kec', { type: 'geojson', data: S.geo, promoteId: 'kode' });
+  S.map.addSource('kel', { type: 'geojson', data: S.villageGeo, promoteId: 'kode' });
 
   S.map.addLayer({
-    id: 'kel-isi', type: 'fill', source: 'kel',
+    id: 'kec-warna', type: 'fill', source: 'kec',
     paint: {
       'fill-color': ['coalesce', ['feature-state', 'warna'], COLOR_EMPTY],
       'fill-opacity': 0.85,
@@ -206,21 +211,19 @@ export function addLayers() {
   });
   S.map.addLayer({
     id: 'kel-garis', type: 'line', source: 'kel',
-    paint: { 'line-color': '#ffffff', 'line-width': 0.5, 'line-opacity': 0.7 },
+    layout: { visibility: 'none' },
+    paint: { 'line-color': '#ffffff', 'line-width': 0.4, 'line-opacity': 0.5 },
   });
   S.map.addLayer({
-    id: 'kel-terpilih', type: 'line', source: 'kel',
-    filter: ['==', ['get', 'kode'], ''],
-    paint: { 'line-color': '#0b2f6b', 'line-width': 2.5 },
-  });
-  S.map.addLayer({
-    id: 'kel-nama', type: 'symbol', source: 'kel', minzoom: 10.5,
+    id: 'kel-nama', type: 'symbol', source: 'kel', minzoom: 11.5,
     layout: {
+      visibility: 'none',
       'text-field': ['get', 'nama'], 'text-font': ['Noto Sans Regular'],
-      'text-size': 11, 'text-allow-overlap': false,
+      'text-size': 10, 'text-allow-overlap': false,
     },
-    paint: { 'text-color': '#1e293b', 'text-halo-color': '#ffffff', 'text-halo-width': 1.4 },
+    paint: { 'text-color': '#475569', 'text-halo-color': '#ffffff', 'text-halo-width': 1.2 },
   });
+  addDistrictLayers();
 
   S.map.addSource('kota', { type: 'geojson', data: S.cityGeo });
   S.map.addLayer({
@@ -537,24 +540,30 @@ async function muatTitikFusi() {
 const LABEL_TITIK = { ktp: 'Titik KTP', servis: 'Titik Servis', kirim: 'Titik Pengiriman' };
 
 /**
- * Cari baris bucket (kelurahan, dealer) asal satu titik yang sedang di-hover.
+ * Jumlah KETIGA sumber untuk satu kantong (KECAMATAN, dealer) — isi tooltip titik.
  *
  * Satu FITUR titik TIDAK membawa hitungan ktp/servis/kirim-nya sendiri —
  * titikPerDesa() (fusion-points.js) mengempiskan satu bucket jadi satu angka `n`
- * untuk JENIS yang sedang diminta saja, membuang dua hitungan sisanya. Baris ASLI
- * (ketiga hitungan utuh) masih tersimpan apa adanya di S.fusionPoints.rows —
- * dicari ulang di sini lewat kode desa + kode dealer, TANPA permintaan baru ke
- * server sama sekali.
+ * untuk JENIS yang sedang diminta saja. Baris ASLI tersimpan apa adanya di
+ * S.fusionPoints.rows (per desa+dealer, karena titiknya disebar per desa), jadi
+ * di sini DIJUMLAHKAN ke kecamatan — satuan analisis sejak 2026-10-10 — tanpa
+ * permintaan baru ke server.
  *
  * Murni: diekspor supaya bisa diuji tanpa membuat instance peta sungguhan.
  *
- * @returns {Object|null} baris {villageCode, dealerCode, ktp, servis, kirim}, atau
- *   null kalau tidak ketemu (semestinya tidak pernah terjadi — titiknya sendiri
- *   lahir dari baris ini — tapi dijaga daripada melempar galat di tengah hover).
+ * @returns {Object|null} {districtCode, dealerCode, ktp, servis, kirim}, atau null
+ *   kalau tidak ada satu baris pun (semestinya tidak pernah terjadi — titiknya
+ *   sendiri lahir dari baris ini — tapi dijaga daripada melempar galat saat hover).
  */
-export function carikanBagianTitikFusi(rows, village, dealer) {
+export function carikanBagianTitikFusi(rows, district, dealer) {
   if (!Array.isArray(rows)) return null;
-  return rows.find((r) => r.villageCode === village && r.dealerCode === dealer) || null;
+  const cocok = rows.filter((r) => r.districtCode === district && r.dealerCode === dealer);
+  if (!cocok.length) return null;
+  const jumlah = (k) => cocok.reduce((n, r) => n + (Number(r[k]) || 0), 0);
+  return {
+    districtCode: district, dealerCode: dealer,
+    ktp: jumlah('ktp'), servis: jumlah('servis'), kirim: jumlah('kirim'),
+  };
 }
 
 /**
@@ -572,13 +581,17 @@ export function carikanBagianTitikFusi(rows, village, dealer) {
 function tampilkanTooltipTitikFusi(jenis, properties, event) {
   const tip = $('tooltip');
   if (!tip) return;
-  const { village, dealer } = properties || {};
-  const desa = S.villageByCode[village];
-  const namaDesa = desa ? desa.name : (village || '—');
-  const namaKota = desa ? displayCityName(desa.cityName) : '';
+  // Yang disebut KECAMATAN, bukan desa: titiknya memang disebar di desa asalnya
+  // (supaya sebarannya aktual), tapi satuan analisis yang boleh tampil di peta
+  // berhenti di kecamatan (2026-10-10). Nama desa per orang tetap ada di daftar
+  // pelanggan — itu keterangan orang, bukan analisis.
+  const { district, dealer } = properties || {};
+  const kec = S.districtByCode[district];
+  const namaKec = S.districtNames[district] || (kec && kec.name) || district || '—';
+  const namaKota = kec ? displayCityName(kec.cityName) : '';
   const namaDealer = S.dealerNames[dealer] || dealer || 'dealer tidak dikenal';
   const bagian = carikanBagianTitikFusi(
-    (S.fusionPoints && S.fusionPoints.rows) || [], village, dealer);
+    (S.fusionPoints && S.fusionPoints.rows) || [], district, dealer);
 
   const baris = (label, n) => `<div class="text-[11px] text-slate-300 flex ` +
     `items-center justify-between gap-3"><span>${esc(label)}</span>` +
@@ -586,7 +599,7 @@ function tampilkanTooltipTitikFusi(jenis, properties, event) {
 
   tip.innerHTML =
     `<div class="font-bold text-white">${esc(LABEL_TITIK[jenis] || 'Titik')}</div>` +
-    `<div class="text-[11px] text-slate-300 mt-0.5">${esc(namaDesa)}${
+    `<div class="text-[11px] text-slate-300 mt-0.5">Kec. ${esc(namaKec)}${
       namaKota ? `, ${esc(namaKota)}` : ''}</div>` +
     `<div class="text-[11px] text-slate-300">${esc(namaDealer)}</div>` +
     `<div class="mt-1.5 pt-1.5 border-t border-slate-600">` +
@@ -595,8 +608,8 @@ function tampilkanTooltipTitikFusi(jenis, properties, event) {
     baris('Pengiriman', bagian ? bagian.kirim : 0) +
     `</div>` +
     `<div class="text-[10px] text-slate-400 mt-1.5 pt-1.5 border-t border-slate-600 ` +
-    `leading-snug">Jumlah pelanggan di kelurahan ini, BUKAN satu orang — posisi titik ` +
-    `acak di dalam kelurahan, bukan alamat sebenarnya.<br>` +
+    `leading-snug">Jumlah pelanggan di kecamatan ini, BUKAN satu orang — posisi titik ` +
+    `acak di dalam desa asalnya, bukan alamat sebenarnya.<br>` +
     `<span class="text-slate-300 font-bold">Klik</span> atau diam 3 detik untuk daftar ` +
     `pelanggannya.</div>`;
   tip.classList.add('show');
@@ -611,19 +624,21 @@ function tampilkanTooltipTitikFusi(jenis, properties, event) {
 
    Yang TIDAK berubah, dan tidak boleh berubah: muatan peta tetap anonim. Tidak ada
    satu pun nomor mesin ikut dikirim bersama titik — kalau iya, seluruh basis data
-   konsumen ada di browser begitu halaman dibuka. Yang dibawa titik cuma kelurahan,
-   dealer, dan NOMOR URUT-nya di dalam kantong itu (`idx`, lihat bangunTitikFusi()).
+   konsumen ada di browser begitu halaman dibuka. Yang dibawa titik cuma desa asal
+   sebarannya, kecamatannya, dealer, dan NOMOR URUT-nya di dalam desa itu (`idx`,
+   lihat bangunTitikFusi()).
 
    Identitasnya diminta terpisah lewat rute PII yang sudah berpagar
-   (/v1/kelurahan/:village/pelanggan), satu kantong per permintaan, dan hasilnya
-   di-cache. Menyapu 40 titik di satu desa = SATU permintaan, bukan 40.
+   (/v1/kecamatan/:district/pelanggan sejak 2026-10-10), satu kantong KECAMATAN per
+   permintaan, dan hasilnya di-cache. Menyapu 40 titik di satu kecamatan = SATU
+   permintaan, bukan 40.
    ========================================================================== */
 
 /** Jeda sebelum daftar kantong diminta saat hover. Lihat alasannya di hoverTitik(). */
 const TUNDA_KARTU_MS = 350;
 
 /**
- * Daftar pelanggan per kantong, berkunci 'kelurahan|dealer|periode'.
+ * Daftar pelanggan per kantong, berkunci 'kecamatan|dealer|periode'.
  *
  * Nilainya Promise, bukan array: dua titik dari kantong yang sama yang di-hover
  * berurutan sebelum permintaan pertama selesai harus MENUNGGU permintaan itu, bukan
@@ -636,11 +651,14 @@ let cacheKantong = new Map();
 
 export function bersihkanCacheKantong() { cacheKantong = new Map(); }
 
-function ambilKantong(village, dealer, periode) {
-  const kunci = `${village}|${dealer || ''}|${periode || ''}`;
+function ambilKantong(district, dealer, periode) {
+  const kunci = `${district}|${dealer || ''}|${periode || ''}`;
   if (!cacheKantong.has(kunci)) {
-    cacheKantong.set(kunci, fetchVillageCustomers(village, { dealer, periode })
-      .then((jawab) => (jawab && jawab.rows) || [])
+    cacheKantong.set(kunci, fetchDistrictCustomers(district, { dealer, periode })
+      .then((jawab) => ({
+        rows: (jawab && jawab.rows) || [],
+        total: Number(jawab && jawab.total) || 0,
+      }))
       // Kegagalan TIDAK di-cache sebagai daftar kosong permanen: kantongnya dilepas
       // supaya percobaan berikutnya benar-benar mencoba lagi. Daftar kosong yang
       // tertanam akan terbaca "tidak ada orangnya di sini" selamanya.
@@ -651,6 +669,12 @@ function ambilKantong(village, dealer, periode) {
 
 /**
  * Baris mana di daftar kantong yang diwakili titik ini.
+ *
+ * Kantongnya KECAMATAN, tapi titiknya disebar per DESA dan `idx`-nya dihitung di
+ * dalam desa itu. Jadi daftarnya dipersempit dulu ke desa asal titik (`village`),
+ * baru `idx` dipakai. Kalau kantongnya TERPOTONG di server (total > rows), daftar
+ * per desa bisa tidak lengkap dan urutannya bergeser — pemetaannya ditolak (null),
+ * bukan ditebak.
  *
  * Lapisan KTP menggambar SEMUA orang di kantong; lapisan Servis hanya yang punya
  * servis; Kirim hanya yang punya pengiriman. Jadi daftarnya disaring dulu dengan
@@ -664,12 +688,13 @@ function ambilKantong(village, dealer, periode) {
  *
  * Murni: diekspor supaya bisa diuji tanpa peta maupun jaringan.
  */
-export function orangDiTitik(rows, jenis, idx) {
-  if (!Array.isArray(rows)) return null;
+export function orangDiTitik(kantong, jenis, idx, village) {
+  if (!kantong || !Array.isArray(kantong.rows)) return null;
+  if (kantong.total > kantong.rows.length) return null;
   const saring = jenis === 'servis' ? ((r) => Number(r.serviceCount) > 0)
     : jenis === 'kirim' ? ((r) => Number(r.deliveryCount) > 0)
       : (() => true);
-  const cocok = rows.filter(saring);
+  const cocok = kantong.rows.filter((r) => r.villageCode === village && saring(r));
   const n = Number(idx);
   if (!Number.isInteger(n) || n < 0 || n >= cocok.length) return null;
   return cocok[n];
@@ -707,7 +732,7 @@ function tampilkanKartuOrang(jenis, orang, event) {
       barisSumber(kirim > 0, 'Pengiriman', kirim ? `${kirim}x` : 'tidak ada') +
     `</div>` +
     `<div class="text-[10px] text-slate-400 mt-2 pt-2 border-t border-slate-200 leading-snug">` +
-      `Titik ${esc(LABEL_TITIK[jenis] || '')} · posisi acak di dalam kelurahan, bukan ` +
+      `Titik ${esc(LABEL_TITIK[jenis] || '')} · posisi acak di dalam desa asalnya, bukan ` +
       `alamat sebenarnya.<br><span class="font-bold text-slate-600">Klik</span> untuk ` +
       `riwayat lengkapnya.</div>`;
   tip.classList.add('show');
@@ -764,16 +789,16 @@ function hoverTitik(jenis, props, event) {
   batalkanKartuTitik();
   kunciKartuTerakhir = kunci;
 
-  const { village, dealer, idx } = props || {};
-  if (!village) return;
+  const { village, district, dealer, idx } = props || {};
+  if (!village || !district) return;
   const periode = fusionFilterPeta().periode;
 
   pewaktuKartu = setTimeout(() => {
     pewaktuKartu = null;
-    ambilKantong(village, dealer, periode).then((rows) => {
+    ambilKantong(district, dealer, periode).then((kantong) => {
       // Kursor sudah pindah sebelum jawabannya datang: jangan menimpa apa pun.
       if (kunciKartuTerakhir !== kunci) return;
-      const orang = orangDiTitik(rows, jenis, idx);
+      const orang = orangDiTitik(kantong, jenis, idx, village);
       // Tidak ketemu -> tooltip kelurahan yang biru DIBIARKAN. Itu keadaan antara yang
       // jujur: "belum bisa menunjuk satu orang", bukan kartu kosong yang terlihat
       // seperti kerusakan.
@@ -790,27 +815,31 @@ function hoverTitik(jenis, props, event) {
  * window.openDealerDetail di filter-bar.js dan outlets.js.
  */
 function bukaRiwayatDariTitik(jenis, props) {
-  const { village, dealer, idx } = props || {};
-  if (!village) return;
+  const { village, district, dealer, idx } = props || {};
+  if (!village || !district) return;
   const periode = fusionFilterPeta().periode;
-  ambilKantong(village, dealer, periode).then((rows) => {
-    const orang = orangDiTitik(rows, jenis, idx);
+  ambilKantong(district, dealer, periode).then((kantong) => {
+    const orang = orangDiTitik(kantong, jenis, idx, village);
     if (orang && orang.engineNo && window.bukaTelusurMesinDari) {
       window.bukaTelusurMesinDari(orang.engineNo);
     } else if (window.bukaDaftarTitik) {
       // Titiknya tidak bisa dipetakan ke satu orang — buka daftar sekantongnya supaya
       // orangnya tetap bisa dicari sendiri, bukan kliknya tidak melakukan apa-apa.
-      window.bukaDaftarTitik(jenis, village, dealer || null);
+      window.bukaDaftarTitik(jenis, district, dealer || null);
     }
   }).catch(() => { /* panel tidak dibuka; pesannya sudah muncul di panel telusur */ });
 }
 
 function bangunTitikFusi(jenis) {
   const data = S.fusionPoints;
-  if (!data || !S.geo) return EMPTY_COLLECTION;
+  if (!data || !S.villageGeo) return EMPTY_COLLECTION;
   if (data.cache[jenis]) return data.cache[jenis];
 
-  if (!data.cincin) data.cincin = cincinPerDesa(S.geo);
+  // Disebar di poligon DESA, bukan kecamatan (keputusan user 2026-10-10): sebarannya
+  // lebih aktual. Kecamatannya ikut dibawa tiap titik untuk tooltip dan kantong PII.
+  if (!data.cincin) data.cincin = cincinPerDesa(S.villageGeo);
+  const kecamatanDesa = {};
+  data.rows.forEach((r) => { kecamatanDesa[r.villageCode] = r.districtCode; });
   const perDesa = titikPerDesa(data.rows, jenis);
   const rand = pembangkitAcak(BENIH_TITIK[jenis]);
   const features = [];
@@ -837,6 +866,7 @@ function bangunTitikFusi(jenis) {
             warna: dealerColor(S.registry, bagian.dealer),
             dealer: bagian.dealer,
             village: kode,
+            district: kecamatanDesa[kode] || '',
             idx,
           },
           geometry: { type: 'Point', coordinates: koordinat },
@@ -934,23 +964,18 @@ export function kembalikanPeta() {
    ========================================================================== */
 
 let kecamatanSiap = false;
-/** GeoJSON kecamatan yang sudah dimuat, dipakai districtAt() cari kecamatan dari titik. */
-let kecGeo = null;
 
 export const districtsLoaded = () => kecamatanSiap;
 
 /**
- * Muat dan pasang lapisan batas kecamatan.
+ * Pasang lapisan kecamatan di atas isian warnanya (kec-warna, di addLayers()).
  *
- * Dipanggil saat togglenya dinyalakan, BUKAN saat halaman dibuka. Berkasnya 3 MB
- * untuk 654 kecamatan, dan sebagian besar sesi tidak pernah menyalakannya sama
- * sekali — memuatnya di awal berarti semua orang membayar untuk yang dipakai sedikit.
+ * Sejak 2026-10-10 TIDAK lagi dimuat malas lewat toggle: kecamatan jadi satuan
+ * analisis, jadi berkasnya (S.geo) dimuat di boot. Berkasnya juga tinggal 0,6 MB,
+ * bukan 3 MB, sejak 29.823 lubang sliver ditutup di view district_shapes.
  */
-export async function addDistrictLayers() {
+function addDistrictLayers() {
   if (kecamatanSiap) return;
-  const geo = await fetchGeo('kecamatan.geojson');
-  kecGeo = geo;
-  S.map.addSource('kec', { type: 'geojson', data: geo, promoteId: 'kode' });
 
   // Isi transparan dulu; setGroupPaint()/paintGroupView() (Bagian EDIT RING DEALER &
   // COVERAGE POS di bawah) yang mewarnainya. Lapisan isi tetap ada walau semuanya
@@ -965,7 +990,12 @@ export async function addDistrictLayers() {
   });
   S.map.addLayer({
     id: 'kec-garis', type: 'line', source: 'kec',
-    paint: { 'line-color': '#db2777', 'line-width': 1.2, 'line-opacity': 0.7 },
+    paint: { 'line-color': '#ffffff', 'line-width': 0.9, 'line-opacity': 0.8 },
+  });
+  S.map.addLayer({
+    id: 'kec-terpilih', type: 'line', source: 'kec',
+    filter: ['==', ['get', 'kode'], ''],
+    paint: { 'line-color': '#0b2f6b', 'line-width': 2.5 },
   });
   S.map.addLayer({
     id: 'kec-nama', type: 'symbol', source: 'kec', minzoom: 8.5,
@@ -973,7 +1003,7 @@ export async function addDistrictLayers() {
       'text-field': ['get', 'nama'], 'text-font': ['Noto Sans Regular'],
       'text-size': 11, 'text-allow-overlap': false,
     },
-    paint: { 'text-color': '#db2777', 'text-halo-color': '#ffffff', 'text-halo-width': 1.6 },
+    paint: { 'text-color': '#1e293b', 'text-halo-color': '#ffffff', 'text-halo-width': 1.6 },
   });
 
   S.map.on('click', 'kec-isi', (e) => {
@@ -991,25 +1021,6 @@ export async function addDistrictLayers() {
   kecamatanSiap = true;
 }
 
-/**
- * Nyalakan atau matikan batas dan nama kecamatan.
- *
- * Berkas batasnya tetap dimuat saat diminta, jadi yang tidak pernah menyalakannya
- * tidak membayar 3 MB.
- */
-export async function toggleDistrictNames() {
-  const nyala = $('opt-kecamatan') && $('opt-kecamatan').checked;
-  if (nyala && !kecamatanSiap) {
-    try {
-      await addDistrictLayers();
-    } catch (error) {
-      $('opt-kecamatan').checked = false;
-      toast('Batas kecamatan tidak bisa dimuat: ' + error.message, 'error');
-      return;
-    }
-  }
-  redrawMap();
-}
 
 /* ==========================================================================
    EDIT & LIHAT: RING DEALER (1-3) / COVERAGE POS (1-8)
@@ -1066,8 +1077,8 @@ export function setGroupPaint(draft, colors) {
 
 /** Kode kecamatan yang memuat satu titik lat/lng, atau null kalau tidak ketemu/di luar. */
 function districtAt(lat, lng) {
-  if (!kecGeo || lat == null || lng == null) return null;
-  for (const f of kecGeo.features) {
+  if (!S.geo || lat == null || lng == null) return null;
+  for (const f of S.geo.features) {
     const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
     for (const poly of polys) {
       if (pointInRing(lng, lat, poly[0])) return f.properties.kode;
@@ -1133,7 +1144,7 @@ export function paintGroupView() {
  * @param {number|'lokasi'} value
  * @param {string[]} tombolIds  id tombol yang perlu diperbarui gayanya
  */
-async function setGroupView(mode, value, tombolIds) {
+function setGroupView(mode, value, tombolIds) {
   const sama = S.ringView && S.ringView.mode === mode && S.ringView.value === value;
   S.ringView = sama ? { mode: null, value: null } : { mode, value };
 
@@ -1145,15 +1156,6 @@ async function setGroupView(mode, value, tombolIds) {
     tombol.classList.add(...(aktif ? ['bg-white', 'text-slate-800', 'shadow-sm'] : ['text-slate-500']));
   });
 
-  if (S.ringView.mode && !kecamatanSiap) {
-    try {
-      await addDistrictLayers();
-    } catch (error) {
-      toast('Batas kecamatan tidak bisa dimuat: ' + error.message, 'error');
-      S.ringView = { mode: null, value: null };
-      return;
-    }
-  }
   paintGroupView();
 }
 
@@ -1216,10 +1218,10 @@ export function syncGroupControls() {
 }
 
 /**
- * Warnai kelurahan menurut Kontribusi Penjualan (% terhadap total KOTANYA SENDIRI),
- * bukan lagi unit mentah — sejak 2026-08-30. Kelurahan kecil yang justru dominan di
- * kotanya sendiri sekarang terlihat gelap, bukan tenggelam di bawah kelurahan
- * bervolume besar dari kota lain yang kebetulan ikut tampil.
+ * Warnai KECAMATAN (satuan analisis sejak 2026-10-10; sebelumnya kelurahan) menurut
+ * Kontribusi Penjualan (% terhadap total KOTANYA SENDIRI), bukan unit mentah — sejak
+ * 2026-08-30. Wilayah kecil yang justru dominan di kotanya sendiri terlihat gelap,
+ * bukan tenggelam di bawah wilayah bervolume besar dari kota lain.
  *
  * Dua mode (S.heatmapMode, lihat setHeatmapMode()):
  * - 'relative' (bawaan): kelas persentil dari sebaran kontribusi yang sedang tampil —
@@ -1248,9 +1250,9 @@ export function paintChoropleth(rows) {
     && (scopeValue('dealer') !== 'ALL' || scopeValue('pos') !== 'ALL');
 
   const kontribusi = pakaiUnit
-    ? unitsForRows(rows, S.villageByCode)
-    : contributionsForRows(rows, S.villageByCode);
-  const perVillage = Object.fromEntries(kontribusi);
+    ? unitsForRows(rows, S.districtByCode)
+    : contributionsForRows(rows, S.districtByCode);
+  const perDistrict = Object.fromEntries(kontribusi);
   const breaks = percentileBreaks([...kontribusi.values()]);
 
   S.geo.features.forEach((f) => {
@@ -1265,13 +1267,13 @@ export function paintChoropleth(rows) {
         warna = cls < 0 ? COLOR_EMPTY : RAMP[cls];
       }
     }
-    S.map.setFeatureState({ source: 'kel', id: f.properties.kode }, { warna });
+    S.map.setFeatureState({ source: 'kec', id: f.properties.kode }, { warna });
   });
 
   // `satuan` ikut dikembalikan supaya legenda MENYEBUT apa yang sedang diukur. Tanpa
   // itu, angka yang sama ("12") berarti "12% kontribusi" di satu keadaan dan "12 unit"
   // di keadaan lain, di kotak legenda yang bentuknya persis sama.
-  return { perVillage, breaks, satuan: pakaiUnit ? 'unit' : 'persen' };
+  return { perDistrict, breaks, satuan: pakaiUnit ? 'unit' : 'persen' };
 }
 
 /**
@@ -1315,25 +1317,29 @@ export function setHeatmapMode(mode) {
  * dengan begitu map.js tidak perlu meng-import render.js, dan lingkaran modul
  * map -> render -> tables -> map tidak pernah terbentuk.
  *
- * @returns {{perVillage: Object, breaks: Array}|null} null kalau lapisan belum siap
+ * @returns {{perDistrict: Object, breaks: Array, satuan: string}|null} null kalau
+ *   lapisan belum siap
  */
 export function refreshMapVisual() {
   if (!S.layersReady) return null;
 
   const rows = activeRows();
-  const { perVillage, breaks } = paintChoropleth(rows);
+  // `satuan` ikut diteruskan. Sampai 2026-10-10 baris ini membuangnya, jadi legenda
+  // selalu jatuh ke bawaannya dan tidak pernah berkata "unit" waktu filter dealer/pos
+  // aktif — padahal paintChoropleth() sudah menghitungnya.
+  const { perDistrict, breaks, satuan } = paintChoropleth(rows);
   drawMarkers();
   drawDealerMarkers();
   redrawMap();
-  return { perVillage, breaks };
+  return { perDistrict, breaks, satuan };
 }
 
 export function redrawMap() {
   if (!S.layersReady) return;
   const on = (id) => ($(id) ? $(id).checked : false);
 
-  // "Batas dan Nama Kelurahan/Desa" — satu toggle, dua lapisan (permintaan Pakbos,
-  // sebelumnya dua sakelar terpisah).
+  // "Batas dan Nama Desa" — satu toggle, dua lapisan. Mati bawaan sejak 2026-10-10:
+  // desa tinggal referensi orientasi, bukan satuan analisis.
   const tampilKel = on('opt-kelurahan');
   S.map.setLayoutProperty('kel-garis', 'visibility', tampilKel ? 'visible' : 'none');
   S.map.setLayoutProperty('kel-nama', 'visibility', tampilKel ? 'visible' : 'none');
@@ -1343,10 +1349,9 @@ export function redrawMap() {
   S.map.setLayoutProperty('kota-garis', 'visibility', tampilKota ? 'visible' : 'none');
   S.map.setLayoutProperty('kota-nama', 'visibility', tampilKota ? 'visible' : 'none');
 
-  // "Batas dan Nama Kecamatan" — referensi visual (garis pink + label), toggle
-  // sendiri lewat Opsi Peta. kec-isi (sorotan ring dealer/coverage pos) diatur
-  // TERPISAH oleh setGroupPaint()/paintGroupView() di bawah — dua lapisan beda tujuan
-  // di satu source yang sama.
+  // "Batas dan Nama Kecamatan" — garis + label, nyala bawaan. Isian warnanya
+  // (kec-warna) SELALU tampil karena itu heatmapnya. kec-isi (sorotan ring dealer/
+  // coverage pos) diatur TERPISAH oleh setGroupPaint()/paintGroupView() di bawah.
   if (kecamatanSiap) {
     const tampilKec = on('opt-kecamatan');
     ['kec-garis', 'kec-nama'].forEach((id) => {
@@ -1408,9 +1413,11 @@ export function redrawMap() {
 
   // Di atas citra satelit, isian pekat menutupi apa pun yang membuat satelit berguna.
   const satellite = S.basemap === 'satelit';
-  S.map.setPaintProperty('kel-isi', 'fill-opacity', satellite ? 0.5 : 0.85);
-  S.map.setPaintProperty('kel-garis', 'line-opacity', satellite ? 0.45 : 0.7);
-  S.map.setPaintProperty('kel-nama', 'text-color', satellite ? '#ffffff' : '#1e293b');
+  S.map.setPaintProperty('kec-warna', 'fill-opacity', satellite ? 0.5 : 0.85);
+  S.map.setPaintProperty('kec-nama', 'text-color', satellite ? '#ffffff' : '#1e293b');
+  S.map.setPaintProperty('kec-nama', 'text-halo-color', satellite ? '#000000' : '#ffffff');
+  S.map.setPaintProperty('kel-garis', 'line-opacity', satellite ? 0.35 : 0.5);
+  S.map.setPaintProperty('kel-nama', 'text-color', satellite ? '#e2e8f0' : '#475569');
   S.map.setPaintProperty('kel-nama', 'text-halo-color', satellite ? '#000000' : '#ffffff');
 
   // "Titik Dealer" dan "Titik Pos" — dua sakelar terpisah sejak 2026-08-31 (permintaan
@@ -1425,8 +1432,10 @@ export function redrawMap() {
    TITIK PENJUALAN
    ==========================================================================
    Alamat konsumen tidak punya koordinat, jadi titiknya disebar acak DI DALAM
-   kelurahannya masing-masing. Yang ditunjukkan sebaran, bukan lokasi rumah — dan
-   halaman menyebutkannya di sudut peta waktu lapisan ini menyala.
+   desanya masing-masing. Yang ditunjukkan sebaran, bukan lokasi rumah — dan
+   halaman menyebutkannya di sudut peta waktu lapisan ini menyala. Sejak 2026-10-10
+   analisisnya berhenti di kecamatan, tapi sebarannya SENGAJA tetap per desa
+   (keputusan user): lebih aktual, dan tidak ada angka per desa yang ikut tampil.
    ========================================================================== */
 
 function pointInRing(lng, lat, ring) {
@@ -1460,7 +1469,7 @@ export function buildSalePoints() {
   rows.forEach((r) => { (byVillage[r.village] ||= []).push(r); });
 
   const ringByVillage = {};
-  S.geo.features.forEach((f) => {
+  S.villageGeo.features.forEach((f) => {
     const rings = f.geometry.type === 'Polygon'
       ? [f.geometry.coordinates[0]]
       : f.geometry.coordinates.map((p) => p[0]);
@@ -1500,13 +1509,13 @@ export function buildSalePoints() {
           ok = pointInRing(lng, lat, ring);
         }
         if (!ok) continue;               // poligon terlalu tipis: lewati saja
-        const village = S.villageByCode[code] || {};
+        const district = S.districtByCode[row.district] || {};
         features.push({
           type: 'Feature',
           properties: {
             warna: dealerColor(S.registry, row.dealer), dealer: row.dealer,
-            outlet: row.outlet, village: code,
-            kota: village.cityCode || '',
+            outlet: row.outlet, district: row.district,
+            kota: district.cityCode || '',
           },
           geometry: { type: 'Point', coordinates: [lng, lat] },
         });
@@ -1591,13 +1600,13 @@ export function toggleFullscreen(force) {
 /**
  * Bawa peta ke data yang SEDANG TAMPIL, bukan selalu ke seluruh wilayah.
  *
- * Kalau satu pos dipilih, yang dipas-kan adalah pos itu beserta seluruh kelurahan yang
+ * Kalau satu pos dipilih, yang dipas-kan adalah pos itu beserta seluruh kecamatan yang
  * dilayaninya — sekali klik langsung kelihatan seberapa jauh pelanggannya menyebar, dan
  * itu justru pertanyaan pokoknya. Zoom ke titik posnya saja malah membuang yang di luar
  * radius keluar layar.
  *
  * @param {boolean} [auto] Sejak 2026-09-14: `true` waktu dipanggil OTOMATIS sesudah
- *   aksi yang mengubah tampilan peta (renderAll(), openVillageDetail() — lihat
+ *   aksi yang mengubah tampilan peta (renderAll(), openDistrictDetail() — lihat
  *   pemanggilnya), BUKAN dari tombol Fit manual. Bedanya dua hal: animasi SENGAJA
  *   dibuat lebih pelan (900ms vs 700ms manual — permintaan eksplisit user, versi
  *   pertama 400ms dianggap "terlalu cepat" untuk dinikmati), dan toast "tidak ada
@@ -1606,10 +1615,10 @@ export function toggleFullscreen(force) {
  */
 export function fitToScope(auto) {
   const points = [];
-  const perVillage = sumBy(activeRows(), 'village');
-  Object.keys(perVillage).forEach((code) => {
-    const village = S.villageByCode[code];
-    if (village && village.lat != null) points.push([village.lng, village.lat]);
+  const perDistrict = sumBy(activeRows(), 'district');
+  Object.keys(perDistrict).forEach((code) => {
+    const district = S.districtByCode[code];
+    if (district && district.lat != null) points.push([district.lng, district.lat]);
   });
 
   const outlet = scopeValue('pos');
@@ -1640,7 +1649,7 @@ export function fitToScope(auto) {
     if (y > maxY) maxY = y;
   });
 
-  // Satu kelurahan saja menghasilkan kotak seluas nol dan fitBounds akan memperbesar
+  // Satu kecamatan saja menghasilkan kotak seluas nol dan fitBounds akan memperbesar
   // sampai maksimum. Diberi kelonggaran ~2,5 km supaya tetap ada konteks.
   const minSpan = 0.022;
   if (maxX - minX < minSpan) { const c = (maxX + minX) / 2; minX = c - minSpan / 2; maxX = c + minSpan / 2; }

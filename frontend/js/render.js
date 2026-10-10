@@ -10,7 +10,7 @@ import {
   activeRows, applyScope, clearScope, pageFilters, scopeLabel, scopeValue,
 } from './filters.js';
 import {
-  businessReferenceGroup, contributionsByOutlet, contributionsByVillage,
+  businessReferenceGroup, contributionsByOutlet, contributionsByDistrict,
   dealerRingSplit, fixedContributionClass, groupSplit, KONTRIBUSI_LABEL, POSISI_LABEL,
   referenceGap, relativePosition,
 } from './sales-stats.js';
@@ -20,7 +20,7 @@ import { S } from './state.js';
 
 /**
  * Label tier legenda peta — HANYA di sini, TIDAK menimpa POSISI_LABEL
- * (Terbawah/Bawah/Tengah/Atas/Teratas): badge di panel kelurahan, ringkasan kota, dan
+ * (Terbawah/Bawah/Tengah/Atas/Teratas): badge di panel kecamatan, ringkasan kota, dan
  * blok Performa Pos Dealer tetap memakai istilah itu, cuma legenda peta yang berbeda.
  *
  * Sampai 2026-09-17 istilahnya Inggris (bottom/lower/middle/upper/top, permintaan
@@ -52,7 +52,7 @@ function legendTitle() {
  * Rentang tiap kelas diambil dari nilai yang benar-benar jatuh di kelas itu, bukan
  * dihitung dari batasnya — lihat classRanges() di colors.js untuk alasannya.
  *
- * `perVillage` sejak 2026-08-30 berisi Kontribusi Penjualan (%), bukan unit mentah —
+ * `perDistrict` (per KECAMATAN sejak 2026-10-10) sejak 2026-08-30 berisi Kontribusi Penjualan (%), bukan unit mentah —
  * lihat paintChoropleth() di map.js. Dua mode, S.heatmapMode:
  * - 'relative' ("Dynamic Relative Tiering by Sales"): lima kelas PERSENTIL dari
  *   sebaran yang sedang tampil (colors.js) — tiap kelas ~20% dari titik yang ada.
@@ -60,10 +60,10 @@ function legendTitle() {
  *   TETAP (sales-stats.js KONTRIBUSI_TETAP), sama di mana pun dan kapan pun — beda
  *   mesin dari relative, jadi rendernya terpisah, bukan cuma ganti label.
  */
-export function renderLegend(perVillage, breaks, satuan) {
+export function renderLegend(perDistrict, breaks, satuan) {
   if ($('legend-title')) $('legend-title').textContent = legendTitle();
 
-  const values = Object.values(perVillage).filter((v) => v > 0);
+  const values = Object.values(perDistrict).filter((v) => v > 0);
   // Baris "No Sales" beserta hitungannya DIBUANG 2026-09-20 (permintaan tim). Kelurahan
   // tanpa penjualan tetap terlihat di peta lewat warnanya sendiri (COLOR_EMPTY); yang
   // hilang cuma satu baris legenda yang selalu jadi angka terbesar di kotak itu dan
@@ -116,9 +116,9 @@ export function renderLegend(perVillage, breaks, satuan) {
     (used < RAMP.length && values.length
       ? `Sebarannya terlalu sempit untuk lima kelas — ${used} kelas terpakai. ` : '') +
     (perUnit
-      ? 'Kelas dihitung dari JUMLAH UNIT per kelurahan pada dealer/pos yang sedang ' +
+      ? 'Kelas dihitung dari JUMLAH UNIT per kecamatan pada dealer/pos yang sedang ' +
         'disaring — bukan kontribusi terhadap kota, yang di lingkup sesempit itu ' +
-        'membuat kelurahan bervolume kecil justru tampil paling gelap.'
+        'membuat kecamatan bervolume kecil justru tampil paling gelap.'
       : 'Kelas dihitung dari sebaran Kontribusi Penjualan yang sedang tampil, jadi ikut berubah waktu filternya diganti.') +
     '</p>';
 }
@@ -168,7 +168,7 @@ function performanceByOutlet(rows) {
     const contribution = kontribusi.has(code) ? kontribusi.get(code) : null;
     const posisi = contribution == null ? null : relativePosition(contribution, breaks);
     const gap = referenceGap(contribution, S.businessReferencePercent);
-    const cover = groupSplit(outletRows, S.posCoverage[code], S.villageByCode, 8);
+    const cover = groupSplit(outletRows, S.posCoverage[code], 8);
 
     return {
       code,
@@ -372,7 +372,7 @@ function performanceRowCompact(item) {
  * Ringkasan kontekstual di atas daftar Performa Pos — sejak 2026-08-31 GANTI TOTAL
  * (permintaan Pakbos, putaran keempat) dari "Dalam radius X km" (radius-based, satu
  * bentuk untuk semua orang) jadi tiga bentuk berbeda menurut filter yang aktif.
- * `splitByCoverage`/`coverage.js` TIDAK dihapus — masih dipakai tooltip kelurahan
+ * `splitByCoverage`/`coverage.js` TIDAK dihapus — masih dipakai tooltip kecamatan
  * (`outlets.js`), di luar cakupan perubahan ini.
  */
 const average = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
@@ -407,12 +407,12 @@ function summaryGridHtml(cells) {
 
 /** Filter Kota ATAU tidak ada filter kota/dealer/pos sama sekali (Semua) — sama-sama lewat sini. */
 function baseScopeSummary(rows) {
-  const { list, breaks } = villageSalesRows(rows);
+  const { list, breaks } = districtSalesRows(rows);
   const totalSales = rows.reduce((sum, r) => sum + r.units, 0);
   const kontribusi = list.map((v) => v.contribution).filter((v) => v != null);
   const avg = average(kontribusi);
   return summaryGridHtml([
-    { label: 'Jumlah Desa', value: formatNumber(list.length) },
+    { label: 'Jumlah Kecamatan', value: formatNumber(list.length) },
     { label: 'Total Sales', value: formatNumber(totalSales) },
     { label: 'AVG Kontribusi', value: avg == null ? '—' : avg.toFixed(2) + '%' },
     { label: 'AVG Posisi Relatif', value: avg == null ? '—' : (relativePosition(avg, breaks) || '—') },
@@ -434,7 +434,7 @@ function dealerCoverageDistricts(dealerCode) {
 }
 
 /**
- * Enam sel dasar scope dealer (jumlah desa, jumlah pos, total sales, tiga AVG) —
+ * Enam sel dasar scope dealer (jumlah kecamatan, jumlah pos, total sales, tiga AVG) —
  * dipakai DUA tempat: dealerScopeSummary() di bawah (ringkas-jangkauan, panel
  * Performa, ditambah pecahan Ring/Coverage) dan topScopeSummary() (kartu ringkasan
  * atas halaman, TANPA pecahan ring/coverage — dikonfirmasi user waktu perencanaan
@@ -442,7 +442,7 @@ function dealerCoverageDistricts(dealerCode) {
  * tempat).
  */
 function dealerScopeBaseCells(rows, dealerCode) {
-  const { list, breaks } = villageSalesRows(rows);
+  const { list, breaks } = districtSalesRows(rows);
   const totalSales = rows.reduce((sum, r) => sum + r.units, 0);
   const kontribusi = list.map((v) => v.contribution).filter((v) => v != null);
   const avg = average(kontribusi);
@@ -451,7 +451,7 @@ function dealerScopeBaseCells(rows, dealerCode) {
   const outletCount = (S.dealerByCode[dealerCode] || {}).outletCount || 0;
 
   return [
-    { label: 'Jumlah Desa', value: formatNumber(list.length) },
+    { label: 'Jumlah Kecamatan', value: formatNumber(list.length) },
     { label: 'Jumlah Pos Dealer', value: formatNumber(outletCount) },
     { label: 'Total Sales', value: formatNumber(totalSales) },
     { label: 'AVG Kontribusi', value: avg == null ? '—' : avg.toFixed(2) + '%' },
@@ -467,7 +467,7 @@ function dealerScopeSummary(rows) {
   // Ring dealer (kecamatan) + coverage gabungan pos cabangnya — ring menang kalau
   // satu kecamatan masuk keduanya (dikonfirmasi user waktu perencanaan 2026-08-31).
   const split = dealerRingSplit(
-    rows, S.dealerRings[dealerCode], dealerCoverageDistricts(dealerCode), S.villageByCode);
+    rows, S.dealerRings[dealerCode], dealerCoverageDistricts(dealerCode));
 
   return summaryGridHtml([
     ...cells,
@@ -485,7 +485,7 @@ function posScopeSummary(rows) {
   const counts = {};
   for (let i = 1; i <= 8; i++) counts[i] = 0;
   Object.values(coverageMap).forEach((c) => { if (counts[c] !== undefined) counts[c]++; });
-  const split = groupSplit(rows, coverageMap, S.villageByCode, 8);
+  const split = groupSplit(rows, coverageMap, 8);
   return summaryGridHtml([
     { label: 'Total Penjualan Pos', value: formatNumber(total) },
     ...Array.from({ length: 8 }, (_, i) => ({
@@ -668,9 +668,9 @@ export function toggleLivePerforma() {
    ==========================================================================
    Blok baru (permintaan Pakbos, putaran ketiga): satu baris per DESA — beda dari
    blok Performa Pos Dealer di atas yang satu baris per POS. Basis kontribusi &
-   posisi relatif SENGAJA relatif terhadap `rows` apa adanya (contributionsByVillage
-   di sales-stats.js), BUKAN terhadap kotanya sendiri seperti villageStats() yang
-   sudah ada di tables.js untuk panel kelurahan — dikonfirmasi user: karena `rows`
+   posisi relatif SENGAJA relatif terhadap `rows` apa adanya (contributionsByDistrict
+   di sales-stats.js), BUKAN terhadap kotanya sendiri seperti districtStats() yang
+   sudah ada di tables.js untuk panel kecamatan — dikonfirmasi user: karena `rows`
    di sini datang dari activeRows(), ini otomatis berarti "relatif terhadap
    dealer/pos yang difilter" tanpa percabangan khusus.
 
@@ -684,22 +684,21 @@ export function toggleLivePerforma() {
  *   dengan breaks yang SAMA PERSIS dipakai tiap baris — kalau dihitung ulang
  *   terpisah, bisa menyimpang tipis dari sebaran yang sesungguhnya ditampilkan.
  */
-function villageSalesRows(rows) {
-  const byVillage = {};
-  rows.forEach((r) => { byVillage[r.village] = (byVillage[r.village] || 0) + r.units; });
+function districtSalesRows(rows) {
+  const byDistrict = {};
+  rows.forEach((r) => { byDistrict[r.district] = (byDistrict[r.district] || 0) + r.units; });
 
-  const kontribusi = contributionsByVillage(rows);
+  const kontribusi = contributionsByDistrict(rows);
   const breaks = percentileBreaks([...kontribusi.values()]);
 
-  const list = Object.keys(byVillage).map((code) => {
-    const village = S.villageByCode[code] || {};
+  const list = Object.keys(byDistrict).map((code) => {
+    const district = S.districtByCode[code] || {};
     const contribution = kontribusi.has(code) ? kontribusi.get(code) : null;
     return {
       code,
-      name: village.name || code,
-      district: village.district || '',
-      cityName: village.cityName || '',
-      units: byVillage[code],
+      name: district.name || code,
+      cityName: district.cityName || '',
+      units: byDistrict[code],
       contribution,
       posisi: contribution == null ? null : relativePosition(contribution, breaks),
     };
@@ -712,7 +711,7 @@ function villageSalesRows(rows) {
 }
 
 function wilayahLokasi(item) {
-  return [item.district, item.cityName].filter(Boolean).join(', ');
+  return item.cityName || '';
 }
 
 /** Baris lebar: kartu normal (SELALU tampil, tidak bergantung filter). */
@@ -745,8 +744,8 @@ function wilayahRowCompact(item) {
 }
 
 export function renderWilayah(rows) {
-  const { list } = villageSalesRows(rows);
-  const kosong = '<p class="text-center text-slate-400 text-sm py-8">Tidak ada desa pada filter ini.</p>';
+  const { list } = districtSalesRows(rows);
+  const kosong = '<p class="text-center text-slate-400 text-sm py-8">Tidak ada kecamatan pada filter ini.</p>';
   const bodyWide = list.length ? list.map(wilayahRowWide).join('') : kosong;
   const bodyCompact = list.length ? list.map(wilayahRowCompact).join('') : kosong;
 
@@ -759,7 +758,7 @@ export function renderWilayah(rows) {
 
 /**
  * Panel kiri layar penuh peta cuma punya SATU slot — jadi begitu dealer/pos
- * difilter, "Analisis Penjualan Wilayah" (per desa, relevan untuk melihat wilayah
+ * difilter, "Analisis Penjualan Wilayah" (per kecamatan, relevan untuk melihat wilayah
  * SATU dealer/pos itu) menggantikan "Analisis Performa Pos" (per pos, lebih relevan
  * waktu melihat semua pos/kota) di slot yang sama. Dipanggil dari renderAll().
  */
@@ -845,10 +844,10 @@ export function dealerCardHtml(compact) {
     if (r.dealer !== code) return false;
     if (f.from !== 'ALL' && r.period < f.from) return false;
     if (f.to !== 'ALL' && r.period > f.to) return false;
-    const village = S.villageByCode[r.village];
-    if (!village) return false;
-    if (city !== 'ALL' && village.cityCode !== city) return false;
-    if (f.kares !== 'ALL' && !KARESIDENAN[f.kares].cities.includes(village.cityCode)) return false;
+    const district = S.districtByCode[r.district];
+    if (!district) return false;
+    if (city !== 'ALL' && district.cityCode !== city) return false;
+    if (f.kares !== 'ALL' && !KARESIDENAN[f.kares].cities.includes(district.cityCode)) return false;
     return true;
   });
 
@@ -884,12 +883,12 @@ export function dealerCardHtml(compact) {
   let cabang;
   if (activePos !== 'ALL') {
     const posRows = rows.filter((r) => r.outlet === activePos);
-    const split = groupSplit(posRows, S.posCoverage[activePos], S.villageByCode, 8);
+    const split = groupSplit(posRows, S.posCoverage[activePos], 8);
     cabang = Array.from({ length: 8 }, (_, i) =>
       ({ label: `Coverage ${i + 1}`, value: split.percents[i].toFixed(1) + '%' }));
   } else {
     const split = dealerRingSplit(
-      rows, S.dealerRings[code], dealerCoverageDistricts(code), S.villageByCode);
+      rows, S.dealerRings[code], dealerCoverageDistricts(code));
     const luar = 100 - split.percent1 - split.percent2 - split.percent3;
     cabang = [
       { label: 'Ring 1', value: split.percent1.toFixed(1) + '%' },
@@ -946,7 +945,7 @@ export function dealerCardHtml(compact) {
     `<div class="flex items-center gap-2 shrink-0">` +
     `<button onclick="openDealerDetail('${esc(code)}')" ` +
     `class="px-3 py-2 rounded-xl text-white text-xs font-bold hover:opacity-90 whitespace-nowrap btn-primary">` +
-    `<i class="ph ph-list-magnifying-glass mr-1"></i>Rincian per kelurahan</button>` +
+    `<i class="ph ph-list-magnifying-glass mr-1"></i>Rincian per kecamatan</button>` +
     `<button onclick="closeDealerCard()" class="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50">Tutup</button>` +
     `</div></div>` +
     `<div class="mt-3">${stats}</div>` +
@@ -998,8 +997,8 @@ export function totalsByMode(rows, mode) {
   if (mode === 'pos') return sumBy(rows, 'outlet');
   const out = {};
   rows.forEach((r) => {
-    const village = S.villageByCode[r.village];
-    if (village) out[village.cityCode] = (out[village.cityCode] || 0) + r.units;
+    const district = S.districtByCode[r.district];
+    if (district) out[district.cityCode] = (out[district.cityCode] || 0) + r.units;
   });
   return out;
 }

@@ -156,6 +156,12 @@ async function main() {
   console.log(`  tanpa kecamatan   : ${stats.tanpa_kecamatan}`);
   console.log(`  luas total        : ${stats.luas} km²`);
   if (dilewati) console.log(`  baris dilewati    : ${dilewati}`);
+
+  // Poligon kecamatan diturunkan dari kelurahan (schema.sql). Tanpa penyegaran ini
+  // jangkauan dan peta tetap memakai batas kecamatan versi sebelum seed.
+  await db.query('REFRESH MATERIALIZED VIEW district_shapes');
+  const kec = await store.one(db, 'SELECT COUNT(*) AS n FROM district_shapes');
+  console.log(`  kecamatan         : ${kec.n}`);
   console.log('');
   console.log('  Lanjutkan: npm run export-geo   (segarkan berkas peta untuk browser)');
   console.log('             npm run seed-coverage (kalau ada pos di kota baru)\n');

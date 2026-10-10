@@ -72,7 +72,9 @@ export const S = {
   },
 
   // --- dari server ---
-  villages: [],            // [{code, name, district, cityCode, cityName, provinceCode, lat, lng}]
+  // SATUAN ANALISIS = kecamatan sejak 2026-10-10 (docs/DECISIONS.md). Yang punya
+  // penjualan atau jangkauan saja; nama SELURUH kecamatan ada di districtNames.
+  districts: [],           // [{code, name, cityCode, cityName, lat, lng, hasGeom}]
   outlets: [],             // [{code, name, dealerCode, dealerName, address, lat, lng, synthetic}]
   // Katalog pos FISIK sungguhan saja — S.outlets bisa memuat baris "proxy" per
   // dealer (synthetic:true) yang menyambungkan penjualan level-dealer lama;
@@ -80,16 +82,18 @@ export const S = {
   // S.outlets di buildIndexes(), lihat app.js.
   realOutlets: [],
   dealers: [],             // [{code, name, address, lat, lng, outletCount}]
-  sales: [],               // [{period, village, outlet, dealer, units}]
+  // `district` kunci semua hitungan; `village` HANYA untuk menyebar titik penjualan
+  // di desa asalnya (map.js buildSalePoints).
+  sales: [],               // [{period, district, village, outlet, dealer, units}]
   periods: [],
   lastImport: null,
   hasCustomers: false,
   pendingNames: 0,         // nama kelurahan yang menunggu dicocokkan manusia
   businessReferencePercent: 1, // acuan bisnis default; ditimpa data.businessReferencePercent
-  panelView: null,         // {kind:'village'|'dealer', code} — isi panel geser
+  panelView: null,         // {kind:'dealer'|'city', code} — isi panel geser
 
   // --- indeks, dibangun sekali saat muat ---
-  villageByCode: {},
+  districtByCode: {},
   outletByCode: {},
   dealerByCode: {},
   dealerNames: {},
@@ -97,7 +101,8 @@ export const S = {
   registry: null,          // warna dealer
 
   // --- geo ---
-  geo: null,               // batas kelurahan
+  geo: null,               // batas KECAMATAN — satuan analisis, diwarnai
+  villageGeo: null,        // batas kelurahan — wadah sebaran titik + lapisan "Batas desa"
   cityGeo: null,           // batas kabupaten
 
   // --- peta ---
@@ -110,7 +115,7 @@ export const S = {
   // Hitungan titik tiga sumber per kelurahan (docs/FUSION.md 3.1). Diambil dari
   // server saat salah satu togglenya pertama dinyalakan, lalu dipakai ulang; dibuang
   // jadi null waktu filter berubah supaya tidak menampilkan angka periode lama.
-  fusionPoints: null,      // {rows:[{villageCode, dealerCode, ktp, servis, kirim}]}
+  fusionPoints: null,      // {rows:[{villageCode, districtCode, dealerCode, ktp, servis, kirim}]}
   fusionPointsLoading: false,
   // Ambang KPI Jarak (meter) untuk lingkaran radius di peta. null = belum diambil;
   // selama masih null lingkarannya TIDAK digambar, bukan digambar dengan tebakan.
@@ -121,7 +126,7 @@ export const S = {
   // Pos yang sedang dipilih TIDAK disimpan di sini: dia bagian dari filter halaman,
   // dibaca lewat scopeValue('pos'). Menyimpannya lagi di sini berarti dua sumber
   // kebenaran untuk fakta yang sama, dan yang satu selalu bisa ketinggalan.
-  selectedVillage: null,
+  selectedDistrict: null,
   // Urutan daftar Analisis Performa Pos: 'asc' = persentase terkecil di atas.
   // Bawaannya yang terkecil, karena yang dicari orang di panel ini adalah pos yang
   // paling bermasalah — bukan yang paling baik.
@@ -155,7 +160,7 @@ export const S = {
   // di render.js.
   treemapChart: null,
   treemapCodes: [],
-  villageTrendChart: null, // grafik tren bulanan di panel Blok 2 (Sales)
+  districtTrendChart: null, // grafik tren bulanan di panel kecamatan
   // 'relative' (persentil, bawaan) | 'fixed' (interval tetap). Ditulis di sini dari
   // sekarang supaya panel ringkasan kota/dealer bisa menyebut mode aktif; belum
   // mengubah warna peta sungguhan sampai togglenya dipasang di bagian berikutnya.
@@ -171,7 +176,7 @@ export const S = {
   districtNames: {},       // kode kecamatan -> nama, untuk menyebutnya di layar (Master Kelurahan)
 
   // --- jangkauan ---
-  coverage: {},            // coverage[outletCode][villageCode] = rasio, radius aktif
+  coverage: {},            // coverage[outletCode][districtCode] = rasio, radius aktif
   coverageAll: {},         // seluruh radius, dari server
   radiusM: 5000,
   radiiM: [5000],
@@ -188,6 +193,6 @@ export const S = {
   editingDealer: null,     // kode dealer yang sedang disunting
   pickingOnMap: false,     // menunggu klik di peta untuk mengambil koordinat
 
-  // --- konsumen kelurahan yang sedang dibuka; diambil per permintaan ---
-  villageCustomers: null,
+  // --- konsumen kecamatan yang sedang dibuka; diambil per permintaan ---
+  districtCustomers: null,
 };

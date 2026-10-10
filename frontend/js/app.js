@@ -20,11 +20,11 @@ import { activeRows, applyScope, scopeValue } from './filters.js';
 import {
   addLayers, fitToScope, invalidateSalePoints, redrawMap, refreshMapVisual, setBasemap,
   setCoverageViewPos, setHeatmapMode, setRingViewDealer, syncGroupControls,
-  syncHeatmapModeButtons, toggleDistrictNames, setupMap, toggleFullscreen,
+  syncHeatmapModeButtons, setupMap, toggleFullscreen,
   toggleFusionPoints,
 } from './map.js';
 import {
-  closeSelectionInfo, selectOutlet, showVillageTooltip,
+  closeSelectionInfo, selectOutlet, showDistrictTooltip,
 } from './outlets.js';
 import {
   closeDealerCard, closeTreemapFull, renderDealerCard, renderDealerLegend, renderTopSummary,
@@ -35,17 +35,17 @@ import {
 } from './render.js';
 import { S } from './state.js';
 import {
-  acceptMapPoint, closeOutletEditor, closeVillageDetail, jumpToVillage,
+  acceptMapPoint, closeOutletEditor, closeDistrictDetail, jumpToDistrict,
   openDealerDetail, openCitySummary, toggleDealerCity, jumpFromDealer,
   closeNewOutlet, closeMatchNames, confirmMatch, customerPage, dealerChoiceChanged,
   newOutletDealerChanged, openMatchNames, undoMatch,
   openNewOutlet, saveNewOutlet,
   askResetOutlets, closeResetOutlets, resetOutletsTyped, confirmResetOutlets,
-  openOutletEditor, openVillageDetail, pickFromMap,
+  openOutletEditor, openDistrictDetail, pickFromMap,
   promptPin,
   editDealerRingFromTable, editPosCoverageFromTable,
   renderCustomerTable,
-  renderOutletTable, renderVillageTable, saveOutletEditor, searchCustomers, showOnMap,
+  renderOutletTable, renderDistrictTable, saveOutletEditor, searchCustomers, showOnMap,
   switchTab, toggleMasterMenu, toggleDataMenu, toggleImportMenu, bukaBagianImport,
   renderDealerTable, openNewDealer, closeNewDealer, saveNewDealer,
   openDealerEditor, closeDealerEditor, saveDealerEditor, deleteDealerConfirm,
@@ -77,7 +77,7 @@ const HANDLERS = {
   coverageEditing, anyGroupEditing,
   openRingChooser, closeRingChooser, assignRing,
   redrawMap, setBasemap, setRingViewDealer, setCoverageViewPos, setHeatmapMode,
-  applyScope, toggleFullscreen, fitToScope, toggleDistrictNames, toggleFusionPoints,
+  applyScope, toggleFullscreen, fitToScope, toggleFusionPoints,
   // ringkasan
   setTreemapView, selectEntity, closeDealerCard, togglePerformanceSort,
   toggleLivePerforma, openPerformaFull, closePerformaFull,
@@ -86,9 +86,9 @@ const HANDLERS = {
   // sunting pos
   openOutletEditor, closeOutletEditor, pickFromMap, saveOutletEditor, dealerChoiceChanged,
   // peta dan outlet
-  selectOutlet, closeSelectionInfo, openVillageDetail, closeVillageDetail,
+  selectOutlet, closeSelectionInfo, openDistrictDetail, closeDistrictDetail,
   // tabel
-  switchTab, toggleMasterMenu, toggleDataMenu, toggleImportMenu, bukaBagianImport, renderOutletTable, renderVillageTable, showOnMap, jumpToVillage, promptPin,
+  switchTab, toggleMasterMenu, toggleDataMenu, toggleImportMenu, bukaBagianImport, renderOutletTable, renderDistrictTable, showOnMap, jumpToDistrict, promptPin,
   openDealerDetail, openCitySummary, toggleDealerCity, jumpFromDealer,
   renderCustomerTable, searchCustomers, customerPage,
   // penyatuan tiga sumber (docs/FUSION.md Tahap F)
@@ -161,7 +161,7 @@ export function renderAll() {
   // nilainya tidak pernah dibaca satu baris pun sesudahnya — kode mati yang terbaca
   // seperti sedang menjaga sesuatu.
   const visual = refreshMapVisual();
-  if (visual) renderLegend(visual.perVillage, visual.breaks, visual.satuan);
+  if (visual) renderLegend(visual.perDistrict, visual.breaks, visual.satuan);
 
   renderTopSummary(rows);
   renderTreemap(rows);
@@ -192,7 +192,7 @@ export function renderAll() {
   // sebelumnya, dan itu aman: ketiganya cuma membaca activeRows() dan S.outlets/S.map,
   // tidak satu pun bergantung pada panel yang digambar di antara keduanya.
 
-  // Panel geser digambar ulang mengikuti ISINYA, bukan selalu dianggap kelurahan.
+  // Panel geser digambar ulang mengikuti ISINYA, bukan selalu dianggap kecamatan.
   // Dealer dan kota memakai S.panelView; keduanya cuma dibuka lewat aksi eksplisit
   // (tombol/dropdown), jadi menutupnya tetap "nempel" — tidak ada baris di sini yang
   // membuka ulang panel yang sengaja ditutup pengguna.
@@ -200,25 +200,25 @@ export function renderAll() {
     openDealerDetail(S.panelView.code);
   } else if (S.panelView && S.panelView.kind === 'city') {
     openCitySummary(S.panelView.code);
-  } else if (S.selectedVillage) {
-    // Kalau kotanya sendiri berubah dan kelurahan yang sedang dibuka sudah tidak
+  } else if (S.selectedDistrict) {
+    // Kalau kotanya sendiri berubah dan kecamatan yang sedang dibuka sudah tidak
     // termasuk kota aktif, panel diganti jadi ringkasan kota itu — bukan tetap
-    // menampilkan kelurahan yang sudah di luar cakupan filter (aturan spek).
-    const village = S.villageByCode[S.selectedVillage];
+    // menampilkan kecamatan yang sudah di luar cakupan filter (aturan spek).
+    const district = S.districtByCode[S.selectedDistrict];
     const cityAktif = scopeValue('kota');
-    if (village && cityAktif !== 'ALL' && village.cityCode !== cityAktif) {
+    if (district && cityAktif !== 'ALL' && district.cityCode !== cityAktif) {
       openCitySummary(cityAktif);
     } else {
-      openVillageDetail(S.selectedVillage);
+      openDistrictDetail(S.selectedDistrict);
     }
   }
 
   // Sejak 2026-09-14: peta ikut "Fit" otomatis (auto=true — animasi 900ms yang
   // sengaja pelan, tanpa toast "tidak ada data") tiap kali renderAll() jalan — ini funnel bersama
   // reset filter, klik marker dealer/pos, dan semua pilihan dropdown Kota/Kares/
-  // Dealer/Pos, jadi satu baris di sini sudah mencakup semuanya. Klik kelurahan di
-  // peta funnel-nya beda (lewat openVillageDetail() langsung, TIDAK renderAll()) —
-  // fitToScope(true) untuk jalur itu ditaruh di openVillageDetail() sendiri.
+  // Dealer/Pos, jadi satu baris di sini sudah mencakup semuanya. Klik kecamatan di
+  // peta funnel-nya beda (lewat openDistrictDetail() langsung, TIDAK renderAll()) —
+  // fitToScope(true) untuk jalur itu ditaruh di openDistrictDetail() sendiri.
   if (S.layersReady) fitToScope(true);
 }
 
@@ -227,7 +227,7 @@ export function renderAll() {
    ========================================================================== */
 
 function buildIndexes(data) {
-  S.villages = data.villages;
+  S.districts = data.districts;
   S.outlets = data.outlets;
   S.dealers = data.dealers || [];
   S.sales = data.sales;
@@ -241,24 +241,24 @@ function buildIndexes(data) {
   S.dealerRings = data.dealerRings || {};
   S.posCoverage = data.posCoverage || {};
   S.districtNames = {};
-  (data.districts || []).forEach((d) => { S.districtNames[d.code] = d.name; });
+  (data.allDistricts || []).forEach((d) => { S.districtNames[d.code] = d.name; });
   S.coverageAll = data.coverage || {};
   S.radiiM = data.radiiM || [data.radiusM || 5000];
   S.radiusM = data.radiusM || S.radiiM[0];
   S.coverage = S.coverageAll[S.radiusM] || {};
   S.coverageReady = Boolean(data.coverageReady);
 
-  S.villageByCode = {};
+  S.districtByCode = {};
   S.cityNames = {};
   // "Kabupaten " dipangkas SATU KALI di sini, sumber tunggal untuk seluruh aplikasi —
   // bukan di tiap tempat yang menampilkannya. `v.cityName` diubah di tempat (objek yang
-  // sama disimpan ke S.villageByCode), jadi setiap kode yang membaca lewat kedua jalur
-  // ini (S.cityNames[kode] ATAU S.villageByCode[kode].cityName) otomatis konsisten.
+  // sama disimpan ke S.districtByCode), jadi setiap kode yang membaca lewat kedua jalur
+  // ini (S.cityNames[kode] ATAU S.districtByCode[kode].cityName) otomatis konsisten.
   // TIDAK menyentuh data mentah dari server maupun apa pun di jalur impor/pencocokan —
   // ini murni salinan tampilan milik frontend.
-  data.villages.forEach((v) => {
+  data.districts.forEach((v) => {
     v.cityName = displayCityName(v.cityName);
-    S.villageByCode[v.code] = v;
+    S.districtByCode[v.code] = v;
     S.cityNames[v.cityCode] = v.cityName;
   });
 
@@ -291,13 +291,13 @@ function fillFilters() {
   // Pemilih Radius jangkauan (#pilihan-radius/#label-radius) dihapus dari markup
   // sejak 2026-08-31 — diganti "Tampilkan Ring" (Bagian I, permintaan Pakbos).
   // S.radiusM tetap 5000 tetap (default), dipakai diam-diam oleh dealerCardHtml()
-  // dan tooltip kelurahan yang masih memakai splitByCoverage().
+  // dan tooltip kecamatan yang masih memakai splitByCoverage().
 }
 
 function updateStatus() {
   const units = S.sales.reduce((sum, r) => sum + r.units, 0);
   $('sidebar-status').textContent =
-    `${formatNumber(S.villages.length)} kelurahan · ${S.realOutlets.length} pos · ` +
+    `${formatNumber(S.districts.length)} kecamatan · ${S.realOutlets.length} pos · ` +
     `${S.registry.order.length} dealer · ${formatNumber(units)} unit` +
     (S.hasCustomers ? '' : ' · tanpa data konsumen');
 }
@@ -355,10 +355,14 @@ async function boot() {
   }
 
   try {
-    const [villageGeo, cityGeo] = await Promise.all([
-      fetchGeo('kelurahan.geojson'), fetchGeo('kota.geojson'),
+    // Kecamatan = satuan analisis yang diwarnai. Kelurahan tetap dimuat: ia wadah
+    // sebaran titik penjualan/fusi (supaya sebarannya mengikuti desa asal konsumen)
+    // dan lapisan "Batas desa" yang mati bawaan.
+    const [districtGeo, villageGeo, cityGeo] = await Promise.all([
+      fetchGeo('kecamatan.geojson'), fetchGeo('kelurahan.geojson'), fetchGeo('kota.geojson'),
     ]);
-    S.geo = villageGeo;
+    S.geo = districtGeo;
+    S.villageGeo = villageGeo;
     S.cityGeo = cityGeo;
   } catch (error) {
     showLoadError(error);
@@ -381,29 +385,37 @@ async function boot() {
     $('pageLoader').classList.add('hidden');
   });
 
-  S.map.on('click', 'kel-isi', (e) => {
+  // Klik/hover utama di lapisan warna KECAMATAN (kec-warna). Editor ring dealer /
+  // coverage pos memakai kec-isi di atasnya dengan penangan klik sendiri
+  // (map.js addDistrictLayers) — selama salah satu editor aktif, penangan di sini
+  // MUNDUR supaya satu klik tidak sekaligus membuka panel dan pemilih ring.
+  const editorAktif = () => window.anyGroupEditing && window.anyGroupEditing();
+  S.map.on('click', 'kec-warna', (e) => {
     // Sedang menunggu titik untuk menyunting pos: klik ini artinya koordinat, bukan
-    // membuka kelurahan.
+    // membuka kecamatan.
     if (S.pickingOnMap) { acceptMapPoint(e.lngLat); return; }
+    if (editorAktif()) return;
     if (e.features && e.features.length) {
       const code = e.features[0].properties.kode;
-      S.map.setFilter('kel-terpilih', ['==', ['get', 'kode'], code]);
-      openVillageDetail(code);
+      S.map.setFilter('kec-terpilih', ['==', ['get', 'kode'], code]);
+      openDistrictDetail(code);
     }
   });
-  S.map.on('mouseenter', 'kel-isi', () => { S.map.getCanvas().style.cursor = 'pointer'; });
+  S.map.on('mouseenter', 'kec-warna', () => {
+    if (!editorAktif()) S.map.getCanvas().style.cursor = 'pointer';
+  });
   // Tooltip mengikuti kursor DI SEPANJANG poligon, bukan cuma muncul saat masuk.
-  // Satu kelurahan bisa selebar layar di zoom rendah; tooltip yang diam di titik
-  // masuk akan tertinggal jauh dari kursor dan terbaca seperti milik kelurahan
+  // Satu kecamatan bisa selebar layar di zoom rendah; tooltip yang diam di titik
+  // masuk akan tertinggal jauh dari kursor dan terbaca seperti milik kecamatan
   // sebelah — salah baca yang tidak pernah terasa seperti bug.
-  S.map.on('mousemove', 'kel-isi', (e) => {
-    if (S.pickingOnMap) return;
+  S.map.on('mousemove', 'kec-warna', (e) => {
+    if (S.pickingOnMap || editorAktif()) return;
     if (e.features && e.features.length) {
-      showVillageTooltip(e.features[0].properties.kode, e.originalEvent);
+      showDistrictTooltip(e.features[0].properties.kode, e.originalEvent);
     }
   });
 
-  S.map.on('mouseleave', 'kel-isi', () => {
+  S.map.on('mouseleave', 'kec-warna', () => {
     S.map.getCanvas().style.cursor = '';
     $('tooltip').classList.remove('show');
   });

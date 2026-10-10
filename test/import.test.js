@@ -384,15 +384,16 @@ async function test() {
     assert.strictEqual(setelahBatal.rowsUsed, 3, 'alias yang dibatalkan masih dipakai');
     assert.strictEqual((await repo.summary()).pendingNames, 1);
 
-    // summary() tetap membawa hasGeom. Sekarang tidak ada satu pun jalur yang membuat
-    // kelurahan tanpa poligon, dan justru itu sebabnya tandanya harus tetap ada: kalau
-    // suatu saat ada yang masuk, dia harus TERLIHAT, bukan hilang diam-diam.
+    // summary() tetap membawa hasGeom — per KECAMATAN sejak 2026-10-10 (satuan
+    // analisis). Kelurahan uji di sini tidak berpoligon, jadi kecamatannya juga tidak.
+    // Tandanya harus tetap ada: kalau suatu saat ada yang masuk tanpa poligon, dia
+    // harus TERLIHAT, bukan hilang diam-diam.
     const ringkas = await repo.summary();
-    const lama = ringkas.villages.find((v) => v.code === '34.04.06.2003');
+    const lama = ringkas.districts.find((v) => v.code === '34.04.06');
     assert.strictEqual(lama.hasGeom, false,
       'summary() tidak membawa hasGeom — halaman tidak bisa membedakan 0% dari belum dihitung');
 
-    // --- summary() menyaring kelurahan yang tidak berarti ---
+    // --- summary() menyaring kecamatan yang tidak berarti ---
     //
     // Database memuat SELURUH Jateng + DIY supaya perluasan cakupan tidak butuh setelan
     // apa pun. Yang dikirim ke halaman harus lebih sempit: yang punya penjualan, yang
@@ -414,20 +415,27 @@ async function test() {
       [111.91, -8.41], [111.9, -8.4]]] }),
     JSON.stringify({ type: 'Polygon', coordinates: [[[111.9, -8.4], [111.91, -8.4],
       [111.91, -8.41], [111.9, -8.4]]] })]);
+    // Poligon kecamatan view turunan; seed-boundaries/seed-regions menyegarkannya
+    // sesudah mengisi kelurahan, dan tes meniru langkah yang sama.
+    await db.query('REFRESH MATERIALIZED VIEW district_shapes');
 
     const disaring = await repo.summary();
-    const kodeTampil = new Set(disaring.villages.map((v) => v.code));
+    const kodeTampil = new Set(disaring.districts.map((v) => v.code));
 
-    assert.ok(!kodeTampil.has('34.04.09.9001'),
-      'kelurahan tanpa penjualan DAN di luar semua radius ikut terkirim — ' +
-      'KPI "Kelurahan Kosong" jadi menghitung seluruh provinsi');
-    assert.ok(kodeTampil.has('34.04.06.2003'),
-      'kelurahan yang punya penjualan malah tersaring keluar');
-    // Kelurahan tanpa poligon TETAP dikirim walau tanpa penjualan. Sekarang tidak ada
-    // jalur yang membuatnya, tapi jaringnya harus tetap ada: yang datanya belum lengkap
-    // wajib terlihat dan ditandai, bukan hilang dari layar tanpa ada yang tahu.
-    assert.ok(kodeTampil.has('34.01.05.2006'),
-      'kelurahan tanpa poligon hilang dari layar — ketidaklengkapannya jadi tak terlihat');
+    assert.ok(!kodeTampil.has('34.04.09'),
+      'kecamatan tanpa penjualan DAN di luar semua radius ikut terkirim — ' +
+      'KPI "Kecamatan Kosong" jadi menghitung seluruh provinsi');
+    assert.ok(kodeTampil.has('34.04.06'),
+      'kecamatan yang punya penjualan malah tersaring keluar');
+    // Kecamatan tanpa poligon TETAP dikirim walau tanpa penjualan: yang datanya belum
+    // lengkap wajib terlihat dan ditandai, bukan hilang dari layar tanpa ada yang tahu.
+    assert.ok(kodeTampil.has('34.01.05'),
+      'kecamatan tanpa poligon hilang dari layar — ketidaklengkapannya jadi tak terlihat');
+    // Baris penjualan membawa kecamatannya: itu kunci SEMUA analisis di halaman.
+    assert.ok(disaring.sales.length && disaring.sales.every((r) => r.district),
+      'baris penjualan summary() tidak membawa `district`');
+    assert.ok(disaring.sales.every((r) => r.village && r.village.startsWith(r.district + '.')),
+      'baris penjualan kehilangan desa asalnya (dipakai menyebar titik) atau kecamatannya salah');
 
     // Kembalikan keadaan supaya pemeriksaan sesudah ini tetap bermakna.
     await runImport({ file, period: '2026-08', fileName: 'agustus.csv', config });
@@ -541,22 +549,25 @@ async function test() {
     assert.strictEqual(takDikenal.rows[0].dealer, '9999',
       'dealer yang tidak ada di master seharusnya tetap membawa kodenya sendiri');
 
-    // --- customersInVillage(): pintu KEDUA, harus membaca tabel yang SAMA ------
+    // --- customersInDistrict(): pintu KEDUA, harus membaca tabel yang SAMA ------
     //
-    // Fungsi ini melayani /api/customers?village= yang dipakai panel kelurahan di
-    // peta. Sampai 2026-09-19 ia membaca `customers` sementara browseCustomers()
-    // sudah pindah ke customer_ktp — dua pintu ke "data konsumen" yang bisa menjawab
-    // pertanyaan yang sama dengan angka berbeda. Dijaga di sini supaya tidak bisa
-    // menyimpang lagi diam-diam.
-    const diDesa = await repo.customersInVillage('33.01.01.2001',
+    // Fungsi ini melayani /api/customers?district= yang dipakai panel kecamatan di
+    // peta (sampai 2026-10-10: customersInVillage, ?village=). Sampai 2026-09-19 ia
+    // membaca `customers` sementara browseCustomers() sudah pindah ke customer_ktp —
+    // dua pintu ke "data konsumen" yang bisa menjawab pertanyaan yang sama dengan
+    // angka berbeda. Dijaga di sini supaya tidak bisa menyimpang lagi diam-diam.
+    const diKec = await repo.customersInDistrict('33.01.01',
       { from: '2026-08', to: '2026-08' });
-    assert.strictEqual(diDesa.length, 3,
-      'customersInVillage tidak membaca customer_ktp — panel kelurahan di peta akan ' +
+    assert.strictEqual(diKec.rows.length, 3,
+      'customersInDistrict tidak membaca customer_ktp — panel kecamatan di peta akan ' +
       'kosong untuk tiap bulan baru, tanpa satu pun galat');
-    assert.ok(diDesa.every((r) => r.engineNo),
-      'nomor mesin tidak ikut — panel kelurahan kehilangan kunci ke Telusur Nomor Mesin');
-    assert.strictEqual(diDesa[0].outlet, 'DEALERUJIKTP',
-      'kode dealer di customersInVillage tidak diterjemahkan ke kosakata turunan nama');
+    assert.strictEqual(diKec.total, 3, 'total tidak sama dengan baris yang tidak terpotong');
+    assert.ok(diKec.rows.every((r) => r.engineNo),
+      'nomor mesin tidak ikut — panel kecamatan kehilangan kunci ke Telusur Nomor Mesin');
+    assert.ok(diKec.rows.every((r) => r.villageName === 'Tambakreja'),
+      'desa tiap orang hilang dari daftar — keterangan orang tidak boleh dipotong ke kecamatan');
+    assert.strictEqual(diKec.rows[0].outlet, 'DEALERUJIKTP',
+      'kode dealer di customersInDistrict tidak diterjemahkan ke kosakata turunan nama');
 
     // --- menelusuri halaman: tiap baris tepat sekali, tidak kembar, tidak terlewat ---
     //
@@ -668,7 +679,7 @@ async function test() {
 
     // Baris yang SAMA juga ditulis ke tabel `customers` yang lama, dan itu BUKAN
     // kelalaian: per 2026-09-18 browseCustomers() sudah membaca customer_ktp
-    // sementara customersInVillage() (yang melayani /api/customers?village=, dipakai
+    // sementara customersInVillage() (kini customersInDistrict, /api/customers?district=, dipakai
     // panel kelurahan di peta) MASIH membaca customers. Dua pintu ke "data konsumen"
     // menunjuk dua tabel berbeda — inkonsistensi yang dicatat apa adanya di
     // docs/ROADMAP.md dan menunggu keputusan tim soal menghapus jalur penjualan
@@ -720,17 +731,17 @@ async function test() {
     // Pintu satunya harus bergerak bersamaan; kalau tidak, dua tempat menjawab
     // pertanyaan yang sama dengan angka yang berbeda.
     assert.strictEqual(
-      (await repo.customersInVillage('34.04.06.2003', { from: '2026-07', to: '2026-07' })).length,
-      4, 'customersInVillage tidak ikut menghormati rentang');
+      (await repo.customersInDistrict('34.04.06', { from: '2026-07', to: '2026-07' })).rows.length,
+      4, 'customersInDistrict tidak ikut menghormati rentang');
     assert.strictEqual(
-      (await repo.customersInVillage('34.04.06.2003', { from: '2026-09', to: '2026-07' })).length,
-      0, 'customersInVillage diam-diam menukar ujung rentang yang terbalik');
+      (await repo.customersInDistrict('34.04.06', { from: '2026-09', to: '2026-07' })).rows.length,
+      0, 'customersInDistrict diam-diam menukar ujung rentang yang terbalik');
 
-    // Panggilan gaya lama gagal keras. Tanpa penjaga ini, customersInVillage(v, '2026-08')
-    // tetap jalan dan berarti "seluruh riwayat kelurahan itu" — lebih luas dari yang
+    // Panggilan gaya lama gagal keras. Tanpa penjaga ini, customersInDistrict(d, '2026-08')
+    // tetap jalan dan berarti "seluruh riwayat kecamatan itu" — lebih luas dari yang
     // diminta, tanpa error, di rute yang mengeluarkan nama dan alamat.
     await assert.rejects(
-      () => repo.customersInVillage('34.04.06.2003', '2026-08'),
+      () => repo.customersInDistrict('34.04.06', '2026-08'),
       /objek, bukan argumen berurutan/,
       'panggilan periode gaya lama tidak ditolak — pelebarannya senyap');
 
@@ -900,14 +911,16 @@ async function test() {
     // Sudah dicoba: menghapus DELETE FROM coverage dari repositori tetap hijau.
     const posUji = (await store.all(db, 'SELECT outlet_code FROM outlets LIMIT 2'))
       .map((r) => r.outlet_code);
-    const kelUji = (await store.all(db, 'SELECT village_code FROM villages LIMIT 2'))
-      .map((r) => r.village_code);
-    assert.ok(posUji.length && kelUji.length, 'prasyarat tes: butuh pos dan kelurahan');
+    // Berkunci kecamatan sejak 2026-10-10.
+    const kecJangkauan = (await store.all(db,
+      'SELECT DISTINCT district_code FROM villages ORDER BY 1 LIMIT 2'))
+      .map((r) => r.district_code);
+    assert.ok(posUji.length && kecJangkauan.length, 'prasyarat tes: butuh pos dan kecamatan');
     for (const kode of posUji) {
-      for (const kel of kelUji) {
+      for (const kec of kecJangkauan) {
         await store.run(db,
-          'INSERT INTO coverage (radius_m, outlet_code, village_code, ratio) VALUES (?, ?, ?, ?)',
-          [5000, kode, kel, 0.5]);
+          'INSERT INTO coverage (radius_m, outlet_code, district_code, ratio) VALUES (?, ?, ?, ?)',
+          [5000, kode, kec, 0.5]);
       }
     }
     assert.ok(Number((await store.one(db, 'SELECT COUNT(*) AS n FROM coverage')).n) > 0,
@@ -972,7 +985,7 @@ async function test() {
     // PII bisa dicabut: DROP DATABASE, sisanya tetap jalan penuh.
     await dropCustomerDatabase(config);
     assert.strictEqual(repo.hasCustomers(), false);
-    assert.strictEqual(await repo.customersInVillage('34.04.06.2003'), null,
+    assert.strictEqual(await repo.customersInDistrict('34.04.06'), null,
       'tanpa database konsumen harus null, bukan melempar error');
     assert.strictEqual(await repo.browseCustomers({}), null,
       'tanpa database konsumen browseCustomers harus null, bukan melempar error');

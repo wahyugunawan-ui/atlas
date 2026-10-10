@@ -27,7 +27,7 @@ const REPAINT = {
   peta: 'renderAll',
   pos: 'renderOutletTable',
   konsumen: 'renderCustomerTable',
-  kelurahan: 'renderVillageTable',
+  kelurahan: 'renderDistrictTable',
   // Tiga halaman penyatuan tiga sumber (docs/FUSION.md Tahap F).
   servis: 'renderServiceTable',
   kirim: 'renderDeliveryTable',
@@ -129,10 +129,10 @@ function isiComboKota() {
     .map((c) => [c, S.cityNames[c]]), 'Semua', (value) => {
       setScope('kota', value, true);
       repaint(false);
-      // Kota dipilih TANPA kelurahan spesifik yang sedang aktif -> buka ringkasan
+      // Kota dipilih TANPA kecamatan spesifik yang sedang aktif -> buka ringkasan
       // kota langsung. Lewat window: tables.js sudah meng-import berkas ini untuk
       // switchTab(), meng-import baliknya akan membuat lingkaran.
-      if (value !== 'ALL' && !S.selectedVillage && window.openCitySummary) {
+      if (value !== 'ALL' && !S.selectedDistrict && window.openCitySummary) {
         window.openCitySummary(value);
       }
     });
@@ -255,6 +255,6 @@ export function resetFilters() {
   setKares('ALL');
   isiComboKota();
   clearScope();
-  if (window.closeVillageDetail) window.closeVillageDetail();
+  if (window.closeDistrictDetail) window.closeDistrictDetail();
   repaint(false);
 }

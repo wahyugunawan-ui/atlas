@@ -18,7 +18,7 @@
  */
 import {
   fetchCakupanSumber, fetchEngineDetail, fetchIrisan, fetchMatriks, fetchPeringkat,
-  fetchPengiriman, fetchSegmentation, fetchServis, fetchVillageCustomers,
+  fetchPengiriman, fetchSegmentation, fetchServis, fetchDistrictCustomers,
 } from './api.js';
 import {
   formatJarak, jangkauanDiagram, kalimatAlasan, titikRelatif,
@@ -509,28 +509,34 @@ function barisPelangganKantong(r) {
         golongan ? golongan.color : '#64748b'}">${
         esc(golongan ? golongan.short : r.segment || '—')}</span>` +
     `</div>` +
+    // Desa orangnya tetap disebut walau kantongnya kecamatan: keterangan orang tidak
+    // dipotong, yang berhenti di kecamatan cuma analisisnya.
+    (r.villageName
+      ? `<div class="text-[10px] text-slate-500 truncate">${esc(r.villageName)}</div>` : '') +
     `<div class="text-[10px] text-slate-400 mono truncate">${esc(r.engineNo)}${
       jejak.length ? ` · ${esc(jejak.join(' · '))}` : ''}</div>` +
     `</button>`;
 }
 
 /**
- * Isi panel untuk SATU kantong titik peta: daftar orang di kelurahan+dealer itu.
+ * Isi panel untuk SATU kantong titik peta: daftar orang di KECAMATAN+dealer itu.
  *
  * Bukan satu orang, karena satu titik memang bukan satu orang — posisinya disebar ACAK
- * di dalam kelurahan (fusion-points.js). Menampilkan satu nama di koordinat acak akan
- * dibaca sebagai alamat rumah sungguhan, dan itu salah yang berbahaya, bukan sekadar
- * tidak akurat. Yang jujur: "di kelurahan ini, dealer ini, ada orang-orang berikut".
+ * di dalam desa asalnya (fusion-points.js). Menampilkan satu nama di koordinat acak
+ * akan dibaca sebagai alamat rumah sungguhan, dan itu salah yang berbahaya, bukan
+ * sekadar tidak akurat. Yang jujur: "di kecamatan ini, dealer ini, ada orang-orang
+ * berikut" — dengan desa tiap orang tetap ditulis di barisnya (keterangan orang,
+ * bukan analisis; satuan analisis berhenti di kecamatan sejak 2026-10-10).
  */
-function isiDaftarKantong(kantong, rows) {
-  const desa = S.villageByCode[kantong.village];
-  const namaDesa = desa ? desa.name : (kantong.village || '—');
-  const namaKota = desa ? displayCityName(desa.cityName) : '';
+function isiDaftarKantong(kantong, rows, total) {
+  const kec = S.districtByCode[kantong.district];
+  const namaKec = S.districtNames[kantong.district] || (kec && kec.name) || kantong.district || '—';
+  const namaKota = kec ? displayCityName(kec.cityName) : '';
   const namaDealer = S.dealerNames[kantong.dealer] || kantong.dealer || 'dealer tidak dikenal';
 
   const kepala = `<div class="text-[10px] font-bold uppercase tracking-wide text-slate-400">` +
       `${esc(LABEL_TITIK_PANEL[kantong.jenis] || 'Titik peta')}</div>` +
-    `<div class="text-sm font-extrabold text-slate-900 pr-6">${esc(namaDesa)}${
+    `<div class="text-sm font-extrabold text-slate-900 pr-6">Kec. ${esc(namaKec)}${
       namaKota ? `, ${esc(namaKota)}` : ''}</div>` +
     `<div class="text-[11px] text-slate-500">${esc(namaDealer)}</div>`;
 
@@ -540,14 +546,16 @@ function isiDaftarKantong(kantong, rows) {
   }
 
   // Batas 200 dari server. Kalau kena, katakan — daftar yang diam-diam terpotong
-  // membuat orang menghitung dari layar dan mendapat angka yang salah.
-  const terpotong = rows.length >= 200
+  // membuat orang menghitung dari layar dan mendapat angka yang salah. `total` dari
+  // server (COUNT(*) OVER ()), jadi jumlah sebenarnya bisa disebut.
+  const terpotong = total > rows.length
     ? `<p class="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg ` +
-      `p-2 mt-2">Ditampilkan 200 teratas. Kantong ini punya lebih banyak.</p>`
+      `p-2 mt-2">Ditampilkan ${esc(formatNumber(rows.length))} dari ` +
+      `${esc(formatNumber(total))} pelanggan kantong ini.</p>`
     : '';
 
   return kepala +
-    `<p class="text-[10px] text-slate-400 mt-1">${esc(String(rows.length))} pelanggan · ` +
+    `<p class="text-[10px] text-slate-400 mt-1">${esc(formatNumber(total || rows.length))} pelanggan · ` +
       `klik satu baris untuk rinciannya</p>` + terpotong +
     `<div class="mt-2">${rows.map(barisPelangganKantong).join('')}</div>` +
     `<p class="text-[9px] text-slate-400 mt-3 pt-2 border-t border-slate-100">Data ` +
@@ -566,20 +574,21 @@ const LABEL_TITIK_PANEL = {
  * perbuatan yang disengaja. TIDAK boleh dipanggil dari mousemove biasa: tiap panggilan
  * menembus pagar PII (dibatasi 30/menit) dan meninggalkan baris di access_log.
  */
-export async function bukaDaftarTitik(jenis, village, dealer) {
+export async function bukaDaftarTitik(jenis, district, dealer) {
   const panel = $('telusur-panel');
   const isi = $('telusur-isi');
-  if (!panel || !isi || !village) return;
+  if (!panel || !isi || !district) return;
 
-  kantongTitikTerakhir = { jenis, village, dealer };
+  kantongTitikTerakhir = { jenis, district, dealer };
   panel.classList.remove('hidden');
   requestAnimationFrame(() => panel.classList.remove('translate-x-full'));
   isi.innerHTML = '<p class="text-xs text-slate-400 p-4 text-center">Mengambil data…</p>';
 
   try {
     const periode = fusionFilter(pageFilters('peta')).periode;
-    const jawab = await fetchVillageCustomers(village, { dealer, periode });
-    isi.innerHTML = isiDaftarKantong(kantongTitikTerakhir, jawab.rows || []);
+    const jawab = await fetchDistrictCustomers(district, { dealer, periode });
+    isi.innerHTML = isiDaftarKantong(kantongTitikTerakhir, jawab.rows || [],
+      Number(jawab.total) || 0);
   } catch (error) {
     // 404 (database PII tidak ada) dan 429 (terlalu sering) artinya sangat berbeda,
     // dan pesan servernya sudah membedakannya — jadi itu yang ditampilkan.
@@ -622,9 +631,9 @@ export async function bukaTelusurMesinDari(nomor) {
 /** Kembali ke daftar kantong yang tadi dibuka. Datanya diminta ulang, bukan disimpan. */
 export function kembaliKeDaftarTitik() {
   if (!kantongTitikTerakhir) return;
-  const { jenis, village, dealer } = kantongTitikTerakhir;
+  const { jenis, district, dealer } = kantongTitikTerakhir;
   hapusTelusurDiPeta();
-  bukaDaftarTitik(jenis, village, dealer);
+  bukaDaftarTitik(jenis, district, dealer);
 }
 
 /** Buka panel telusur untuk nomor mesin yang diketik. */

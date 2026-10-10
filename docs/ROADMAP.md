@@ -311,6 +311,44 @@ cuma perluasan ke Sulawesi ke timur.
 
 ## Selesai
 
+### Satuan analisis pindah ke kecamatan; batas desa tinggal referensi (2026-10-10)
+
+Belum di-commit. **51/51 berkas tes**; satu tes baru: `district-shapes.test.js`. Alasan dan
+alternatifnya ada di DECISIONS 2026-10-10.
+
+- Peta mewarnai **654 kecamatan** (lapisan `kec-warna`). Kecamatan yang tanpa penjualan
+  diberi warna kosong, jadi tidak ada lagi wilayah bolong seperti waktu peta masih
+  per desa (dulu hanya 4.003 dari 8.999 desa yang dikirim). Batas desa = toggle
+  "Batas dan Nama Desa", **mati bawaan**.
+- View `district_shapes` menutup 29.823 lubang sliver hasil ST_Union. Tinggal 38,
+  semuanya enclave sah. Diuji mutasi dua arah (semua lubang dipertahankan / semua
+  ditutup → merah).
+- Rasio jangkauan, POS_FILTER, `/api/summary`, tabel/panel/tooltip, Master Kecamatan,
+  baris segmentasi fusion: semua per kecamatan. Daftar konsumen dan kantong titik peta
+  per kecamatan, dengan desa tiap orang tetap ditulis.
+- Total unit per kota sebelum vs sesudah **sama persis** di 38 kota (18.915 unit, 0 baris
+  yatim). Dicek di browser lokal: peta, klik kecamatan → panel, toggle desa, label
+  kecamatan, titik per desa, nol galat konsol.
+- Ikut diperbaiki: `refreshMapVisual()` membuang `satuan`, jadi legenda tidak pernah
+  menulis "unit" waktu filter dealer/pos aktif.
+
+**Belum diuji / dicatat apa adanya:**
+- Daftar konsumen di panel kecamatan **belum dilihat berisi data sungguhan**:
+  `customer_ktp` di database laptop kosong. Fungsinya sendiri sudah diuji di
+  `import.test.js` dan `fusion-district-customers.test.js`.
+- Kartu "satu titik = satu orang" tidak muncul kalau kantong kecamatan+dealer > 200
+  orang; yang tampil tooltip agregat. Seberapa sering ini terjadi di data VPS belum diukur.
+- Lapisan "Batas dan Nama Desa" hanya memuat desa yang punya penjualan atau data fusion
+  (3.326). Desa lain tidak bergaris walau kecamatannya berwarna. Ini disengaja (berkas
+  ringan), tapi bisa terbaca sebagai garis yang hilang.
+- Jarak KTP–servis (`fuseEngine`) masih dari titik tengah desa. Perlu konfirmasi user
+  apakah tetap begitu.
+
+**Langkah wajib saat deploy ke VPS** (sesudah `atlas-deploy`): server start membuat view
+dan membuang tabel `coverage` lama, lalu jalankan `npm run seed-coverage` dan
+`npm run export-geo`. Tanpa dua langkah itu, jangkauan 0% di semua pos dan peta masih
+memakai `kecamatan.geojson` lama yang berbintik.
+
 ### Server review di VPS Hostinger, bisa dibuka dari mana saja (2026-10-09)
 
 Laptop tidak bisa menyala terus, padahal tim perlu mereview UI dan fitur dari jauh.

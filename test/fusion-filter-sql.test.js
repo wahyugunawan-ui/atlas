@@ -59,10 +59,11 @@ async function seed() {
   await store.run(db,
     `INSERT INTO outlets (outlet_code, outlet_name, dealer_code, dealer_name)
      VALUES ('O1', 'POS SATU', 'DEALERSATU', 'DEALER SATU')`);
-  // Pos O1 hanya mencakup V1. Saringan Pos karena itu harus menyisakan 10, bukan 15.
+  // Pos O1 hanya mencakup kecamatan V1 (coverage berkunci KECAMATAN sejak 2026-10-10).
+  // Saringan Pos karena itu harus menyisakan 10, bukan 15.
   await store.run(db,
-    `INSERT INTO coverage (radius_m, outlet_code, village_code, ratio)
-     VALUES (1000, 'O1', ?, 1.0)`, [V1]);
+    `INSERT INTO coverage (radius_m, outlet_code, district_code, ratio)
+     VALUES (1000, 'O1', '34.04.01', 1.0)`);
 
   const rollup = `
     INSERT INTO segment_rollup
@@ -147,13 +148,35 @@ async function main() {
     assert.strictEqual(halaman.rows[0].dealerName, 'DEALER SATU',
       'nama dealer harus terisi lewat legacy_code');
     assert.strictEqual(halaman.rows[0].cityName, 'Sleman');
-    assert.strictEqual(halaman.rows[0].villageName, 'Sendangadi');
+    // Baris tabel per KECAMATAN (satuan analisis sejak 2026-10-10), bukan per desa.
+    assert.strictEqual(halaman.rows[0].districtName, 'Mlati');
+    assert.strictEqual(halaman.rows[0].districtCode, '34.04.01');
+    assert.strictEqual(halaman.rows[0].villageCode, undefined,
+      'kode desa bocor ke baris analisis fusion');
+
+    // 3b. Dua desa di kecamatan yang sama, dealer dan golongan sama -> SATU baris
+    // dengan jumlah keduanya. Periode terpisah supaya angka kasus lain tidak berubah.
+    const desaKedua = '34.04.01.2002';
+    await store.run(store.db(), `
+      INSERT INTO villages (village_code, village_name, district_code, district_name,
+                            city_code, city_name, province_code)
+      VALUES (?, 'Tirtoadi', '34.04.01', 'Mlati', '34.04', 'Sleman', '34')`, [desaKedua]);
+    const rollupSep = `
+      INSERT INTO segment_rollup
+        (period, village_code, city_code, dealer_code, segment, customer_count, weight_sum)
+      VALUES ('2026-09', ?, '34.04', '9', 'loyal_verified', ?, ?)`;
+    await store.run(store.db(), rollupSep, [V1, 4, 4.0]);
+    await store.run(store.db(), rollupSep, [desaKedua, 6, 6.0]);
+    const perKec = await repo.fusionRows({ period: '2026-09' });
+    assert.strictEqual(perKec.rows.length, 1, 'dua desa satu kecamatan tidak digabung');
+    assert.strictEqual(Number(perKec.rows[0].customerCount), 10);
+    assert.strictEqual(Number(perKec.rows[0].weightSum), 10);
 
     // 4. Saringan Pos diterjemahkan lewat tabel coverage, bukan kolom di rollup.
     const lewatPos = await repo.fusionRows({ period: PERIOD, outletCode: 'O1' });
     assert.strictEqual(lewatPos.rows.length, 1);
-    assert.strictEqual(lewatPos.rows[0].villageCode, V1,
-      'pos O1 hanya mencakup V1, jadi V2 tidak boleh ikut');
+    assert.strictEqual(lewatPos.rows[0].districtCode, '34.04.01',
+      'pos O1 hanya mencakup kecamatan V1, jadi V2 tidak boleh ikut');
 
     // 4b. Titik peta memakai kode dealer TURUNAN NAMA, bukan kode numerik rollup.
     //
@@ -166,7 +189,10 @@ async function main() {
     assert.strictEqual(titik.length, 1, 'Sleman punya satu pasangan (kelurahan, dealer)');
     assert.strictEqual(titik[0].dealerCode, 'DEALERSATU',
       'titik peta harus memakai dealers.dealer_code, bukan legacy_code numerik');
-    assert.strictEqual(titik[0].villageCode, V1);
+    assert.strictEqual(titik[0].villageCode, V1,
+      'titik tetap per desa: sebarannya digambar di desa asalnya');
+    assert.strictEqual(titik[0].districtCode, '34.04.01',
+      'titik harus membawa kecamatannya — tooltip dan kantong PII berkunci kecamatan');
     assert.strictEqual(Number(titik[0].ktp), 10);
     assert.strictEqual(Number(titik[0].servis), 10, 'baris V1 ditandai has_service');
     assert.strictEqual(Number(titik[0].kirim), 0, 'belum ada pengiriman sama sekali');

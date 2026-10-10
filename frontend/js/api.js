@@ -58,12 +58,12 @@ export const fetchUnmatched = (period) =>
 /**
  * Konsumen di SATU kelurahan.
  *
- * Tidak ada versi "ambil semua". Server menolak permintaan tanpa kode kelurahan, dan
+ * Tidak ada versi "ambil semua". Server menolak permintaan tanpa kode kecamatan, dan
  * itu disengaja: satu akun dipakai bersama, jadi tidak boleh ada satu permintaan yang
  * bisa menyedot seluruh basis data konsumen.
  */
-export function fetchCustomers(villageCode, range) {
-  const query = new URLSearchParams({ village: villageCode });
+export function fetchCustomers(districtCode, range) {
+  const query = new URLSearchParams({ district: districtCode });
   const r = range || {};
   if (r.from && r.from !== 'ALL') query.set('periodFrom', r.from);
   if (r.to && r.to !== 'ALL') query.set('periodTo', r.to);
@@ -233,19 +233,19 @@ export const fetchEngineDetail = (engineNo) =>
   request(`${API}v1/mesin/${encodeURIComponent(engineNo)}`);
 
 /**
- * Daftar pelanggan satu kantong (kelurahan, dealer) di balik satu titik peta.
+ * Daftar pelanggan satu kantong (KECAMATAN, dealer) di balik satu titik peta.
  *
  * RUTE PII — dibatasi laju dan dicatat di server, jadi ia HANYA boleh dipanggil dari
  * perbuatan yang disengaja (klik titik, atau berhenti 3 detik di atasnya), tidak
  * pernah dari gerakan kursor biasa. Lihat komentar rutenya di routes.js.
  */
-export function fetchVillageCustomers(village, opsi) {
+export function fetchDistrictCustomers(district, opsi) {
   const o = opsi || {};
   const q = new URLSearchParams();
   if (o.dealer) q.set('dealer', o.dealer);
   if (o.periode) q.set('periode', o.periode);
   const tanya = q.toString();
-  return request(`${API}v1/kelurahan/${encodeURIComponent(village)}/pelanggan${
+  return request(`${API}v1/kecamatan/${encodeURIComponent(district)}/pelanggan${
     tanya ? `?${tanya}` : ''}`);
 }
 
