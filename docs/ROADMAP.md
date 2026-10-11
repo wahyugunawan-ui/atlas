@@ -341,6 +341,11 @@ di layar penuh tetap di kiri-bawah area peta.
    memeriksanya.
 
 **Belum dilakukan / dicatat apa adanya:**
+- **Push ke GitHub GAGAL:** commit ada di laptop ini, tetapi `git push atlas main` ditolak
+  ("could not read Username") — tidak ada kredensial GitHub yang tersimpan untuk git di
+  terminal (hanya VS Code yang tampaknya sudah masuk). `atlas/main` masih tertinggal tiga
+  commit (f3325b2, cd98f3a, dan commit entri ini). Perlu didorong dari VS Code (Source
+  Control → Sync Changes) atau dari terminal yang sudah punya kredensial.
 - **Di VPS:** server harus di-restart agar migrasi `schema.sql` membuat `sales_targets`
   (idempoten). Belum dilakukan. Target yang diisi di laptop ini tidak ikut ke VPS.
 - Tidak ada impor target dari Excel dan tidak ada riwayat perubahan; mengisi 78 dealer
