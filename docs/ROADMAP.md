@@ -339,7 +339,10 @@ kecamatan bergaris, kelimanya di dalam layar; mode edit ring → semua garis kem
   sebaran titik di luar kecamatan yang bergaris.
 - Belum dicoba: layar penuh dengan filter aktif, dan mengklik kecamatan baru untuk dimasukkan
   ke ring selagi mode edit (yang diperiksa hanya bahwa garis kembali semua).
-- Push ke GitHub: lihat catatan di entri sebelum ini — status terbaru ada di akhir sesi.
+- **Push ke GitHub GAGAL lagi**, alasan sama dengan entri sebelumnya (git di terminal tidak
+  punya kredensial; `GIT_ASKPASS` kosong, jadi bantuan masuk VS Code tidak terpakai). Semua
+  commit sejak f3325b2, termasuk entri ini, hanya ada di laptop: `git log atlas/main..main`.
+  Dorong dari VS Code (Source Control → Sync Changes) atau terminal yang sudah login.
 
 ### Hover ikon pos/dealer, legenda kiri-bawah, seksi Persentase Keberhasilan Target Penjualan (2026-10-11, putaran ketiga)
 
