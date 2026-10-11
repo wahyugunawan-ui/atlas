@@ -339,10 +339,9 @@ kecamatan bergaris, kelimanya di dalam layar; mode edit ring → semua garis kem
   sebaran titik di luar kecamatan yang bergaris.
 - Belum dicoba: layar penuh dengan filter aktif, dan mengklik kecamatan baru untuk dimasukkan
   ke ring selagi mode edit (yang diperiksa hanya bahwa garis kembali semua).
-- **Push ke GitHub GAGAL lagi**, alasan sama dengan entri sebelumnya (git di terminal tidak
-  punya kredensial; `GIT_ASKPASS` kosong, jadi bantuan masuk VS Code tidak terpakai). Semua
-  commit sejak f3325b2, termasuk entri ini, hanya ada di laptop: `git log atlas/main..main`.
-  Dorong dari VS Code (Source Control → Sync Changes) atau terminal yang sudah login.
+- Push ke GitHub sempat gagal (git lama tanpa kredensial); sesudah Git for Windows
+  dipasang (`C:\Program Files\Git`, Credential Manager sudah menyimpan akun) seluruh commit
+  sampai entri ini berhasil didorong ke `atlas/main`.
 
 ### Hover ikon pos/dealer, legenda kiri-bawah, seksi Persentase Keberhasilan Target Penjualan (2026-10-11, putaran ketiga)
 
@@ -374,11 +373,8 @@ di layar penuh tetap di kiri-bawah area peta.
    memeriksanya.
 
 **Belum dilakukan / dicatat apa adanya:**
-- **Push ke GitHub GAGAL:** commit ada di laptop ini, tetapi `git push atlas main` ditolak
-  ("could not read Username") — tidak ada kredensial GitHub yang tersimpan untuk git di
-  terminal (hanya VS Code yang tampaknya sudah masuk). `atlas/main` masih tertinggal beberapa
-  commit (semua sejak f3325b2; cek dengan `git log atlas/main..main`). Perlu didorong dari VS Code (Source
-  Control → Sync Changes) atau dari terminal yang sudah punya kredensial.
+- Push ke GitHub sempat gagal di putaran ini (git lama tanpa kredensial); sudah teratasi
+  setelah Git for Windows dipasang, lihat entri putaran keempat.
 - **Di VPS:** server harus di-restart agar migrasi `schema.sql` membuat `sales_targets`
   (idempoten). Belum dilakukan. Target yang diisi di laptop ini tidak ikut ke VPS.
 - Tidak ada impor target dari Excel dan tidak ada riwayat perubahan; mengisi 78 dealer
