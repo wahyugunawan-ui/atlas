@@ -87,6 +87,8 @@ const store = require('../backend/server/db');
 const repo = require('../backend/server/repository');
 
 const SHEET_DEALER = 'Dealer';
+/** Jumlah jenis Kec. Tercover per pos — harus sama dengan CHECK di schema.sql. */
+const KEC_TERCOVER_JENIS = 2;
 const SHEET_POS = 'POS';
 const SHEET_RING = 'RING';
 
@@ -145,6 +147,9 @@ async function readDealerSheet(file, cityByCore) {
   for (const [k, v] of Object.entries(col)) {
     if (v < 0) throw new Error(`Kolom untuk "${k}" tidak ditemukan di sheet Dealer.`);
   }
+  // Opsional, di luar pemeriksaan wajib di atas: Excel lama tanpa kolom ini tetap terbaca
+  // (dealer-nya hanya tidak punya kecamatan asal).
+  col.kecamatan = header.indexOf('Kecamatan');
 
   const rows = [];
   const tanpaKoordinat = [];
@@ -157,6 +162,8 @@ async function readDealerSheet(file, cityByCore) {
     const koordinat = parseLongLat(row.getCell(col.koordinat).value);
     if (!koordinat) tanpaKoordinat.push(namaStr);
 
+    const kecamatanText = col.kecamatan > 0
+      ? String(cellText(row.getCell(col.kecamatan).value) || '').trim() : '';
     const kabupatenText = String(row.getCell(col.kabupaten).value || '').trim();
     const kota = cityByCore.get(coreCityName(kabupatenText));
     if (kabupatenText && !kota) kabupatenTakDikenal.push(`${namaStr} (${kabupatenText})`);
@@ -167,12 +174,43 @@ async function readDealerSheet(file, cityByCore) {
       name: namaStr,
       address: String(row.getCell(col.alamat).value || '').trim() || null,
       cityCode: kota ? kota.code : null,
+      // Nama kecamatan mentah dari Excel; dicocokkan ke kode di main() (butuh indeks
+      // kecamatan database). Kolomnya opsional: Excel lama tanpa kolom ini tetap terbaca.
+      kecamatan: kecamatanText,
       lat: koordinat ? koordinat.lat : null,
       lng: koordinat ? koordinat.lng : null,
     });
   });
 
   return { rows, tanpaKoordinat, kabupatenTakDikenal };
+}
+
+/**
+ * Pencari kecamatan dari NAMA: nama yang sama bisa ada di beberapa kabupaten, jadi
+ * kandidat disaring ke kabupaten petunjuk. Tidak cocok atau masih ambigu -> null (pemanggil
+ * MELAPORKANNYA, tidak menebak). Dipakai importer ini dan scripts/backfill-dealer-city.js.
+ *
+ * @param {Array<{district_code, district_name, city_code}>} villageRows
+ * @return {function(string, string=): ({code, cityCode, name}|null)}
+ */
+function makeDistrictMatcher(villageRows) {
+  const districtsByNorm = new Map(); // normName -> [{code, cityCode, name}]
+  villageRows.forEach((v) => {
+    const key = normalizeName(v.district_name);
+    if (!districtsByNorm.has(key)) districtsByNorm.set(key, []);
+    const ada = districtsByNorm.get(key).some((k) => k.code === v.district_code);
+    if (!ada) {
+      districtsByNorm.get(key).push({ code: v.district_code, cityCode: v.city_code, name: v.district_name });
+    }
+  });
+
+  return function matchDistrict(name, cityCodeHint) {
+    const kandidat = districtsByNorm.get(normalizeName(name));
+    if (!kandidat || !kandidat.length) return null;
+    if (kandidat.length === 1) return kandidat[0];
+    const sekabupaten = kandidat.filter((k) => k.cityCode === cityCodeHint);
+    return sekabupaten.length === 1 ? sekabupaten[0] : null;
+  };
 }
 
 /**
@@ -210,13 +248,15 @@ async function readPosSheet(file) {
   for (const [k, v] of Object.entries(col)) {
     if (v < 0) throw new Error(`Kolom untuk "${k}" tidak ditemukan di sheet POS.`);
   }
-  // KEC COVER 1..8: cari kolom yang judulnya persis begitu, urut apa adanya di header.
+  // KEC COVER 1..N: cari kolom yang judulnya persis begitu, urut apa adanya di header.
+  // HANYA DUA yang pertama dipakai (Kec. Tercover jenis 1 dan 2, keputusan user
+  // 2026-10-11); kolom 3..8 yang masih ada di Excel diabaikan, bukan dikolaps.
   const coverCols = [];
   header.forEach((judul, idx) => {
     if (/^KEC COVER \d$/i.test(String(judul || '').trim())) coverCols.push(idx);
   });
-  if (coverCols.length !== 8) {
-    throw new Error(`Kolom "KEC COVER 1".."KEC COVER 8" tidak lengkap (ketemu ${coverCols.length}).`);
+  if (coverCols.length < KEC_TERCOVER_JENIS) {
+    throw new Error(`Kolom "KEC COVER 1" dan "KEC COVER 2" tidak lengkap (ketemu ${coverCols.length}).`);
   }
 
   const rows = [];
@@ -242,9 +282,11 @@ async function readPosSheet(file) {
       kec: String(cellText(row.getCell(col.kec).value) || '').trim(),
       lat: koordinat ? koordinat.lat : null,
       lng: koordinat ? koordinat.lng : null,
-      coverage: coverCols
-        .map((idx) => String(cellText(row.getCell(idx).value) || '').trim())
-        .filter(Boolean),
+      // POSISI dipertahankan (indeks 0 = jenis 1, indeks 1 = jenis 2), sel kosong tetap
+      // '' — dulu `.filter(Boolean)` memampatkannya, sehingga isian di KEC COVER 2 yang
+      // KEC COVER 1-nya kosong salah tercatat sebagai jenis 1.
+      coverage: coverCols.slice(0, KEC_TERCOVER_JENIS)
+        .map((idx) => String(cellText(row.getCell(idx).value) || '').trim()),
     });
   }
 
@@ -347,12 +389,7 @@ async function main(config, dealerPosFile, ringFile, noReset) {
       cityByCore.set(coreCityName(v.city_name), { code: v.city_code, name: v.city_name });
     }
   });
-  const districtsByNorm = new Map(); // normName -> [{code, cityCode, name}]
-  villageRows.forEach((v) => {
-    const key = normalizeName(v.district_name);
-    if (!districtsByNorm.has(key)) districtsByNorm.set(key, []);
-    districtsByNorm.get(key).push({ code: v.district_code, cityCode: v.city_code, name: v.district_name });
-  });
+  const matchDistrict = makeDistrictMatcher(villageRows);
 
   // Kelurahan+kecamatan -> kabupaten, dipakai Fase B mencari kabupaten POS ITU
   // SENDIRI (kolom Kel/Kec sheet POS) — lebih akurat daripada kabupaten dealer
@@ -368,19 +405,20 @@ async function main(config, dealerPosFile, ringFile, noReset) {
     if (!cityByKelKec.has(key)) cityByKelKec.set(key, v.city_code);
   });
 
-  /** @return {{code,name}|null} kecamatan tunggal, diprioritaskan yang sekabupaten. */
-  function matchDistrict(name, cityCodeHint) {
-    const kandidat = districtsByNorm.get(normalizeName(name));
-    if (!kandidat || !kandidat.length) return null;
-    if (kandidat.length === 1) return kandidat[0];
-    const sekabupaten = kandidat.filter((k) => k.cityCode === cityCodeHint);
-    return sekabupaten.length === 1 ? sekabupaten[0] : null;
-  }
-
   console.log('\n  Membaca berkas Excel...');
   const dealerSheet = await readDealerSheet(dealerPosFile, cityByCore);
   const posSheet = await readPosSheet(dealerPosFile);
   const ringSheet = readRingSheet(ringFile, cityByCore);
+
+  // Kecamatan ASAL dealer: nama mentah dari Excel -> kode, disaring ke kabupaten dealer
+  // supaya nama yang sama di kabupaten lain tidak tertukar. Yang tidak cocok/ambigu
+  // DILAPORKAN, tidak ditebak.
+  const kecamatanDealerTakDikenal = [];
+  dealerSheet.rows.forEach((d) => {
+    const match = d.kecamatan ? matchDistrict(d.kecamatan, d.cityCode) : null;
+    d.districtCode = match ? match.code : null;
+    if (d.kecamatan && !match) kecamatanDealerTakDikenal.push(`${d.name} (${d.kecamatan})`);
+  });
 
   const dealerCityCode = new Map(dealerSheet.rows.map((d) => [d.dealerCode, d.cityCode]));
   // Kunci sesungguhnya yang menghubungkan Dealer <-> POS <-> RING — lihat catatan
@@ -421,14 +459,15 @@ async function main(config, dealerPosFile, ringFile, noReset) {
   for (const d of dealerSheet.rows) {
     await store.run(db, `
       INSERT INTO dealers (dealer_code, dealer_name, address, lat, lng, legacy_code,
-                           city_code, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                           city_code, district_code, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (dealer_code) DO UPDATE SET
         dealer_name = EXCLUDED.dealer_name, address = EXCLUDED.address,
         lat = EXCLUDED.lat, lng = EXCLUDED.lng, legacy_code = EXCLUDED.legacy_code,
-        city_code = EXCLUDED.city_code, updated_at = EXCLUDED.updated_at`,
+        city_code = EXCLUDED.city_code, district_code = EXCLUDED.district_code,
+        updated_at = EXCLUDED.updated_at`,
     [d.dealerCode, d.name, d.address, d.lat, d.lng, d.numericCode || null,
-      d.cityCode || null, new Date().toISOString()]);
+      d.cityCode || null, d.districtCode || null, new Date().toISOString()]);
     dealerDitulis++;
   }
 
@@ -465,6 +504,7 @@ async function main(config, dealerPosFile, ringFile, noReset) {
     const cityHint = posOwnCity || dealerCityCode.get(dealerCode);
     const assignments = {};
     p.coverage.forEach((namaKec, i) => {
+      if (!namaKec) return;   // sel kosong: posisi tetap dihitung, tidak ditulis
       const match = matchDistrict(namaKec, cityHint);
       if (!match) { posCoverageTakDikenal.push(`${p.name}: cov${i + 1} "${namaKec}"`); return; }
       assignments[match.code] = i + 1;
@@ -557,6 +597,8 @@ async function main(config, dealerPosFile, ringFile, noReset) {
     daftarRingkas(dealerSheet.kabupatenTakDikenal));
   // Dealer tanpa kabupaten tidak akan muncul di filter Kota/Karesidenan sama sekali,
   // jadi jumlahnya wajib terlihat di sini (bukan hilang diam-diam).
+  console.log(`  kecamatan dealer tidak dikenal/ambigu : ${kecamatanDealerTakDikenal.length}` +
+    daftarRingkas(kecamatanDealerTakDikenal));
   const tanpaKota = dealerSheet.rows.filter((d) => !d.cityCode).map((d) => d.name);
   console.log(`  dealer TANPA kota (tak masuk filter Kota/Kares) : ${tanpaKota.length}` +
     daftarRingkas(tanpaKota));
@@ -567,8 +609,8 @@ async function main(config, dealerPosFile, ringFile, noReset) {
     daftarRingkas(posSheet.tanpaKode));
   console.log(`  pos dengan dealer induk asing      : ${posDealerAsing.length}` +
     daftarRingkas(posDealerAsing));
-  console.log(`  coverage ditulis (baris kecamatan) : ${posCoverageDitulis}`);
-  console.log(`  coverage: kecamatan tidak dikenal/ambigu : ${posCoverageTakDikenal.length}` +
+  console.log(`  kec. tercover ditulis (baris kecamatan) : ${posCoverageDitulis}`);
+  console.log(`  kec. tercover: kecamatan tidak dikenal/ambigu : ${posCoverageTakDikenal.length}` +
     daftarRingkas(posCoverageTakDikenal));
   console.log('');
   console.log(`  === OUTLET PROXY DEALER (Fase D) ===`);
@@ -604,6 +646,7 @@ module.exports = main;
 // Dipakai scripts/backfill-dealer-city.js: membaca kabupaten dealer dari Excel TANPA
 // menulis apa pun selain dealers.city_code.
 module.exports.readDealerSheet = readDealerSheet;
+module.exports.makeDistrictMatcher = makeDistrictMatcher;
 
 if (require.main === module) {
   main().catch((error) => {

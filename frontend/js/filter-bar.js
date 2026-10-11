@@ -16,11 +16,10 @@ import { $, esc } from './dom.js';
 import {
   clearScope, pageFilters, scopeOptions, scopeValue, setKares, setPeriod, setScope,
 } from './filters.js';
-import { invalidateSalePoints } from './map.js';
 import { S } from './state.js';
 
-/** Tiga dropdown lingkup, masing-masing slot sendiri. Urutannya urutan tampil di bilah. */
-const SCOPE_KINDS = ['kota', 'dealer', 'pos'];
+/** Empat dropdown lingkup, masing-masing slot sendiri. Urutannya urutan tampil di bilah. */
+const SCOPE_KINDS = ['kota', 'kec', 'dealer', 'pos'];
 
 /** Halaman yang punya bilah, dan fungsi yang menggambar ulang isinya. */
 const REPAINT = {
@@ -118,6 +117,7 @@ function bacaKotakPeriode(which, el) {
  * berpenjualan; kota asal dealer yang belum punya penjualan jatuh ke kodenya.
  */
 const namaKota = (c) => S.cityNames[c] || c;
+const namaKec = (k) => S.districtNames[k] || k;
 
 /**
  * Memilih dari daftar berarti "tampilkan yang ini", bukan "nyalakan atau matikan yang
@@ -142,7 +142,7 @@ const pilihLingkup = (kind) => (value) => {
 };
 
 /**
- * Isi ulang dropdown Kota, Dealer, dan Pos menurut tingkat di atasnya (lihat
+ * Isi ulang dropdown Kota, Kec, Dealer, dan Pos menurut tingkat di atasnya (lihat
  * scopeOptions() di filters.js). Dipanggil dari syncFilterBar(), jadi cukup satu tempat
  * — tapi daftarnya baru dibangun ulang kalau tingkat di atasnya benar-benar berubah,
  * bukan di setiap penggambaran ulang.
@@ -150,7 +150,8 @@ const pilihLingkup = (kind) => (value) => {
 let tandaOpsi = '';
 function isiComboBerjenjang(paksa) {
   const f = pageFilters();
-  const tanda = [f.kares, f.cityCode, f.dealerCode, S.dealers.length, S.realOutlets.length].join('|');
+  const tanda = [f.kares, f.cityCode, f.districtCode, f.dealerCode,
+    S.dealers.length, S.realOutlets.length].join('|');
   if (!paksa && tanda === tandaOpsi) return;
   tandaOpsi = tanda;
 
@@ -167,6 +168,14 @@ function isiComboBerjenjang(paksa) {
       if (value !== 'ALL' && !S.selectedDistrict && window.openCitySummary) {
         window.openCitySummary(value);
       }
+    });
+
+  // Kec = kecamatan ASAL dealer (dealers.district_code), bukan kecamatan pelanggan.
+  fillCombo('kec', 'Kec', opsi.districts
+    .sort((a, b) => namaKec(a).localeCompare(namaKec(b)))
+    .map((k) => [k, namaKec(k)]), 'Semua', (value) => {
+      setScope('kec', value, true);
+      repaint(false);
     });
 
   fillCombo('dealer', 'Dealer', S.registry.order
@@ -251,10 +260,6 @@ export function syncFilterBar() {
  * switchTab(), dan meng-import baliknya akan membuat lingkaran.
  */
 function repaint(periodChanged) {
-  // Titik penjualan dibangun ulang HANYA kalau rentangnya berganti. Filter lain tidak
-  // mengubah titiknya — cuma warnanya — dan membangun ulang 18 ribu titik tiap kali
-  // dropdown disentuh akan terasa berat tanpa alasan.
-  if (periodChanged) invalidateSalePoints();
   syncFilterBar();
   const fungsi = window[REPAINT[S.filterPage]];
   if (fungsi) fungsi();

@@ -15,31 +15,34 @@ import { S } from './state.js';
 /** Nilai filter halaman yang sedang aktif, atau halaman yang disebut. */
 export const pageFilters = (page) => S.filters[page || S.filterPage] || S.filters.peta;
 
-/** 'kota' | 'dealer' | 'pos' -> nama field-nya di objek filter. */
-const FIELD = { kota: 'cityCode', dealer: 'dealerCode', pos: 'outletCode' };
+/** 'kota' | 'kec' | 'dealer' | 'pos' -> nama field-nya di objek filter. */
+const FIELD = { kota: 'cityCode', kec: 'districtCode', dealer: 'dealerCode', pos: 'outletCode' };
 const KINDS = Object.keys(FIELD);
 
 /**
- * Empat tingkat filter wilayah, dari yang terbesar ke terkecil:
- * karesidenan berisi kota, kota berisi dealer, dealer berisi pos.
+ * Lima tingkat filter wilayah, dari yang terbesar ke terkecil:
+ * karesidenan berisi kota, kota berisi kecamatan, kecamatan berisi dealer, dealer
+ * berisi pos. (Kec ditambahkan 2026-10-11, permintaan tim.)
  */
-const LEVELS = ['kares', 'cityCode', 'dealerCode', 'outletCode'];
+const LEVELS = ['kares', 'cityCode', 'districtCode', 'dealerCode', 'outletCode'];
+const IDX = Object.fromEntries(LEVELS.map((l, i) => [l, i]));
 
 /**
- * Kota, dealer, dan pos BERJENJANG sejak 2026-10-11 (permintaan tim), bukan lagi
- * saling eksklusif. Dua arah:
+ * Kares, kota, kec, dealer, dan pos BERJENJANG (sejak 2026-10-11), bukan lagi saling
+ * eksklusif. Dua arah:
  *
  * - Memilih yang KECIL mengisi yang besar: pilih dealer Astra Motor Center Yogyakarta
- *   -> kotanya (Sleman) dan karesidenannya (Yogyakarta) terisi otomatis.
+ *   -> kecamatannya (Mlati), kotanya (Sleman), dan karesidenannya (Yogyakarta) terisi.
  * - Memilih yang BESAR mempersempit yang kecil: pilih kota Sleman -> dealer/pos yang
  *   bukan dari Sleman dilepas, dan daftar dealer di dropdown tinggal dealer Sleman.
  *
  * Membuka ("Semua") satu tingkat ikut membuka semua tingkat di bawahnya.
  *
- * ARTI Kota/Kares: bukan lokasi pelanggan, tapi KUMPULAN DEALER yang terdaftar di
- * wilayah itu (dealers.city_code). Semua penjualan dealer-dealer itu ikut, juga yang
- * pelanggannya tinggal di luar kota/karesidenan. Ini MEMBALIKKAN keputusan 2026-08-31
- * dan 2026-09-17 (kota = tempat pelanggan); lihat docs/DECISIONS.md.
+ * ARTI Kota/Kec/Kares: bukan lokasi pelanggan, tapi KUMPULAN DEALER yang terdaftar di
+ * wilayah itu (dealers.city_code / dealers.district_code, dari kolom Kabupaten dan
+ * Kecamatan Excel Dealer & POS). Semua penjualan dealer-dealer itu ikut, juga yang
+ * pelanggannya tinggal di luar kota/karesidenan. Ini MEMBALIKKAN keputusan 2026-08-31 dan
+ * 2026-09-17 (kota = tempat pelanggan); lihat docs/DECISIONS.md.
  */
 export function scopeValue(kind, f) {
   const filters = f || pageFilters();
@@ -52,21 +55,50 @@ export function dealerCityOf(dealerCode) {
   return (d && d.cityCode) || null;
 }
 
+/** Kecamatan ASAL (terdaftar) sebuah dealer, atau null kalau Excel tidak memuatnya. */
+export function dealerDistrictOf(dealerCode) {
+  const d = S.dealerByCode[dealerCode];
+  return (d && d.districtCode) || null;
+}
+
+
 /** Karesidenan yang memuat kota ini, atau null (kota di luar ketiga karesidenan). */
 export function karesOfCity(cityCode) {
   return Object.keys(KARESIDENAN).find((k) => KARESIDENAN[k].cities.includes(cityCode)) || null;
 }
 
-/** Apakah kota/karesidenan di `f` (kalau ada) memuat dealer ini. */
-function dealerInRegion(dealerCode, f) {
+/** Apakah kares/kota di `f` (kalau ada) memuat dealer ini — tanpa melihat Kec. */
+function dealerInCityKares(dealerCode, f) {
   const city = dealerCityOf(dealerCode);
   if (f.cityCode !== 'ALL' && city !== f.cityCode) return false;
   if (f.kares !== 'ALL' && !(city && KARESIDENAN[f.kares].cities.includes(city))) return false;
   return true;
 }
 
+/** Apakah kares/kota/kec di `f` (kalau ada) memuat dealer ini. */
+function dealerInRegion(dealerCode, f) {
+  if (!dealerInCityKares(dealerCode, f)) return false;
+  if (f.districtCode !== 'ALL' && dealerDistrictOf(dealerCode) !== f.districtCode) return false;
+  return true;
+}
+
 /**
- * Kode dealer yang lolos filter Kota/Karesidenan, atau null kalau keduanya "Semua".
+ * Hubungan Kota <-> Kec diturunkan dari DEALER TERDAFTAR, bukan dari geografi. Sebuah
+ * kecamatan "milik" kota-kota tempat dealer-dealernya terdaftar. Ini sengaja: ada dealer yang
+ * terdaftar di satu kota tapi kecamatannya secara geografis di kota tetangga (mis. ASTRA
+ * MOTOR BANTUL terdaftar di Kab. Bantul, kecamatannya Mantrijeron di Kota Yogyakarta;
+ * dealer Magelang yang terdaftar di Kab. Magelang berkecamatan Magelang Selatan di Kota
+ * Magelang). Memakai kota geografis kecamatan membuat dealer seperti itu hilang waktu Kec
+ * dipilih. Hasilnya bisa LEBIH DARI SATU kota untuk satu kecamatan.
+ */
+function citiesOfDistrict(districtCode) {
+  return [...new Set(S.dealers
+    .filter((d) => d.districtCode === districtCode)
+    .map((d) => d.cityCode).filter(Boolean))];
+}
+
+/**
+ * Kode dealer yang lolos filter Kares/Kota/Kec, atau null kalau ketiganya "Semua".
  *
  * null berarti "tidak membatasi", BUKAN "kosong": daftar kosong (tidak ada dealer
  * terdaftar di wilayah itu) harus berarti tidak ada penjualan, dan keduanya tidak
@@ -74,31 +106,44 @@ function dealerInRegion(dealerCode, f) {
  */
 export function regionDealerCodes(f) {
   const filters = f || pageFilters();
-  if (filters.cityCode === 'ALL' && filters.kares === 'ALL') return null;
+  if (filters.cityCode === 'ALL' && filters.kares === 'ALL' && filters.districtCode === 'ALL') {
+    return null;
+  }
   return S.dealers.map((d) => d.code).filter((code) => dealerInRegion(code, filters));
 }
 
 /**
- * Pilihan yang masih masuk akal di dropdown Kota/Dealer/Pos, mengikuti tingkat di
- * atasnya: karesidenan mempersempit kota, kota mempersempit dealer, dealer mempersempit
- * pos. Murni (tanpa DOM) supaya aturannya bisa diuji.
+ * Pilihan yang masih masuk akal di dropdown Kota/Kec/Dealer/Pos, mengikuti tingkat di
+ * atasnya: karesidenan mempersempit kota, kota mempersempit kecamatan, kecamatan
+ * mempersempit dealer, dealer mempersempit pos. Murni (tanpa DOM) supaya aturannya bisa
+ * diuji.
  *
- * Kota yang ditawarkan = kota tempat ada dealer terdaftar (bukan semua kota di peta),
- * dibatasi ke kota anggota karesidenan kalau ada yang dipilih. Kota yang sedang aktif
- * selalu ikut, walau di luar tiga karesidenan, supaya pilnya tidak menampilkan "Semua"
- * padahal filternya menyala.
+ * Kota/kecamatan yang ditawarkan = tempat ada dealer terdaftar (bukan semua wilayah di
+ * peta). Yang sedang aktif selalu ikut, walau di luar tiga karesidenan, supaya pilnya
+ * tidak menampilkan "Semua" padahal filternya menyala.
  *
- * @returns {{cities: string[], dealers: Set<string>, outlets: Set<string>}}
+ * @returns {{cities: string[], districts: string[], dealers: Set<string>,
+ *   outlets: Set<string>}}
  */
 export function scopeOptions(f) {
   const filters = f || pageFilters();
-  const region = regionDealerCodes(filters);
-  const regionSet = region ? new Set(region) : null;
   const allowed = filters.kares !== 'ALL' ? new Set(KARESIDENAN[filters.kares].cities) : null;
 
   const cities = [...new Set(S.dealers.map((d) => d.cityCode).filter(Boolean))]
     .filter((c) => !allowed || allowed.has(c) || c === filters.cityCode);
 
+  // Kecamatan tempat ada dealer yang lolos Kares/Kota (bukan kota geografis kecamatan itu).
+  const districts = [...new Set(S.dealers
+    .filter((d) => dealerInCityKares(d.code, filters)).map((d) => d.districtCode)
+    .filter(Boolean))];
+  if (filters.districtCode !== 'ALL' && !districts.includes(filters.districtCode)) {
+    districts.push(filters.districtCode);
+  }
+
+  const regionSet = (() => {
+    const r = regionDealerCodes(filters);
+    return r ? new Set(r) : null;
+  })();
   const dealers = new Set(S.dealers.map((d) => d.code).filter((c) => !regionSet || regionSet.has(c)));
 
   const outlets = new Set(S.realOutlets
@@ -106,7 +151,7 @@ export function scopeOptions(f) {
       && (filters.dealerCode === 'ALL' || o.dealerCode === filters.dealerCode))
     .map((o) => o.code));
 
-  return { cities, dealers, outlets };
+  return { cities, districts, dealers, outlets };
 }
 
 /**
@@ -122,11 +167,23 @@ export function regionCityCodes(f) {
 
 /** Lepas tingkat di bawah `field` yang tidak lagi cocok dengan tingkat di atasnya. */
 function trimBelow(f, field) {
-  const i = LEVELS.indexOf(field);
-  if (i < 1 && f.cityCode !== 'ALL' && f.kares !== 'ALL'
+  const i = IDX[field];
+
+  if (i < IDX.cityCode && f.cityCode !== 'ALL' && f.kares !== 'ALL'
     && !KARESIDENAN[f.kares].cities.includes(f.cityCode)) f.cityCode = 'ALL';
-  if (i < 2 && f.dealerCode !== 'ALL' && !dealerInRegion(f.dealerCode, f)) f.dealerCode = 'ALL';
-  if (i < 3 && f.outletCode !== 'ALL') {
+
+  if (i < IDX.districtCode && f.districtCode !== 'ALL') {
+    // Kecamatan bertahan selama MASIH ada dealer terdaftar di sana yang lolos Kares/Kota.
+    const masihAda = S.dealers.some((d) => d.districtCode === f.districtCode
+      && dealerInCityKares(d.code, f));
+    if (!masihAda) f.districtCode = 'ALL';
+  }
+
+  if (i < IDX.dealerCode && f.dealerCode !== 'ALL' && !dealerInRegion(f.dealerCode, f)) {
+    f.dealerCode = 'ALL';
+  }
+
+  if (i < IDX.outletCode && f.outletCode !== 'ALL') {
     const outlet = S.outletByCode[f.outletCode];
     if (f.dealerCode === 'ALL' || !outlet || outlet.dealerCode !== f.dealerCode) f.outletCode = 'ALL';
   }
@@ -142,9 +199,18 @@ function reconcile(f, field) {
     f.dealerCode = outlet ? outlet.dealerCode : 'ALL';
   }
   if (field === 'outletCode' || field === 'dealerCode') {
-    // Dealer yang kotanya tidak tercatat tidak bisa mengisi kota/kares: dikosongkan,
-    // bukan dibiarkan memegang sisa pilihan lama yang bukan miliknya.
+    // Dealer yang kecamatan/kotanya tidak tercatat tidak bisa mengisi tingkat itu:
+    // dikosongkan, bukan dibiarkan memegang sisa pilihan lama yang bukan miliknya.
+    f.districtCode = f.dealerCode !== 'ALL' ? (dealerDistrictOf(f.dealerCode) || 'ALL') : 'ALL';
     f.cityCode = f.dealerCode !== 'ALL' ? (dealerCityOf(f.dealerCode) || 'ALL') : f.cityCode;
+  }
+  if (field === 'districtCode') {
+    // Kota diisi dari dealer terdaftar di kecamatan itu. Kalau dealer-dealernya tersebar di
+    // beberapa kota, kota yang sedang dipilih dipertahankan bila salah satunya, selain itu
+    // dikosongkan (tidak ada satu kota yang bisa disebut).
+    const kota = citiesOfDistrict(f.districtCode);
+    if (kota.length === 1) [f.cityCode] = kota;
+    else if (!kota.includes(f.cityCode)) f.cityCode = 'ALL';
   }
   if (field !== 'kares') {
     f.kares = f.cityCode !== 'ALL' ? (karesOfCity(f.cityCode) || 'ALL') : 'ALL';
@@ -153,7 +219,7 @@ function reconcile(f, field) {
 }
 
 /**
- * @param {string} kind  'kota' | 'dealer' | 'pos'
+ * @param {string} kind  'kota' | 'kec' | 'dealer' | 'pos'
  * @param {string} code  kode, atau 'ALL' untuk mengosongkan
  * @param {boolean} [force]  jangan toggle — dipakai "Lihat di peta" dari tabel, yang
  *   artinya "tampilkan ini", bukan "nyalakan atau matikan ini"
@@ -167,57 +233,38 @@ export function setScope(kind, code, force) {
 
   if (value === 'ALL') {
     // Membuka satu tingkat membuka semua tingkat di bawahnya.
-    LEVELS.slice(LEVELS.indexOf(field) + 1).forEach((l) => { f[l] = 'ALL'; });
+    LEVELS.slice(IDX[field] + 1).forEach((l) => { f[l] = 'ALL'; });
   } else {
     reconcile(f, field);
   }
 
-  // Mode heatmap otomatis ikut filter Kota: Static waktu satu kota dipilih, Dynamic
-  // waktu "Semua". Ditulis di sini (bukan di renderAll()) supaya toggle manual orang
-  // di antara dua render tidak ketiban reset setiap kali — cuma waktu KOTA-nya sendiri
-  // yang berubah. window.syncHeatmapModeButtons ada di map.js; lewat window supaya
-  // filters.js tidak perlu mengimpor map.js (menghindari impor melingkar).
-  if (kind === 'kota') {
-    S.heatmapMode = value !== 'ALL' ? 'fixed' : 'relative';
-    if (window.syncHeatmapModeButtons) window.syncHeatmapModeButtons();
-  }
-
-  // Kontrol "Tampilan Ring Dealer"/"Tampilan Coverage POS" aktif/nonaktif mengikuti
-  // scope dealer/pos — dipanggil untuk KETIGA kind (dealer/pos bisa ikut berubah lewat
-  // jenjang di atas, bukan cuma waktu dipanggil langsung). Lewat window dengan alasan
-  // sama seperti syncHeatmapModeButtons di atas.
+  // Blok kontekstual Ring Dealer / Kec. Tercover tampil/hilang mengikuti scope
+  // dealer/pos — dipanggil untuk SEMUA kind (dealer/pos bisa ikut berubah lewat jenjang di
+  // atas, bukan cuma waktu dipanggil langsung). Lewat window supaya filters.js tidak perlu
+  // mengimpor map.js (menghindari impor melingkar).
   if (window.syncGroupControls) window.syncGroupControls();
 }
 
-/** @param {string} [kind] tanpa argumen, kosongkan KETIGANYA (dipakai tombol Reset). */
+/** @param {string} [kind] tanpa argumen, kosongkan SEMUANYA kecuali Kares (tombol Reset). */
 export function clearScope(kind) {
   const f = pageFilters();
   const kinds = kind ? [kind] : KINDS;
   kinds.forEach((k) => {
     f[FIELD[k]] = 'ALL';
-    LEVELS.slice(LEVELS.indexOf(FIELD[k]) + 1).forEach((l) => { f[l] = 'ALL'; });
+    LEVELS.slice(IDX[FIELD[k]] + 1).forEach((l) => { f[l] = 'ALL'; });
   });
-
-  if (kinds.includes('kota')) {
-    S.heatmapMode = 'relative';
-    if (window.syncHeatmapModeButtons) window.syncHeatmapModeButtons();
-  }
 }
 
-/** Tingkat terbesar. "Semua" membuka kota/dealer/pos juga; sebuah pilihan mempersempitnya. */
+/** Tingkat terbesar. "Semua" membuka kota/kec/dealer/pos juga; sebuah pilihan mempersempitnya. */
 export function setKares(code) {
   const f = pageFilters();
   if (code && KARESIDENAN[code]) {
     f.kares = code;
     reconcile(f, 'kares');
   } else {
-    f.kares = 'ALL';
-    f.cityCode = 'ALL';
-    f.dealerCode = 'ALL';
-    f.outletCode = 'ALL';
+    LEVELS.forEach((l) => { f[l] = 'ALL'; });
   }
 }
-
 /**
  * Ujung rentang yang menyilang DISERET, bukan ditolak.
  *
@@ -279,6 +326,7 @@ export function fusionFilter(f) {
   const periode = (nilai) => (/^\d{4}-\d{2}$/.test(String(nilai || '')) ? nilai : null);
 
   const kota = pakai(filters.cityCode);
+  const kec = pakai(filters.districtCode);
   const kares = pakai(filters.kares);
 
   // Karesidenan diterjemahkan jadi DAFTAR KODE KOTA di sini, bukan di server.
@@ -295,7 +343,7 @@ export function fusionFilter(f) {
   // kota tempat pelanggan tinggal. Penerjemahan ke daftar dealer dilakukan SERVER
   // (saringFusi di routes.js, lewat dealers.city_code); dealer atau pos yang dipilih
   // lebih sempit dan menang di sana.
-  const kotaBanyak = (!kota && kares && KARESIDENAN[kares])
+  const kotaBanyak = (!kota && !kec && kares && KARESIDENAN[kares])
     ? KARESIDENAN[kares].cities.slice()
     : null;
 
@@ -311,6 +359,7 @@ export function fusionFilter(f) {
   return {
     periode: sampai,
     kota,
+    kec,
     kotaBanyak,
     dealer: pakai(filters.dealerCode),
     pos: pakai(filters.outletCode),
@@ -546,6 +595,9 @@ export function scopeLabel() {
   // jadi mereka disebut sebagai wilayah ASAL dealer, bukan tempat penjualan.
   if (f.kares !== 'ALL') parts.push(KARESIDENAN[f.kares].label);
   if (f.cityCode !== 'ALL') parts.push(S.cityNames[f.cityCode] || f.cityCode);
+  if (f.districtCode !== 'ALL') {
+    parts.push('Kec. ' + (S.districtNames[f.districtCode] || f.districtCode));
+  }
   if (f.dealerCode !== 'ALL') {
     parts.push('Dealer ' + (S.dealerNames[f.dealerCode] || f.dealerCode));
   }

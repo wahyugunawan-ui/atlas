@@ -113,10 +113,34 @@ test('saringan kota aktif: dikatakan, berikut cara mengosongkannya', async () =>
   // Dealer dan Pos memang TIDAK dikirim saringSumber() ke rutenya. Menyebut keduanya
   // sebagai saringan aktif akan membuat orang mengosongkan saringan yang sejak awal
   // tidak berpengaruh di halaman ini — dan tabelnya tetap kosong.
-  assert.match(html, /Dealer dan Pos tidak berpengaruh/,
-    'harus dikatakan bahwa Dealer dan Pos tidak menyaring halaman ini');
+  assert.match(html, /Periode, Dealer, dan Pos tidak berpengaruh/,
+    'harus dikatakan bahwa Periode, Dealer, dan Pos tidak menyaring halaman ini');
 
   await bersihkanSaringan();
   assert.strictEqual(m.catatanKosongSaringan(), '',
     'saringan bocor antar tes; hasil tes berikutnya jadi tidak bisa dipercaya');
+});
+
+test('periode (Dari–Sampai) TIDAK menyaring Servis dan Pengiriman, hanya data KTP', async () => {
+  const m = await import(modul('fusion.js'));
+  const f = await import(modul('filters.js'));
+  await bersihkanSaringan();
+
+  // Permintaan 2026-10-11: rentang tanggal hanya untuk data KTP. Servis dan Pengiriman
+  // selalu tampil seluruhnya, jadi saringSumber() tidak boleh lagi mengirim periode.
+  f.setPeriod('from', '2026-08');
+  f.setPeriod('to', '2026-08');
+  const q = m.saringSumber(0, null);
+  assert.strictEqual('periodFrom' in q, false, 'periodFrom masih dikirim ke Servis/Pengiriman');
+  assert.strictEqual('periodTo' in q, false, 'periodTo masih dikirim ke Servis/Pengiriman');
+
+  // Dan keterangan "kosong karena saringan" tidak menyalahkan periode yang tidak berlaku.
+  assert.strictEqual(m.catatanKosongSaringan(), '',
+    'periode disebut sebagai saringan aktif di halaman yang tidak memakainya');
+
+  // Saringan yang MEMANG berlaku di halaman ini (kota) tetap terkirim.
+  f.setScope('kota', '34.04', true);
+  assert.strictEqual(m.saringSumber(0, null).city, '34.04', 'saringan kota ikut hilang');
+
+  await bersihkanSaringan();
 });

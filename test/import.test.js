@@ -827,10 +827,11 @@ async function test() {
       'daftar belum cocok tidak ikut pulih');
 
     /* --------------------------------------------------------------------
-       RING DEALER (kecamatan, 1-3) & COVERAGE POS (kecamatan, 1-8)
+       RING DEALER (kecamatan, 1-3) & KEC. TERCOVER POS (kecamatan, 1-2)
        --------------------------------------------------------------------
        Sejak 2026-08-31 sore, ring pindah dari pos+kelurahan ke DEALER+KECAMATAN,
-       dan pos mendapat konsep baru coverage (1-8, juga kecamatan). Yang dijaga di
+       dan pos mendapat konsep baru coverage (kini disebut Kec. Tercover, 2 jenis sejak
+       2026-10-11, juga kecamatan). Yang dijaga di
        sini bukan "simpannya jalan", tapi: satu kecamatan masuk dua ring/coverage
        sekaligus (satu penjualan terhitung dua kali), kecamatan asing yang dilewati
        diam-diam, susunan lama yang tertinggal sesudah ditimpa, dan ring/coverage
@@ -884,23 +885,31 @@ async function test() {
     assert.deepStrictEqual((await repo.allDealerRings())[dealerRing], { [kecUji[0]]: 3 },
       'ring dealer yang sudah benar ikut hilang waktu simpan berikutnya ditolak');
 
-    // --- Coverage pos: pola sama, rentang 1-8, tabel & entitas beda ---
+    // --- Kec. Tercover pos: pola sama, rentang 1-2, tabel & entitas beda ---
 
     await repo.savePosCoverage(posCover,
-      { [kecUji[0]]: 1, [kecUji[1]]: 8 });
+      { [kecUji[0]]: 1, [kecUji[1]]: 2 });
     let cover = (await repo.allPosCoverage())[posCover];
-    assert.deepStrictEqual(cover, { [kecUji[0]]: 1, [kecUji[1]]: 8 },
+    assert.deepStrictEqual(cover, { [kecUji[0]]: 1, [kecUji[1]]: 2 },
       'coverage pos tidak tersimpan apa adanya');
 
     await assert.rejects(
       () => repo.savePosCoverage(posCover, { '99.99.99': 1 }),
       /tidak dikenal/i, 'kecamatan asing tidak ditolak (coverage pos)');
     await assert.rejects(
-      () => repo.savePosCoverage(posCover, { [kecUji[0]]: 9 }),
-      /Coverage harus/i, 'nomor coverage di luar 1-8 tidak ditolak');
+      () => repo.savePosCoverage(posCover, { [kecUji[0]]: 3 }),
+      /Kec\. tercover harus/i, 'jenis kec. tercover di luar 1-2 tidak ditolak (3 dulu sah, kini tidak)');
+    await assert.rejects(
+      () => repo.savePosCoverage(posCover, { [kecUji[0]]: 8 }),
+      /Kec\. tercover harus/i, 'jenis 8 (rentang lama) masih diterima');
     await assert.rejects(
       () => repo.savePosCoverage(posCover, { [kecUji[0]]: 0 }),
-      /Coverage harus/i, 'nomor coverage 0 tidak ditolak');
+      /Kec\. tercover harus/i, 'jenis kec. tercover 0 tidak ditolak');
+    // Batasnya juga dijaga DATABASE, bukan cuma fungsinya: skrip/impor yang menulis
+    // langsung tidak boleh menyelundupkan jenis 3..8 lagi.
+    await assert.rejects(
+      () => store.run(db, 'INSERT INTO pos_coverage_district (outlet_code, district_code, coverage_num) VALUES (?, ?, 5)', [posCover, kecUji[2]]),
+      /check|violates/i, 'CHECK database masih menerima jenis kec. tercover > 2');
     await assert.rejects(
       () => repo.savePosCoverage('POS-TIDAK-ADA', { [kecUji[0]]: 1 }),
       /tidak ada/i, 'coverage bisa disimpan untuk pos yang tidak ada');

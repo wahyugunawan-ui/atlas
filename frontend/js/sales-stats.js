@@ -24,22 +24,6 @@ import { classOf } from './colors.js';
 export const POSISI_LABEL = ['Terbawah', 'Bawah', 'Tengah', 'Atas', 'Teratas'];
 
 /**
- * Batas kelas interval TETAP untuk mode Static ("Static Relative Tiering by Total
- * Sales per City") — beda dari posisi relatif (yang bergantung sebaran), kelas ini
- * sama di mana pun dan kapan pun dipakai.
- *
- * Sejak 2026-08-31: 5 kelas, bukan 6 — permintaan Pakbos. Ambang angkanya SAMA PERSIS
- * (0,02/0,04/0,06/0,08), cuma kelas ke-5 dan ke-6 lama ("0,081–1%" dan "Lebih dari 1%")
- * DIGABUNG jadi satu kelas "top" di atas 0,08%.
- */
-export const KONTRIBUSI_TETAP = [0.02, 0.04, 0.06, 0.08];
-
-/** Label tetap mode Static — SATU indeks dengan fixedContributionClass(). */
-export const KONTRIBUSI_LABEL = [
-  '0–0,02%', '0,021–0,04%', '0,041–0,06%', '0,061–0,08%', 'Lebih dari 0,08%',
-];
-
-/**
  * Kelompokkan baris penjualan per kota, lalu per kecamatan di dalamnya.
  *
  * @param {Array<{district, units}>} rows       baris penjualan yang SUDAH difilter
@@ -123,39 +107,18 @@ export function relativePosition(value, breaks) {
   return kelas < 0 ? null : POSISI_LABEL[Math.min(kelas, POSISI_LABEL.length - 1)];
 }
 
-/**
- * Kelas interval tetap (mode Static). -1 kalau tidak ada data (kontribusi `null`),
- * 0..3 sesuai KONTRIBUSI_TETAP, 4 untuk "lebih dari 0,08%".
- */
-export function fixedContributionClass(percent) {
-  if (percent == null || !Number.isFinite(percent)) return -1;
-  for (let i = 0; i < KONTRIBUSI_TETAP.length; i++) {
-    if (percent <= KONTRIBUSI_TETAP[i]) return i;
-  }
-  return KONTRIBUSI_TETAP.length;
-}
-
-/** Selisih dari Acuan, dalam poin persentase. `null` kalau salah satu nilainya tidak ada. */
-export function referenceGap(contributionPct, benchmarkPct) {
-  if (contributionPct == null || benchmarkPct == null) return null;
-  return contributionPct - benchmarkPct;
-}
-
-/** Rasio terhadap Acuan, dalam persen (100 = tepat sama dengan acuan). */
-export function referenceRatio(contributionPct, benchmarkPct) {
-  if (contributionPct == null || !benchmarkPct) return null;
-  return (contributionPct / benchmarkPct) * 100;
-}
-
 /* ==========================================================================
-   PERFORMA POS DEALER — kontribusi, posisi relatif, dan acuan bisnis PER POS
+   PERFORMA POS DEALER — kontribusi dan posisi relatif PER POS
    ==========================================================================
    Sejak 2026-08-31 (permintaan Pakbos). Basisnya beda dari kecamatan: kontribusi
    kecamatan relatif terhadap KOTANYA SENDIRI (groupByCity), kontribusi pos relatif
    terhadap TOTAL SELURUH POS yang tampil di filter aktif — dikonfirmasi user waktu
-   perencanaan. Posisi relatif dan acuan bisnis TETAP memakai mesin yang sama
-   (percentileBreaks/classOf lewat relativePosition(), referenceGap()) — tidak ada
-   mesin klasifikasi baru, cuma dipanggil dengan input per-outlet.
+   perencanaan. Posisi relatif TETAP memakai mesin yang sama (percentileBreaks/classOf
+   lewat relativePosition()) — tidak ada mesin klasifikasi baru, cuma dipanggil dengan
+   input per-outlet.
+
+   Mode "Per Nilai Kontribusi" (interval tetap) dan Acuan Bisnis (selisih/rasio/kelompok
+   terhadap acuan) DIHAPUS 2026-10-11 atas permintaan tim; lihat docs/DECISIONS.md.
    ========================================================================== */
 
 /**
@@ -202,32 +165,17 @@ export function contributionsByOutlet(rows) { return contributionsByField(rows, 
 export function contributionsByDistrict(rows) { return contributionsByField(rows, 'district'); }
 
 /**
- * Kelompok Business Reference dari selisih (referenceGap()) — cuma tandanya yang
- * menentukan kelompok, bukan ambang baru. `null` kalau gap-nya tidak ada (salah satu
- * dari kontribusi/acuan tidak tersedia).
- */
-export function businessReferenceGroup(gap) {
-  if (gap == null) return null;
-  if (gap > 0) return 'Di Atas Acuan';
-  if (gap < 0) return 'Di Bawah Acuan';
-  return 'Sesuai Acuan';
-}
-
-/**
- * Bagi penjualan satu pos ke coverage 1..8 (kecamatan), dari penetapan manual (bukan
- * radius) — lihat backend/server/schema.sql `pos_coverage_district`. Kecamatan yang
- * tidak masuk coverage manapun TIDAK dihitung ke kelompok manapun, tapi TETAP masuk
- * `total` — sisanya adalah "%di luar semua coverage", dihitung pemanggilnya supaya
+ * Bagi penjualan satu pos ke Kec. Tercover 1..N (kecamatan), dari penetapan manual
+ * (bukan radius) — lihat backend/server/schema.sql `pos_coverage_district`. Kecamatan
+ * yang tidak masuk jenis manapun TIDAK dihitung ke kelompok manapun, tapi TETAP masuk
+ * `total` — sisanya adalah "%di luar kec. tercover", dihitung pemanggilnya supaya
  * totalnya selalu genap 100% di layar.
  *
- * Generik untuk jumlah kelompok berapa pun (dipakai coverage pos, 8 kelompok) —
- * bedanya dari ring dealer (yang punya bucket tambahan "coverage gabungan" dan aturan
- * prioritas) cukup besar untuk dipisah sebagai dealerRingSplit() sendiri di bawah,
- * bukan dipaksa satu fungsi dengan banyak cabang.
+ * Generik untuk jumlah kelompok berapa pun (sejak 2026-10-11 hanya DUA jenis, dulu 8).
  *
  * @param {Array<{district, units}>} rows  baris SATU pos, sudah difilter
  * @param {Object} groupMap  S.posCoverage[outletCode] — {districtCode: 1..groupCount}
- * @param {number} groupCount  jumlah slot, 8 untuk coverage pos
+ * @param {number} groupCount  jumlah slot, 2 untuk kec. tercover
  * @return {{total: number, percents: number[]}}  percents[0] = kelompok 1, dst.
  */
 export function groupSplit(rows, groupMap, groupCount) {
@@ -247,21 +195,54 @@ export function groupSplit(rows, groupMap, groupCount) {
 }
 
 /**
- * Bagi penjualan satu dealer ke Ring 1/2/3 (kecamatan milik dealer itu) dan "Coverage
- * gabungan" (union kecamatan dari seluruh coverage pos cabangnya). Kalau satu
- * kecamatan masuk ring DAN coverage gabungan sekaligus, RING MENANG — dikonfirmasi
- * user waktu perencanaan (2026-08-31). Kecamatan yang tidak masuk keduanya TIDAK
- * dihitung ke kelompok manapun, tapi TETAP masuk `total`.
+ * Bulatkan daftar persentase ke `decimals` desimal TANPA merusak jumlahnya: hasilnya
+ * selalu menjumlah persis seperti jumlah aslinya (100 kalau ada penjualan), bukan 99,9
+ * atau 100,1 akibat pembulatan tiap angka sendiri-sendiri. Metode sisa terbesar: semua
+ * angka dibulatkan ke bawah, sisanya dibagikan ke angka dengan pecahan terbesar.
+ *
+ * @param {number[]} values  persentase mentah (jumlahnya 100, atau 0 kalau tidak ada data)
+ * @return {number[]} nilai terbulatkan, urutan sama
+ */
+export function balancedPercents(values, decimals = 1) {
+  const scale = 10 ** decimals;
+  const sum = values.reduce((a, b) => a + b, 0);
+  const target = Math.round(sum * scale);
+  const scaled = values.map((v) => v * scale);
+  const floors = scaled.map(Math.floor);
+  let sisa = target - floors.reduce((a, b) => a + b, 0);
+  const urutan = scaled.map((v, i) => ({ i, frac: v - floors[i] })).sort((a, b) => b.frac - a.frac);
+  for (let k = 0; k < urutan.length && sisa > 0; k++, sisa--) floors[urutan[k].i] += 1;
+  return floors.map((v) => v / scale);
+}
+
+/**
+ * Bagi penjualan satu dealer ke LIMA kategori yang saling lepas (sejak 2026-10-11):
+ *
+ * 1. Ring 1, Ring 2, Ring 3 — kecamatan milik ring dealer itu. Definisi dan mekanisme
+ *    TIDAK berubah, dan ring boleh mencakup kecamatan di kota lain. Ring MENANG atas
+ *    semua kategori lain kalau satu kecamatan memenuhi lebih dari satu.
+ * 2. Others — di luar Ring 1–3 tapi masih di kota TERDAFTAR dealer (dealers.city_code),
+ *    ATAU kecamatan yang ditoleransi (kecamatan tempat dealer berada dan yang berbatasan
+ *    langsung dengannya — pengecualian dealer di perbatasan kota).
+ * 3. Pelanggaran Wilayah — di luar Ring 1–3, di luar kota dealer, dan bukan kecamatan
+ *    yang ditoleransi.
+ *
+ * Tiap baris jatuh ke TEPAT satu kategori, jadi jumlahnya selalu 100% tanpa hitung
+ * ganda. Kota dealer yang tidak tercatat: tidak ada dasar menyebut sesuatu "pelanggaran",
+ * jadi sisa non-ring masuk Others dan `kotaTakDikenal` bernilai true supaya layar bisa
+ * mengatakannya.
  *
  * @param {Array<{district, units}>} rows  baris SATU dealer, sudah difilter
  * @param {Object} ringMap  S.dealerRings[dealerCode] — {districtCode: 1|2|3}
- * @param {Set<string>} coverageDistricts  union kecamatan dari S.posCoverage milik
- *   seluruh pos dealer ini — dibangun pemanggilnya (butuh S.outletByCode)
- * @return {{total: number, percent1: number, percent2: number, percent3: number,
- *   percentCoverage: number}}
+ * @param {{cityCode: string|null, cityOfDistrict: function(string): (string|null),
+ *   tolerated: Set<string>}} dealer  kota terdaftar dealer, pencari kota sebuah
+ *   kecamatan, dan himpunan kecamatan yang ditoleransi
+ * @return {{total, units: {1,2,3,others,violation}, percent1, percent2, percent3,
+ *   percentOthers, percentViolation, kotaTakDikenal: boolean}}
  */
-export function dealerRingSplit(rows, ringMap, coverageDistricts) {
-  const units = { 1: 0, 2: 0, 3: 0, coverage: 0 };
+export function dealerRingSplit(rows, ringMap, dealer) {
+  const info = dealer || {};
+  const units = { 1: 0, 2: 0, 3: 0, others: 0, violation: 0 };
   let total = 0;
   (rows || []).forEach((row) => {
     total += row.units;
@@ -269,15 +250,77 @@ export function dealerRingSplit(rows, ringMap, coverageDistricts) {
     const ring = district && ringMap ? ringMap[district] : undefined;
     if (ring === 1 || ring === 2 || ring === 3) {
       units[ring] += row.units;
-    } else if (district && coverageDistricts && coverageDistricts.has(district)) {
-      units.coverage += row.units;
+      return;
     }
+    const diKotaDealer = info.cityCode && info.cityOfDistrict
+      && info.cityOfDistrict(district) === info.cityCode;
+    const ditoleransi = Boolean(info.tolerated && info.tolerated.has(district));
+    if (!info.cityCode || diKotaDealer || ditoleransi) units.others += row.units;
+    else units.violation += row.units;
   });
+  const pct = (n) => contributionPercent(n, total) || 0;
   return {
     total,
-    percent1: contributionPercent(units[1], total) || 0,
-    percent2: contributionPercent(units[2], total) || 0,
-    percent3: contributionPercent(units[3], total) || 0,
-    percentCoverage: contributionPercent(units.coverage, total) || 0,
+    units,
+    percent1: pct(units[1]),
+    percent2: pct(units[2]),
+    percent3: pct(units[3]),
+    percentOthers: pct(units.others),
+    percentViolation: pct(units.violation),
+    kotaTakDikenal: !info.cityCode,
   };
+}
+
+/**
+ * Kontribusi tiap POS FISIK terhadap total DEALER-nya.
+ *
+ * Penyebutnya SELURUH penjualan dealer (termasuk yang dicatat di baris "proxy" tingkat
+ * dealer), bukan hanya penjualan pos: jumlah semua pos + sisa yang belum terpetakan ke
+ * pos = 100%. Sampai penjualan dicatat per pos, `attributed` bernilai 0 dan pemanggil
+ * menampilkan "belum tersedia" — bukan angka karangan.
+ *
+ * @param {Array<{outlet, units}>} rows  baris dealer ini (seluruh pos + proxy)
+ * @param {function(string): boolean} isRealOutlet  true untuk pos fisik
+ * @return {{dealerTotal: number, attributed: number, unattributed: number,
+ *   perOutlet: Map<string, number>}}  perOutlet: kode pos -> % terhadap total dealer
+ */
+export function posContributionInDealer(rows, isRealOutlet) {
+  const perUnits = new Map();
+  let dealerTotal = 0;
+  (rows || []).forEach((row) => {
+    dealerTotal += row.units;
+    if (isRealOutlet(row.outlet)) perUnits.set(row.outlet, (perUnits.get(row.outlet) || 0) + row.units);
+  });
+  let attributed = 0;
+  const perOutlet = new Map();
+  perUnits.forEach((units, code) => {
+    attributed += units;
+    const pct = contributionPercent(units, dealerTotal);
+    if (pct != null) perOutlet.set(code, pct);
+  });
+  return { dealerTotal, attributed, unattributed: dealerTotal - attributed, perOutlet };
+}
+
+/**
+ * Lima sel jangkauan dealer untuk layar: Ring 1, Ring 2, Ring 3, Others, Pelanggaran
+ * Wilayah, dari hasil dealerRingSplit(). Nilainya dibulatkan lewat balancedPercents()
+ * supaya jumlah yang TAMPIL tetap 100,0% (bukan 99,9 atau 100,1). Tanpa penjualan sama
+ * sekali: "—", bukan lima nol.
+ *
+ * @return {Array<{label: string, value: string}>}
+ */
+export function ringCells(split) {
+  const ada = split.total > 0;
+  const nilai = ada ? balancedPercents([
+    split.percent1, split.percent2, split.percent3,
+    split.percentOthers, split.percentViolation,
+  ]) : [];
+  const teks = (i) => (ada ? nilai[i].toFixed(1) + '%' : '—');
+  return [
+    { label: 'Ring 1', value: teks(0) },
+    { label: 'Ring 2', value: teks(1) },
+    { label: 'Ring 3', value: teks(2) },
+    { label: 'Others', value: teks(3) },
+    { label: 'Pelanggaran Wilayah', value: teks(4) },
+  ];
 }

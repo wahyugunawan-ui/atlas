@@ -45,12 +45,14 @@ async function seed() {
 
   // D1 terdaftar di Sleman, D2 di Cilacap, D3 tanpa kota (Excel tak terbaca), D4 dibuat
   // manual tanpa legacy_code.
-  const dealer = `INSERT INTO dealers (dealer_code, dealer_name, legacy_code, city_code)
-                  VALUES (?, ?, ?, ?)`;
-  await store.run(db, dealer, ['DEALERSATU', 'DEALER SATU', '9', '34.04']);
-  await store.run(db, dealer, ['DEALERDUA', 'DEALER DUA', '77', '33.01']);
-  await store.run(db, dealer, ['DEALERTIGA', 'DEALER TIGA', '88', null]);
-  await store.run(db, dealer, ['DEALEREMPAT', 'DEALER EMPAT', null, '34.04']);
+  // Kecamatan asal: D1 di 34.04.01 (Mlati), D2 di 33.01.01 (Cilacap), D3 tanpa kota
+  // maupun kecamatan, D4 dibuat manual tanpa legacy_code.
+  const dealer = `INSERT INTO dealers (dealer_code, dealer_name, legacy_code, city_code, district_code)
+                  VALUES (?, ?, ?, ?, ?)`;
+  await store.run(db, dealer, ['DEALERSATU', 'DEALER SATU', '9', '34.04', '34.04.01']);
+  await store.run(db, dealer, ['DEALERDUA', 'DEALER DUA', '77', '33.01', '33.01.01']);
+  await store.run(db, dealer, ['DEALERTIGA', 'DEALER TIGA', '88', null, null]);
+  await store.run(db, dealer, ['DEALEREMPAT', 'DEALER EMPAT', null, '34.04', null]);
 
   const rollup = `
     INSERT INTO segment_rollup
@@ -94,6 +96,60 @@ function minta(port, method, path, { cookie, body } = {}) {
     if (payload) req.write(payload);
     req.end();
   });
+}
+
+/**
+ * Perbatasan kecamatan untuk kategori Others vs Pelanggaran Wilayah.
+ *
+ * Empat kecamatan di sekitar X (1° ≈ 110 km di sini):
+ *   X = kecamatan dealer 9 · Y menempel di timur X · G di barat X dengan celah ±55 m
+ *   (celah sempit hasil ST_Union kelurahan) · F di utara X dengan jarak ±330 m (memang
+ *   terpisah).
+ * Hanya X, Y, dan G yang boleh ditoleransi; F tidak. Dan batasnya harus datang dari POLIGON,
+ * bukan dari angka lain: dealer di kecamatan terpencil tidak membawa tetangga.
+ */
+async function tesPerbatasan() {
+  const db = store.db();
+  const BASE_LNG = 110.0;
+  const BASE_LAT = -7.8;
+  const kotak = (x0, x1, dy = 0) => ({
+    type: 'Polygon',
+    coordinates: [[[BASE_LNG + x0, BASE_LAT + dy], [BASE_LNG + x1, BASE_LAT + dy],
+      [BASE_LNG + x1, BASE_LAT + dy + 0.01], [BASE_LNG + x0, BASE_LAT + dy + 0.01],
+      [BASE_LNG + x0, BASE_LAT + dy]]],
+  });
+  // Desa yang SUDAH ada (V_SLEMAN, kecamatan dealer 9) tinggal diberi poligon.
+  const beriPoligon = async (kode, geom) => store.run(db, `
+    UPDATE villages SET geom = ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)),
+                        geom_m = ST_Transform(ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)), 32749)
+    WHERE village_code = ?`, [JSON.stringify(geom), JSON.stringify(geom), kode]);
+  const tambah = async (kode, kecamatan, geom) => store.run(db, `
+    INSERT INTO villages (village_code, village_name, district_code, district_name,
+                          city_code, city_name, province_code, lat, lng, geom, geom_m)
+    VALUES (?, ?, ?, ?, '34.04', 'Sleman', '34', NULL, NULL,
+            ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)),
+            ST_Transform(ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)), 32749))`,
+  [kode, kode, kecamatan, kecamatan, JSON.stringify(geom), JSON.stringify(geom)]);
+
+  await beriPoligon(V_SLEMAN, kotak(0, 0.05));                            // X
+  await tambah('34.04.02.0001', '34.04.02', kotak(0.05, 0.10));           // Y menempel
+  await tambah('34.04.03.0001', '34.04.03', kotak(-0.0505, -0.0005));     // G celah ±55 m
+  await tambah('34.04.04.0001', '34.04.04', kotak(0, 0.05, 0.013));       // F ±330 m
+  await db.query('REFRESH MATERIALIZED VIEW district_shapes');
+
+  const batas = await repo.dealerBorderDistricts();
+  assert.deepStrictEqual((batas.DEALERSATU || []).sort(),
+    ['34.04.01', '34.04.02', '34.04.03'], 'perbatasan dealer 9 salah');
+  assert.ok(!(batas.DEALERSATU || []).includes('34.04.04'),
+    'kecamatan yang berjarak ±330 m ikut ditoleransi — pengecualian terlalu longgar');
+  assert.ok((batas.DEALERSATU || []).includes('34.04.02'),
+    'kecamatan yang menempel pada kecamatan dealer tidak ditoleransi');
+  assert.ok((batas.DEALERSATU || []).includes('34.04.03'),
+    'celah sempit ±55 m antar kecamatan membuat tetangga sungguhan tidak terdeteksi');
+  assert.ok((batas.DEALERSATU || []).includes('34.04.01'), 'kecamatan dealer sendiri tidak ikut');
+  // Dealer tanpa kecamatan tercatat tidak punya perbatasan; D2 (kecamatan tanpa poligon).
+  assert.strictEqual(batas.DEALERTIGA, undefined);
+  assert.strictEqual(batas.DEALERDUA, undefined, 'dealer di kecamatan tanpa poligon dapat tetangga');
 }
 
 async function tesRute(testConfig) {
@@ -143,6 +199,16 @@ async function tesRute(testConfig) {
     assert.strictEqual(await jumlah('pos=O1&dealer=DEALERDUA&kota=33.01'), lewatPos,
       'pos dikalikan dealer/kota — mekanisme pos berubah diam-diam');
 
+    // Kec (kecamatan ASAL dealer): dealer yang terdaftar di kecamatan itu, dan lebih sempit
+    // dari kota — kalau keduanya dikirim, Kec yang menang.
+    assert.strictEqual(await jumlah('kec=34.04.01'), 10, 'Kec 34.04.01 = dealer 9 (10 pelanggan)');
+    assert.strictEqual(await jumlah('kec=33.01.01'), 11,
+      'Kec 33.01.01 = dealer 77 termasuk 6 pelanggannya di Sleman');
+    assert.strictEqual(await jumlah('kec=34.04.01&kota=33.01'), 10,
+      'kota mengalahkan kec — seharusnya yang lebih sempit yang menang');
+    assert.strictEqual(await jumlah('kec=99.99.99'), 0, 'kecamatan tanpa dealer harus kosong');
+    assert.strictEqual(await jumlah('kec=ngasal'), 25, 'kode kecamatan salah-bentuk tidak diabaikan');
+
     // Panel Cakupan Sumber turun jadi daftar DEALER begitu kota dipilih.
     const cakupan = await minta(port, 'GET',
       `/api/v1/cakupan-sumber?periode=${PERIOD}&kota=33.01`, { cookie });
@@ -160,7 +226,18 @@ async function tesRute(testConfig) {
     const salah = await minta(port, 'PUT', '/api/dealers/DEALERTIGA', {
       cookie, body: { cityCode: 'ngasal' } });
     assert.strictEqual(salah.status, 400, 'kode kota asal-asalan diterima');
+    const ubahKec = await minta(port, 'PUT', '/api/dealers/DEALERTIGA', {
+      cookie, body: { districtCode: '33.01.01' } });
+    assert.strictEqual(ubahKec.json.dealer.districtCode, '33.01.01', 'kecamatan dealer tak tersimpan');
+    const salahKec = await minta(port, 'PUT', '/api/dealers/DEALERTIGA', {
+      cookie, body: { districtCode: 'ngasal' } });
+    assert.strictEqual(salahKec.status, 400, 'kode kecamatan asal-asalan diterima');
     const summary = await minta(port, 'GET', '/api/summary', { cookie });
+    assert.ok(summary.json.dealerBorder && summary.json.dealerBorder.DEALERSATU,
+      '/api/summary tidak membawa dealerBorder — kategori Others/Pelanggaran tak punya dasar');
+    assert.strictEqual(
+      summary.json.dealers.find((d) => d.code === 'DEALERSATU').districtCode, '34.04.01');
+    assert.ok(!('businessReferencePercent' in summary.json), 'Acuan Bisnis muncul lagi di summary');
     const tiga = summary.json.dealers.find((d) => d.code === 'DEALERTIGA');
     assert.strictEqual(tiga.cityCode, '33.01', '/api/summary tidak membawa cityCode dealer');
   } finally {
@@ -179,6 +256,19 @@ async function main() {
     assert.deepStrictEqual(kota, {
       DEALERSATU: '34.04', DEALERDUA: '33.01', DEALERTIGA: null, DEALEREMPAT: '34.04',
     }, 'listDealers tidak membawa cityCode — frontend tak bisa menyusun kumpulan dealer');
+    const kecDealer = Object.fromEntries(dealers.map((d) => [d.code, d.districtCode]));
+    assert.deepStrictEqual(kecDealer, {
+      DEALERSATU: '34.04.01', DEALERDUA: '33.01.01', DEALERTIGA: null, DEALEREMPAT: null,
+    }, 'listDealers tidak membawa districtCode — filter Kec tidak punya dasar');
+
+    // Kumpulan dealer per KECAMATAN (filter Kec).
+    assert.deepStrictEqual(await repo.legacyCodesOfDistricts(['34.04.01']), ['9']);
+    assert.deepStrictEqual(await repo.legacyCodesOfDistricts(['33.01.01']), ['77']);
+    assert.deepStrictEqual(await repo.legacyCodesOfDistricts(['99.99.99']), [],
+      'kecamatan tanpa dealer harus memberi daftar kosong');
+    assert.deepStrictEqual(await repo.legacyCodesOfDistricts([]), []);
+
+    await tesPerbatasan();
 
     // 2. Kumpulan dealer per kota.
     assert.deepStrictEqual(await repo.legacyCodesOfCities(['33.01']), ['77']);

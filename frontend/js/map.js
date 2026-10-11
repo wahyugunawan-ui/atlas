@@ -1,12 +1,12 @@
 /**
- * Peta: basemap, lapisan choropleth, batas kabupaten, radius, dan titik penjualan.
+ * Peta: basemap, lapisan choropleth, batas kabupaten, dan titik tiga sumber.
  */
 import {
   ATTRIBUTION, ATTRIBUTION_SATELLITE, BASEMAP_PMTILES, BASEMAP_SATELLITE,
 } from './config.js';
 import { classOf, dealerColor, percentileBreaks, RAMP, COLOR_EMPTY } from './colors.js';
 import { $, bbox, displayCityName, esc, formatNumber, sumBy, toast } from './dom.js';
-import { fetchDistrictCustomers, fetchKpiJarak, fetchTitikPeta } from './api.js';
+import { fetchDistrictCustomers, fetchTitikPeta } from './api.js';
 import {
   activeRows, fusionFilterPeta, pageFilters, regionDealerCodes, scopeValue,
 } from './filters.js';
@@ -17,7 +17,7 @@ import {
 import { fiturTelusur } from './fusion-alasan.js';
 // Cuma tabel warna+nama golongan (data murni, tanpa DOM) — bukan lingkaran modul.
 import { SEGMENTS } from './fusion-segments.js';
-import { contributionsForRows, fixedContributionClass, unitsForRows } from './sales-stats.js';
+import { contributionsForRows, unitsForRows } from './sales-stats.js';
 // outlets.js TIDAK meng-import berkas ini (ia cuma memakai colors, dom, filters, dan
 // state), jadi impor ini tidak membuat lingkaran modul. Lihat catatan serupa di
 // outlets.js yang memakai window.openDealerDetail justru untuk menghindari lingkaran
@@ -241,21 +241,6 @@ export function addLayers() {
     paint: { 'text-color': '#e2231a', 'text-halo-color': '#ffffff', 'text-halo-width': 1.6 },
   });
 
-  // Titik penjualan: lapisan circle, BUKAN marker DOM. Delapan belas ribu elemen DOM
-  // akan membekukan halaman begitu petanya digeser.
-  S.map.addSource('jual', { type: 'geojson', data: EMPTY_COLLECTION });
-  S.map.addLayer({
-    id: 'jual-titik', type: 'circle', source: 'jual',
-    layout: { visibility: 'none' },
-    paint: {
-      'circle-radius': ['interpolate', ['linear'], ['zoom'], 7, 1.4, 11, 2.6, 14, 4.5],
-      'circle-color': ['get', 'warna'],
-      'circle-opacity': 0.75,
-      'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 11, 0, 13, 0.5],
-      'circle-stroke-color': '#ffffff',
-    },
-  });
-
   /* ---- tiga lapisan titik penyatuan sumber (docs/FUSION.md 3.1) -------------
      MENYIMPANG DARI SPESIFIKASI, disengaja: spesifikasi meminta Servis berupa
      SYMBOL layer berbentuk kotak lewat map.addImage(). addImage() belum pernah
@@ -263,7 +248,7 @@ export function addLayers() {
      di browser — memperkenalkan API baru yang tidak terverifikasi demi bentuk
      kotak bukan pertukaran yang sepadan. Ketiganya circle layer, dibedakan lewat
      ISIAN dan OUTLINE:
-       KTP    = isian warna dealer, tanpa outline   (menyatu dengan titik penjualan)
+       KTP    = isian warna dealer, tanpa outline
        Servis = isian merah muda tetap, kecil       (warna tetap = bukan soal dealer)
        Kirim  = isian kosong, outline kuning        (kosong-berpinggir beda jelas)
      Warna tetap dipakai untuk DEALER pada lapisan KTP; golongan tidak pernah
@@ -371,33 +356,6 @@ export function addLayers() {
   S.map.on('movestart', batalkanKartuTitik);
   S.map.on('zoomstart', batalkanKartuTitik);
 
-  // Lingkaran radius KPI Jarak. Fill sangat tipis + garis putus-putus: ini alat ukur,
-  // bukan data — tidak boleh menutupi wilayah di bawahnya.
-  //
-  // NAMANYA `kpi-jarak-*`. JANGAN diberi awalan "radius".
-  //
-  // test/page.test.js bagian 11 menjaga agar dua nama lapisan milik fitur lama
-  // "Lingkaran Radius 3/5/7/10 km" (dibuang total 2026-08-31) tidak pernah muncul
-  // lagi di berkas ini. Penjaganya mencocokkan POTONGAN TEKS pada seluruh isi
-  // map.js — komentar pun ikut terbaca. Jadi menuliskan kedua nama lama itu di sini,
-  // bahkan hanya untuk menjelaskan, sudah cukup untuk menyalakannya; itu persis yang
-  // terjadi pada versi pertama komentar ini. KPI Jarak juga memang hal yang berbeda
-  // dari radius jangkauan lama, jadi namanya tidak seharusnya mirip.
-  S.map.addSource('kpi-jarak', { type: 'geojson', data: EMPTY_COLLECTION });
-  S.map.addLayer({
-    id: 'kpi-jarak-isi', type: 'fill', source: 'kpi-jarak',
-    layout: { visibility: 'none' },
-    paint: { 'fill-color': '#0b2f6b', 'fill-opacity': 0.05 },
-  });
-  S.map.addLayer({
-    id: 'kpi-jarak-garis', type: 'line', source: 'kpi-jarak',
-    layout: { visibility: 'none' },
-    paint: {
-      'line-color': '#0b2f6b', 'line-width': 1.4, 'line-dasharray': [3, 2],
-      'line-opacity': 0.8,
-    },
-  });
-
   /* ---- telusur SATU mesin (docs/FUSION.md 3.1 dan 3.4) ---------------------
      Ditambahkan PALING AKHIR supaya berada di atas lapisan titik massal: yang
      sedang ditelusuri satu orang, dan ia harus terlihat di antara ribuan titik
@@ -484,7 +442,7 @@ export function hapusTelusurDiPeta() {
 }
 
 /* ==========================================================================
-   TITIK KTP / SERVIS / PENGIRIMAN + RADIUS KPI
+   TITIK KTP / SERVIS / PENGIRIMAN
    ==========================================================================
    Datanya HITUNGAN per kelurahan, bukan koordinat — lihat fusion-points.js untuk
    alasan lengkapnya (centroid kelurahan, dan PII pada titik pengiriman). Yang di
@@ -510,7 +468,7 @@ function tandaSaringPeta() {
   // sama persis dengan yang dikirim muatTitikFusi() — kalau tidak, pindah halaman
   // tidak menginvalidasi cache dan titiknya diam saja.
   const f = fusionFilterPeta();
-  return [f.periode, f.kota, f.dealer, f.pos].join('|');
+  return [f.periode, f.kota, f.kec, (f.kotaBanyak || []).join(','), f.dealer, f.pos].join('|');
 }
 
 /** Ambil hitungan titik dari server, lalu gambar ulang. Aman dipanggil berkali-kali. */
@@ -881,38 +839,7 @@ function bangunTitikFusi(jenis) {
   return data.cache[jenis];
 }
 
-/**
- * Lingkaran radius KPI Jarak, dipusatkan di pos atau dealer yang sedang dipilih.
- *
- * Spesifikasi menggambarnya di sekitar titik KTP saat telusur satu Nomor Mesin.
- * Layar telusur itu SUDAH ada (panel `#telusur-panel`, fusion.js), tapi ia
- * menggambar lingkarannya sebagai diagram skematik di dalam panel — bukan di atas
- * peta ini. Menyambungkan keduanya berarti mengirim koordinat KTP satu mesin ke
- * lapisan peta, dan itu keputusan PII tersendiri yang belum diambil.
- *
- * Di peta, pusatnya karena itu tetap pos/dealer terpilih — pertanyaan yang bisa
- * dijawab tanpa PII sama sekali ("sejauh apa 50 km dari pos ini?"), bukan
- * lingkaran karangan di tengah peta.
- */
-function bangunRadiusKpi() {
-  if (!S.kpiRadiusM) return EMPTY_COLLECTION;
-
-  const kodePos = scopeValue('pos');
-  const kodeDealer = scopeValue('dealer');
-  let titik = null;
-  if (kodePos !== 'ALL') titik = S.outletByCode[kodePos];
-  else if (kodeDealer !== 'ALL') titik = S.dealerByCode[kodeDealer];
-
-  if (!titik || !Number.isFinite(titik.lat) || !Number.isFinite(titik.lng)) {
-    return EMPTY_COLLECTION;
-  }
-  return {
-    type: 'FeatureCollection',
-    features: [circle(titik.lng, titik.lat, S.kpiRadiusM)],
-  };
-}
-
-/** Toggle tiga titik dan radius KPI. Memuat data saat pertama dibutuhkan. */
+/** Toggle tiga titik sumber. Memuat data saat pertama dibutuhkan. */
 export function toggleFusionPoints() {
   redrawMap();
 }
@@ -994,6 +921,18 @@ function addDistrictLayers() {
     id: 'kec-garis', type: 'line', source: 'kec',
     paint: { 'line-color': '#ffffff', 'line-width': 0.9, 'line-opacity': 0.8 },
   });
+  // Kecamatan KOSONG (nol penjualan pada filter aktif) tidak berisi warna dan garisnya
+  // ABU-ABU, bukan putih (2026-10-11). Lapisan tersendiri di atas kec-garis, bukan
+  // warna garis berbasis feature-state di kec-garis: tepi yang dipakai bersama dua
+  // kecamatan digambar dua kali, dan putih milik tetangga yang berisi akan menimpa abu-
+  // abu kalau lapisannya sama. `kosong` diisi paintChoropleth().
+  S.map.addLayer({
+    id: 'kec-garis-kosong', type: 'line', source: 'kec',
+    paint: {
+      'line-color': '#94a3b8', 'line-width': 1,
+      'line-opacity': ['case', ['boolean', ['feature-state', 'kosong'], false], 1, 0],
+    },
+  });
   S.map.addLayer({
     id: 'kec-terpilih', type: 'line', source: 'kec',
     filter: ['==', ['get', 'kode'], ''],
@@ -1038,11 +977,8 @@ function addDistrictLayers() {
 
 /** Warna tiap ring dealer — sama dengan RING_COLORS di rings.js. */
 const RING_WARNA = { 1: '#0b2f6b', 2: '#3b6fc4', 3: '#93b4e6' };
-/** Warna tiap coverage pos — sama dengan COVERAGE_COLORS di rings.js. */
-const COVERAGE_WARNA = {
-  1: '#0b2f6b', 2: '#1d4ed8', 3: '#3b6fc4', 4: '#0891b2',
-  5: '#0d9488', 6: '#65a30d', 7: '#ca8a04', 8: '#c2410c',
-};
+/** Warna tiap jenis Kec. Tercover pos — sama dengan COVERAGE_COLORS di rings.js. */
+const COVERAGE_WARNA = { 1: '#0891b2', 2: '#ca8a04' };
 /** Warna sorotan "Lokasi" — netral, beda dari kedua keluarga warna di atas. */
 const LOKASI_WARNA = '#0f172a';
 
@@ -1176,89 +1112,80 @@ export function setRingViewDealer(value) {
 /** @param {number|'lokasi'} value */
 export function setCoverageViewPos(value) {
   return setGroupView('pos-coverage', value,
-    ['cv-lokasi', 'cv-1', 'cv-2', 'cv-3', 'cv-4', 'cv-5', 'cv-6', 'cv-7', 'cv-8']);
+    ['cv-lokasi', 'cv-1', 'cv-2']);
 }
 
 /**
- * Aktif/nonaktifkan kontrol "Tampilan Ring Dealer" dan "Tampilan Coverage POS"
- * menurut scope yang sedang dipilih (permintaan eksplisit: ring dealer hanya relevan
- * kalau dealer difilter, coverage pos hanya relevan kalau pos difilter). Dipanggil
- * dari filters.js setiap scope berubah.
+ * Tampilkan blok KONTEKSTUAL "Ring Dealer" / "Kec. Tercover" di tengah atas peta
+ * (2026-10-11, permintaan tim; dulu dua bagian di dalam Opsi Peta yang cuma diredupkan).
  *
- * Kalau grup yang sedang disorot jadi tidak relevan untuk scope baru, matikan
- * sorotannya — highlight lama yang menggantung tanpa scope yang menjelaskannya
- * cuma membingungkan.
+ * - Ring Dealer muncul HANYA kalau tepat satu dealer dipilih (klik di peta maupun filter).
+ * - Kec. Tercover muncul HANYA kalau tepat satu pos dipilih.
+ * - Keduanya hilang waktu pilihannya dibatalkan, dan tidak pernah tampil bersamaan.
+ *
+ * "Tepat satu" selalu benar, karena filter hanya memegang satu dealer dan satu pos.
+ * Yang perlu dijaga: memilih pos ikut mengisi dealernya (filter berjenjang), jadi POS
+ * MENANG — saat pos terpilih yang tampil Kec. Tercover pos itu, bukan Ring Dealer
+ * milik dealernya. Dipanggil dari filters.js tiap scope berubah dan dari redrawMap().
+ *
+ * Sorotan yang menggantung (grup yang sedang disorot tapi blok-nya sudah hilang) ikut
+ * dimatikan: highlight tanpa kontrol yang menjelaskannya cuma membingungkan.
  */
 export function syncGroupControls() {
-  // Pos menang atas dealer: memilih pos ikut mengisi dealernya (filter berjenjang), tapi
-  // yang relevan tetap coverage pos — bukan ring dealernya.
   const posAktif = scopeValue('pos') !== 'ALL';
   const dealerAktif = scopeValue('dealer') !== 'ALL' && !posAktif;
 
-  const ringBox = $('pilihan-ring-dealer');
-  const coverBox = $('pilihan-coverage-pos');
-  if (ringBox) ringBox.classList.toggle('nonaktif', !dealerAktif);
-  if (coverBox) coverBox.classList.toggle('nonaktif', !posAktif);
+  const ringBlok = $('blok-ring-dealer');
+  const coverBlok = $('blok-kec-tercover');
+  if (ringBlok) ringBlok.classList.toggle('hidden', !dealerAktif);
+  if (coverBlok) coverBlok.classList.toggle('hidden', !posAktif);
 
-  // Bagiannya ikut MEMBUKA/MENUTUP sendiri, bukan cuma redup (permintaan tim
-  // 2026-09-20): filter Dealer membuka Ring Dealer dan menutup Coverage POS, filter
-  // Pos kebalikannya. Dulu keduanya selalu terbuka dan yang tidak relevan cuma
-  // diredupkan — panel Opsi Peta jadi panjang oleh bagian yang sedang tidak bisa
-  // dipakai, dan yang relevan terdorong ke bawah lipatan.
-  //
-  // Tanpa scope apa pun (dua-duanya 'ALL'), keduanya DIBIARKAN apa adanya — orang
-  // yang sengaja membuka satu bagian untuk membacanya tidak boleh ditutup paksa oleh
-  // penggambaran ulang yang tidak ia minta.
-  const ringGrup = $('grup-ring-dealer');
-  const coverGrup = $('grup-coverage-pos');
-  if (dealerAktif || posAktif) {
-    if (ringGrup) ringGrup.open = dealerAktif;
-    if (coverGrup) coverGrup.open = posAktif;
-  }
-
+  const sebelum = S.ringView.mode;
   if (S.ringView.mode === 'dealer-ring' && !dealerAktif) S.ringView = { mode: null, value: null };
   if (S.ringView.mode === 'pos-coverage' && !posAktif) S.ringView = { mode: null, value: null };
+  // Gaya tombol ikut dibersihkan waktu sorotan dimatikan lewat jalur ini (setGroupView()
+  // hanya memperbarui gayanya waktu tombolnya sendiri diklik).
+  if (sebelum && !S.ringView.mode) {
+    ['rv-lokasi', 'rv-1', 'rv-2', 'rv-3', 'cv-lokasi', 'cv-1', 'cv-2'].forEach((id) => {
+      const tombol = $(id);
+      if (!tombol) return;
+      tombol.classList.remove('bg-white', 'text-slate-800', 'shadow-sm');
+      tombol.classList.add('text-slate-500');
+    });
+  }
   paintGroupView();
 }
-
 /**
  * Warnai KECAMATAN (satuan analisis sejak 2026-10-10; sebelumnya kelurahan) menurut
  * Kontribusi Penjualan (% terhadap total KOTANYA SENDIRI), bukan unit mentah — sejak
  * 2026-08-30. Wilayah kecil yang justru dominan di kotanya sendiri terlihat gelap,
  * bukan tenggelam di bawah wilayah bervolume besar dari kota lain.
  *
- * Dua mode (S.heatmapMode, lihat setHeatmapMode()):
- * - 'relative' (bawaan): kelas persentil dari sebaran kontribusi yang sedang tampil —
- *   mesin yang sama dengan sebelumnya (percentileBreaks/classOf di colors.js), cuma
- *   input-nya sekarang kontribusi %.
- * - 'fixed': interval TETAP (sales-stats.js KONTRIBUSI_TETAP), sama di mana pun dan
- *   kapan pun — dua kelurahan dengan kontribusi yang sama persis SELALU warna sama,
- *   tidak bergantung siapa lagi yang sedang difilter.
+ * Kelasnya selalu PERSENTIL dari sebaran yang sedang tampil (status kelompok relatif).
+ * Yang berbeda hanya nilai yang dipersentilkan, lihat `pakaiUnit`. Mode "Per Nilai
+ * Kontribusi" (interval tetap) dihapus 2026-10-11.
+ *
+ * Kecamatan tanpa nilai (nol penjualan pada filter aktif) TIDAK berisi warna dan garisnya
+ * abu-abu: ditandai lewat feature-state `kosong` (lapisan kec-garis-kosong).
  */
 export function paintChoropleth(rows) {
-  // MODE RELATIF DENGAN FILTER DEALER/POS memakai unit MUTLAK, bukan kontribusi %
-  // terhadap kota (perbaikan 2026-09-20, dilaporkan tim). Kontribusi % membagi dengan
-  // total kota DARI BARIS YANG SUDAH TERSARING: satu dealer dengan 1 unit di kota yang
-  // — bagi dealer itu — juga cuma 1 unit menghasilkan 100%, jadi kelurahan dengan
-  // penjualan PALING SEDIKIT justru tampil paling gelap. Difilter per kota hasilnya
-  // benar karena penyebutnya sama untuk semua kelurahan yang tampil.
+  // UNIT MUTLAK, bukan kontribusi % terhadap kota, dipakai kalau:
   //
-  // Tanpa filter dealer/pos, kontribusi % TETAP dipakai — itu keputusan sengaja
-  // 2026-08-30 supaya kelurahan kecil yang dominan di kotanya tidak tenggelam.
+  // 1. Filter DEALER/POS aktif (perbaikan 2026-09-20, dilaporkan tim). Kontribusi %
+  //    membagi dengan total kota DARI BARIS YANG SUDAH TERSARING: satu dealer dengan 1
+  //    unit di kota yang — bagi dealer itu — juga cuma 1 unit menghasilkan 100%, jadi
+  //    kecamatan dengan penjualan PALING SEDIKIT justru tampil paling gelap.
+  // 2. Filter KOTA/KARESIDENAN aktif (2026-10-11). Keduanya kini memilih KUMPULAN DEALER,
+  //    jadi baris yang lolos berisi penjualan dealer-dealer itu di kota pelanggan mana
+  //    pun — cacat yang sama seperti butir 1.
+  // 3. Saklar "Status Kelompok Relatif" dimatikan (S.statusRelatif === false): pengguna
+  //    meminta jumlah unit, bukan kontribusi.
   //
-  // Mode 'fixed' TIDAK ikut: intervalnya memang didefinisikan atas kontribusi %
-  // (KONTRIBUSI_TETAP), dan artinya justru "sama di mana pun" — mengubah satuannya
-  // menurut filter akan menghancurkan satu-satunya sifat yang membuatnya berguna.
-  const fixed = S.heatmapMode === 'fixed';
-  //
-  // Sejak 2026-10-11 kota dan karesidenan ikut: keduanya kini memilih KUMPULAN DEALER,
-  // jadi baris yang lolos berisi penjualan dealer-dealer itu di kota pelanggan mana pun.
-  // Penjualan yang menyasar kota lain cuma beberapa unit, dan kontribusi % terhadap
-  // total kota-pelanggan dari baris tersaring itu akan menjadikannya 100% — persis cacat
-  // yang diperbaiki untuk dealer/pos di atas.
-  const pakaiUnit = !fixed
-    && (scopeValue('dealer') !== 'ALL' || scopeValue('pos') !== 'ALL'
-      || scopeValue('kota') !== 'ALL' || pageFilters().kares !== 'ALL');
+  // Tanpa semuanya, kontribusi % TETAP dipakai — keputusan sengaja 2026-08-30 supaya
+  // kecamatan kecil yang dominan di kotanya tidak tenggelam.
+  const pakaiUnit = S.statusRelatif === false
+    || scopeValue('dealer') !== 'ALL' || scopeValue('pos') !== 'ALL'
+    || scopeValue('kota') !== 'ALL' || pageFilters().kares !== 'ALL';
 
   const kontribusi = pakaiUnit
     ? unitsForRows(rows, S.districtByCode)
@@ -1268,17 +1195,10 @@ export function paintChoropleth(rows) {
 
   S.geo.features.forEach((f) => {
     const value = kontribusi.get(f.properties.kode);
-    let warna = COLOR_EMPTY;
-    if (value != null) {
-      if (fixed) {
-        const cls = fixedContributionClass(value);
-        warna = cls < 0 ? COLOR_EMPTY : RAMP[Math.min(cls, RAMP.length - 1)];
-      } else {
-        const cls = classOf(value, breaks);
-        warna = cls < 0 ? COLOR_EMPTY : RAMP[cls];
-      }
-    }
-    S.map.setFeatureState({ source: 'kec', id: f.properties.kode }, { warna });
+    const cls = value != null ? classOf(value, breaks) : -1;
+    const warna = cls < 0 ? COLOR_EMPTY : RAMP[cls];
+    S.map.setFeatureState({ source: 'kec', id: f.properties.kode },
+      { warna, kosong: cls < 0 });
   });
 
   // `satuan` ikut dikembalikan supaya legenda MENYEBUT apa yang sedang diukur. Tanpa
@@ -1287,31 +1207,28 @@ export function paintChoropleth(rows) {
   return { perDistrict, breaks, satuan: pakaiUnit ? 'unit' : 'persen' };
 }
 
-/**
- * Sinkronkan tampilan tombol Dynamic/Static dengan S.heatmapMode.
- *
- * Terpisah dari setHeatmapMode() supaya titik auto-switch di filters.js (waktu filter
- * Kota berganti) bisa memakainya lewat window TANPA memicu window.renderAll() kedua —
- * setScope()/clearScope() di filters.js sudah berakhir di renderAll() sendiri.
- */
-export function syncHeatmapModeButtons() {
-  ['relative', 'fixed'].forEach((m) => {
-    const button = $('hm-' + m);
-    if (button) {
-      button.className = 'flex-1 px-2 py-1.5 rounded-md text-[10px] font-bold ' +
-        (m === S.heatmapMode ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500');
-    }
-  });
-}
-
-/** @param {'relative'|'fixed'} mode */
-export function setHeatmapMode(mode) {
-  if (mode !== 'relative' && mode !== 'fixed') return;
-  S.heatmapMode = mode;
-  syncHeatmapModeButtons();
+/** Saklar "Status Kelompok Relatif" di Opsi Peta (nyala bawaan). Mati = peta dalam unit. */
+export function setStatusRelatif() {
+  const kotak = $('opt-status-relatif');
+  S.statusRelatif = kotak ? kotak.checked : true;
   window.renderAll();
 }
 
+/**
+ * Buka/tutup panel Opsi Peta lewat tombol "Set Tampilan Peta" di pojok kanan atas.
+ * Tersembunyi bawaan (2026-10-11): panelnya menutupi peta, dan sebagian besar sesi tidak
+ * menyentuh opsinya sama sekali.
+ */
+export function toggleOpsiPeta() {
+  const panel = $('opsi-peta-panel');
+  const tombol = $('btn-opsi-peta');
+  if (!panel) return;
+  const terbuka = panel.classList.toggle('hidden') === false;
+  if (tombol) {
+    tombol.setAttribute('aria-expanded', String(terbuka));
+    tombol.classList.toggle('bg-slate-100', terbuka);
+  }
+}
 /**
  * Bagian VISUAL peta saja: warna heatmap, titik, dan marker — tanpa satu pun panel.
  *
@@ -1365,23 +1282,17 @@ export function redrawMap() {
   // coverage pos) diatur TERPISAH oleh setGroupPaint()/paintGroupView() di bawah.
   if (kecamatanSiap) {
     const tampilKec = on('opt-kecamatan');
-    ['kec-garis', 'kec-nama'].forEach((id) => {
+    ['kec-garis', 'kec-garis-kosong', 'kec-nama'].forEach((id) => {
       if (S.map.getLayer(id)) {
         S.map.setLayoutProperty(id, 'visibility', tampilKec ? 'visible' : 'none');
       }
     });
   }
 
-  // Kontrol + sorotan Tampilan Ring Dealer/Coverage POS ikut ruang lingkup —
-  // dipanggil di sini supaya ganti dealer/pos otomatis memperbarui aktif/nonaktif
-  // tombolnya dan sorotannya tanpa perlu klik ulang.
+  // Blok kontekstual Ring Dealer / Kec. Tercover + sorotannya ikut ruang lingkup —
+  // dipanggil di sini supaya ganti dealer/pos otomatis menampilkan/menyembunyikan
+  // bloknya tanpa perlu klik ulang.
   syncGroupControls();
-
-  const showPoints = on('opt-jual');
-  if (showPoints) S.map.getSource('jual').setData(buildSalePoints());
-  S.map.setLayoutProperty('jual-titik', 'visibility', showPoints ? 'visible' : 'none');
-  if ($('map-note')) $('map-note').classList.toggle('hidden', !showPoints);
-
   // Tiga titik penyatuan sumber. Datanya diambil sekali, lalu dipakai ulang; kalau
   // saringannya sudah berganti, diambil lagi. Pengambilannya asinkron dan memanggil
   // redrawMap() lagi setelah selesai — jadi di lintasan INI layernya cukup dibiarkan
@@ -1398,29 +1309,6 @@ export function redrawMap() {
     }
     S.map.setLayoutProperty(LAYER_TITIK[jenis], 'visibility', tampil ? 'visible' : 'none');
   });
-
-  // Radius KPI Jarak. Ambangnya diambil sekali dari server; sampai datang, lingkaran
-  // tidak digambar sama sekali — lebih baik tidak ada daripada lingkaran berjari-jari
-  // tebakan yang terlihat persis seperti yang sungguhan.
-  const tampilRadius = on('opt-kpi-jarak');
-  if (tampilRadius && S.kpiRadiusM == null && !S.kpiRadiusLoading) {
-    S.kpiRadiusLoading = true;
-    fetchKpiJarak()
-      .then((k) => { S.kpiRadiusM = k.radiusM; })
-      .catch(() => { S.kpiRadiusM = null; })
-      .finally(() => { S.kpiRadiusLoading = false; redrawMap(); });
-  }
-  if (tampilRadius) S.map.getSource('kpi-jarak').setData(bangunRadiusKpi());
-  ['kpi-jarak-isi', 'kpi-jarak-garis'].forEach((id) => {
-    S.map.setLayoutProperty(id, 'visibility', tampilRadius ? 'visible' : 'none');
-  });
-
-  // Titik penjualan ikut ruang lingkup.
-  //
-  // Yang disaring lapisan MapLibre, bukan datanya. Membangun ulang belasan ribu titik
-  // tiap kali dropdown disentuh terasa berat, dan titiknya akan melompat-lompat
-  // sehingga orang mengira datanya berubah.
-  if (showPoints) S.map.setFilter('jual-titik', salePointFilter());
 
   // Di atas citra satelit, isian pekat menutupi apa pun yang membuat satelit berguna.
   const satellite = S.basemap === 'satelit';
@@ -1440,15 +1328,13 @@ export function redrawMap() {
 }
 
 /* ==========================================================================
-   TITIK PENJUALAN
+   GEOMETRI TITIK
    ==========================================================================
-   Alamat konsumen tidak punya koordinat, jadi titiknya disebar acak DI DALAM
-   desanya masing-masing. Yang ditunjukkan sebaran, bukan lokasi rumah — dan
-   halaman menyebutkannya di sudut peta waktu lapisan ini menyala. Sejak 2026-10-10
-   analisisnya berhenti di kecamatan, tapi sebarannya SENGAJA tetap per desa
-   (keputusan user): lebih aktual, dan tidak ada angka per desa yang ikut tampil.
+   Lapisan "Titik Penjualan" (satu titik acak per unit terjual, dibangkitkan di peta)
+   DIHAPUS 2026-10-11 atas permintaan tim: titik KTP (default nyala) sudah menampilkan
+   sebaran pelanggan berwarna dealer, dan keduanya saling menumpuk. Yang tersisa di sini
+   hanya uji titik-dalam-poligon, dipakai districtAt() di bawah.
    ========================================================================== */
-
 function pointInRing(lng, lat, ring) {
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
@@ -1458,108 +1344,6 @@ function pointInRing(lng, lat, ring) {
         lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
   }
   return inside;
-}
-
-/**
- * Dibangkitkan sekali lalu dipakai ulang.
- *
- * Mengacak ulang tiap kali filter berubah akan membuat titiknya melompat-lompat, dan
- * orang akan mengira datanya yang berubah. Benihnya tetap, jadi titik yang sama selalu
- * muncul di tempat yang sama.
- */
-export function buildSalePoints() {
-  if (S.salePoints) return S.salePoints;
-
-  // Titiknya dibangun untuk RENTANG periode yang aktif, bukan satu bulan. Perbandingan
-  // teks aman karena 'YYYY-MM' lebar-tetap — alasan lengkapnya di filters.js.
-  const { from, to } = pageFilters();
-  const rows = S.sales.filter((r) =>
-    (from === 'ALL' || r.period >= from) && (to === 'ALL' || r.period <= to));
-
-  const byVillage = {};
-  rows.forEach((r) => { (byVillage[r.village] ||= []).push(r); });
-
-  const ringByVillage = {};
-  S.villageGeo.features.forEach((f) => {
-    const rings = f.geometry.type === 'Polygon'
-      ? [f.geometry.coordinates[0]]
-      : f.geometry.coordinates.map((p) => p[0]);
-    ringByVillage[f.properties.kode] = rings.reduce((a, b) => (b.length > a.length ? b : a));
-  });
-
-  let seed = 991;
-  const rand = () => {
-    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-    return seed / 0x7fffffff;
-  };
-
-  const features = [];
-  Object.keys(byVillage).forEach((code) => {
-    const ring = ringByVillage[code];
-    if (!ring) return;
-
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    ring.forEach(([x, y]) => {
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-    });
-
-    byVillage[code].forEach((row) => {
-      for (let i = 0; i < row.units; i++) {
-        let lng = 0;
-        let lat = 0;
-        let ok = false;
-        for (let tries = 0; tries < 24 && !ok; tries++) {
-          lng = minX + rand() * (maxX - minX);
-          lat = minY + rand() * (maxY - minY);
-          ok = pointInRing(lng, lat, ring);
-        }
-        if (!ok) continue;               // poligon terlalu tipis: lewati saja
-        const district = S.districtByCode[row.district] || {};
-        features.push({
-          type: 'Feature',
-          properties: {
-            warna: dealerColor(S.registry, row.dealer), dealer: row.dealer,
-            outlet: row.outlet, district: row.district,
-            kota: district.cityCode || '',
-          },
-          geometry: { type: 'Point', coordinates: [lng, lat] },
-        });
-      }
-    });
-  });
-
-  S.salePoints = { type: 'FeatureCollection', features };
-  return S.salePoints;
-}
-
-/** Titik penjualan dibangun ulang kalau periodenya berganti. */
-export function invalidateSalePoints() { S.salePoints = null; }
-
-/** Ekspresi filter lapisan titik penjualan, mengikuti ruang lingkup aktif. */
-function salePointFilter() {
-  const clauses = ['all'];
-  const f = pageFilters();
-
-  // Kares, kota, dealer, dan pos berjenjang — semua tingkat yang aktif di-AND-kan lewat
-  // 'all'.
-  if (f.outletCode !== 'ALL') clauses.push(['==', ['get', 'outlet'], f.outletCode]);
-  if (f.dealerCode !== 'ALL') clauses.push(['==', ['get', 'dealer'], f.dealerCode]);
-
-  // Kota/Karesidenan memilih KUMPULAN DEALER yang terdaftar di sana, BUKAN titik yang
-  // jatuh di dalam batas kota itu. Semua titik penjualan dealer-dealer itu tetap tampil,
-  // juga yang berada di kota/karesidenan lain. Prop `kota` pada titik (kota lokasi
-  // penjualan) sengaja tidak dipakai di sini. ['literal', []] cocok dengan tidak ada
-  // titik sama sekali — itu jawaban yang benar kalau tidak ada dealer terdaftar di sana.
-  const dealerWilayah = regionDealerCodes(f);
-  if (dealerWilayah) clauses.push(['in', ['get', 'dealer'], ['literal', dealerWilayah]]);
-
-  return clauses.length === 1 ? null : clauses;
 }
 
 /* ==========================================================================

@@ -144,6 +144,9 @@ async function test() {
   }
   assert.strictEqual(CLASS_LABELS.length, RAMP.length,
     'jumlah label legenda harus sama dengan jumlah kelas');
+  assert.strictEqual(COLOR_EMPTY, 'rgba(0, 0, 0, 0)',
+    'kecamatan kosong harus TANPA isian (transparan) — bukan krem atau putih');
+  assert.ok(!RAMP.includes(COLOR_EMPTY), 'warna kosong sama dengan salah satu kelas ramp');
   assert.notStrictEqual(COLOR_EMPTY, RAMP[0],
     '"nol" dan "paling sedikit" harus bisa dibedakan');
 

@@ -141,9 +141,9 @@ async function summary() {
     pendingNames: (await store.one(db, `
       SELECT COUNT(*) AS n FROM unmatched
       WHERE period = (SELECT MAX(period) FROM unmatched)`)).n,
-    // Acuan bisnis, bukan hasil statistik — lihat config.js. Dikirim di sini supaya
-    // panel wilayah bisa menghitung Selisih/Rasio terhadap Acuan tanpa permintaan kedua.
-    businessReferencePercent: config.businessReferencePercent,
+    // Kecamatan tempat tiap dealer berada + yang berbatasan langsung (dihitung dari poligon
+    // kecamatan): bahan kategori Others vs Pelanggaran Wilayah di ringkasan jangkauan dealer.
+    dealerBorder: await dealerBorderDistricts(),
   };
 }
 
@@ -704,7 +704,7 @@ async function allDealerRings() {
 }
 
 /**
- * Seluruh coverage pos, dibentuk posCoverage[outletCode][districtCode] = 1..8.
+ * Seluruh Kec. Tercover pos, dibentuk posCoverage[outletCode][districtCode] = 1..2.
  *
  * Konsep baru sejak 2026-08-31 sore, bukan penggantian nama dari `coverage` (rasio
  * radius PostGIS lama, lihat backend/server/coverage-store.js) — lihat docs/DECISIONS.md.
@@ -787,11 +787,11 @@ async function saveDealerRings(dealerCode, assignments) {
 }
 
 /**
- * Ganti seluruh coverage satu pos sekaligus. Pola sama persis dengan saveDealerRings,
- * bedanya rentang nilai (1..8) dan tabel tujuannya.
+ * Ganti seluruh Kec. Tercover satu pos sekaligus. Pola sama persis dengan saveDealerRings,
+ * bedanya rentang nilai (1..2 sejak 2026-10-11, dulu 1..8) dan tabel tujuannya.
  *
  * @param {string} outletCode
- * @param {Object} assignments  {districtCode: 1..8}
+ * @param {Object} assignments  {districtCode: 1..2}
  */
 async function savePosCoverage(outletCode, assignments) {
   const db = store.db();
@@ -801,8 +801,8 @@ async function savePosCoverage(outletCode, assignments) {
 
   const entries = Object.entries(assignments || {});
   for (const [, num] of entries) {
-    if (!Number.isInteger(Number(num)) || Number(num) < 1 || Number(num) > 8) {
-      throw new Error('Coverage harus angka 1 sampai 8.');
+    if (!Number.isInteger(Number(num)) || Number(num) < 1 || Number(num) > 2) {
+      throw new Error('Kec. tercover harus angka 1 atau 2.');
     }
   }
 
@@ -1269,7 +1269,7 @@ async function listOutletsForImport() {
 async function listDealers() {
   return store.all(store.db(), `
     SELECT d.dealer_code AS code, d.dealer_name AS name, d.address, d.lat, d.lng,
-           d.city_code AS "cityCode",
+           d.city_code AS "cityCode", d.district_code AS "districtCode",
            COUNT(o.outlet_code) FILTER (WHERE NOT o.is_dealer_proxy) AS "outletCount"
     FROM dealers d
     LEFT JOIN outlets o ON o.dealer_code = d.dealer_code
@@ -1294,17 +1294,20 @@ async function createDealer(data) {
   if (ada) throw new Error(`Nama ${name} sudah dipakai oleh dealer "${ada.dealer_name}".`);
 
   await store.run(db, `
-    INSERT INTO dealers (dealer_code, dealer_name, address, lat, lng, city_code, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    INSERT INTO dealers (dealer_code, dealer_name, address, lat, lng, city_code,
+                         district_code, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   [code, name, data.address ? String(data.address).trim() : null,
     data.lat === undefined || data.lat === null ? null : data.lat,
     data.lng === undefined || data.lng === null ? null : data.lng,
     data.cityCode || null,
+    data.districtCode || null,
     new Date().toISOString()]);
 
   return store.one(db,
     `SELECT dealer_code AS code, dealer_name AS name, address, lat, lng,
-            city_code AS "cityCode" FROM dealers WHERE dealer_code = ?`,
+            city_code AS "cityCode", district_code AS "districtCode"
+     FROM dealers WHERE dealer_code = ?`,
     [code]);
 }
 
@@ -1334,7 +1337,7 @@ async function updateDealer(code, patch) {
 
   await store.run(db, `
     UPDATE dealers SET dealer_name = ?, address = ?, lat = ?, lng = ?, city_code = ?,
-                       updated_at = ?
+                       district_code = ?, updated_at = ?
     WHERE dealer_code = ?`, [
     name,
     patch.address === undefined ? current.address : patch.address,
@@ -1342,12 +1345,15 @@ async function updateDealer(code, patch) {
     patch.lng === undefined ? current.lng : patch.lng,
     // undefined = tidak diubah; null/'' = dikosongkan (dealer keluar dari filter Kota).
     patch.cityCode === undefined ? current.city_code : (patch.cityCode || null),
+    // Sama untuk kecamatan: undefined = tidak diubah, kosong = dikosongkan.
+    patch.districtCode === undefined ? current.district_code : (patch.districtCode || null),
     new Date().toISOString(), code,
   ]);
 
   return store.one(db,
     `SELECT dealer_code AS code, dealer_name AS name, address, lat, lng,
-            city_code AS "cityCode" FROM dealers WHERE dealer_code = ?`,
+            city_code AS "cityCode", district_code AS "districtCode"
+     FROM dealers WHERE dealer_code = ?`,
     [code]);
 }
 
@@ -1365,6 +1371,45 @@ async function legacyCodesOfCities(cityCodes) {
     `SELECT legacy_code AS "legacyCode" FROM dealers
      WHERE city_code = ANY(?) AND legacy_code IS NOT NULL`, [cityCodes]);
   return rows.map((r) => r.legacyCode);
+}
+
+/**
+ * Sama seperti legacyCodesOfCities(), untuk filter Kec: kode numerik Excel seluruh dealer
+ * yang TERDAFTAR di salah satu kecamatan (dealers.district_code).
+ */
+async function legacyCodesOfDistricts(districtCodes) {
+  if (!districtCodes || !districtCodes.length) return [];
+  const rows = await store.all(store.db(),
+    `SELECT legacy_code AS "legacyCode" FROM dealers
+     WHERE district_code = ANY(?) AND legacy_code IS NOT NULL`, [districtCodes]);
+  return rows.map((r) => r.legacyCode);
+}
+
+/**
+ * Jarak (meter) di bawah mana dua kecamatan dianggap BERBATASAN LANGSUNG. ST_Touches
+ * murni terlalu ketat: poligon `district_shapes` dibangun dari gabungan kelurahan yang
+ * tepinya tidak selalu berimpit, jadi dua kecamatan bertetangga bisa menyisakan celah
+ * sempit. Celah itu cuma beberapa meter; 100 m menutupnya tanpa menyeret kecamatan yang
+ * memang terpisah.
+ */
+const BATAS_KECAMATAN_M = 100;
+
+/**
+ * Kecamatan tempat tiap dealer berada beserta kecamatan yang berbatasan langsung
+ * dengannya: {dealerCode: [districtCode, ...]}. Seluruhnya ditoleransi sebagai "Others",
+ * bukan "Pelanggaran Wilayah", di ringkasan jangkauan dealer — pengecualian untuk dealer
+ * yang berada di perbatasan kota. Dealer tanpa kecamatan tercatat tidak muncul di sini.
+ */
+async function dealerBorderDistricts() {
+  const rows = await store.all(store.db(), `
+    SELECT d.dealer_code AS "dealerCode",
+           ARRAY_AGG(DISTINCT n.district_code) AS districts
+    FROM dealers d
+    JOIN district_shapes s ON s.district_code = d.district_code
+    JOIN district_shapes n ON ST_DWithin(n.geom_m, s.geom_m, ?)
+    WHERE d.district_code IS NOT NULL
+    GROUP BY d.dealer_code`, [BATAS_KECAMATAN_M]);
+  return Object.fromEntries(rows.map((r) => [r.dealerCode, r.districts]));
 }
 
 /** Tolak kalau masih ada pos yang menunjuk dealer ini — pindahkan dulu manual. */
@@ -2089,7 +2134,7 @@ module.exports = {
   fusionDistrictCustomers,
   latestFusionPeriod, fusionTotals, fusionRows, fusionByCity, fusionByDealer,
   fusionEngineDetail, setAppConfig, fusionMatrix, fusionOverlap, legacyDealerCode,
-  legacyCodesOfCities,
+  legacyCodesOfCities, legacyCodesOfDistricts, dealerBorderDistricts,
   fusionSourceCoverage, fusionVillagePoints,
   summary, unmatched, imports, periodSummary, periodDataSummary,
   serviceVisits, deliveryPings, deleteSourcePeriod,

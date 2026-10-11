@@ -20,17 +20,18 @@
  */
 
 /**
- * Ramp volume, terang -> gelap. Lima langkah — dipakai KEDUA mode heatmap (relative
- * DAN fixed) sejak 2026-08-31, keduanya lima kelas (lihat sales-stats.js KONTRIBUSI_TETAP).
+ * Ramp volume, terang -> gelap. Lima langkah — kelas persentil heatmap (status kelompok
+ * relatif). Mode interval-tetap yang dulu berbagi ramp ini dihapus 2026-10-11.
  */
 export const RAMP = ['#cde2fb', '#9ec5f4', '#5598e7', '#256abf', '#104281'];
 
 /**
- * Kelurahan tanpa penjualan. Bukan langkah paling terang dari ramp — "nol" dan
- * "paling sedikit" harus bisa dibedakan, karena kekosongan itu justru yang jadi bahan
- * analisis tim channel.
+ * Kecamatan tanpa penjualan: TANPA isian (transparan) — permintaan tim 2026-10-11, dulu
+ * krem pekat. "Nol" dan "paling sedikit" tetap harus bisa dibedakan, dan sekarang
+ * bedanya lebih tegas: yang kosong tidak berwarna sama sekali, garisnya abu-abu
+ * (lapisan kec-garis-kosong di map.js), sedangkan kelas terendah ramp berwarna biru muda.
  */
-export const COLOR_EMPTY = '#e1e0d9';
+export const COLOR_EMPTY = 'rgba(0, 0, 0, 0)';
 
 /** Dealer yang tidak dikenal. Tidak pernah dikarang jadi warna acak. */
 export const COLOR_UNKNOWN = '#c3c2b7';

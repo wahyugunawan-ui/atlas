@@ -79,6 +79,8 @@ export function fetchCustomers(districtCode, range) {
 export function fetchSegmentation(filter) {
   const q = new URLSearchParams();
   if (filter && filter.periode) q.set('periode', filter.periode);
+  // Kec (kecamatan ASAL dealer) lebih sempit dari kota: server memakainya lebih dulu.
+  if (filter && filter.kec) q.set('kec', filter.kec);
   if (filter && filter.kota && filter.kota !== 'ALL') q.set('kota', filter.kota);
   // Karesidenan: satu parameter `kota` berisi DAFTAR kode, dipisah koma. Mengikuti
   // pola `outlets` yang sudah ada di /api/customers/browse — server memvalidasi tiap
@@ -96,6 +98,8 @@ export function fetchSegmentation(filter) {
 export function fetchPeringkat(filter) {
   const q = new URLSearchParams();
   if (filter && filter.periode) q.set('periode', filter.periode);
+  // Kec (kecamatan ASAL dealer) lebih sempit dari kota: server memakainya lebih dulu.
+  if (filter && filter.kec) q.set('kec', filter.kec);
   if (filter && filter.kota && filter.kota !== 'ALL') q.set('kota', filter.kota);
   // Karesidenan: satu parameter `kota` berisi DAFTAR kode, dipisah koma. Mengikuti
   // pola `outlets` yang sudah ada di /api/customers/browse — server memvalidasi tiap
@@ -112,6 +116,8 @@ export function fetchPeringkat(filter) {
 export function fetchIrisan(filter) {
   const q = new URLSearchParams();
   if (filter && filter.periode) q.set('periode', filter.periode);
+  // Kec (kecamatan ASAL dealer) lebih sempit dari kota: server memakainya lebih dulu.
+  if (filter && filter.kec) q.set('kec', filter.kec);
   if (filter && filter.kota && filter.kota !== 'ALL') q.set('kota', filter.kota);
   // Karesidenan: satu parameter `kota` berisi DAFTAR kode, dipisah koma. Mengikuti
   // pola `outlets` yang sudah ada di /api/customers/browse — server memvalidasi tiap
@@ -128,6 +134,8 @@ export function fetchIrisan(filter) {
 export function fetchMatriks(filter) {
   const q = new URLSearchParams();
   if (filter && filter.periode) q.set('periode', filter.periode);
+  // Kec (kecamatan ASAL dealer) lebih sempit dari kota: server memakainya lebih dulu.
+  if (filter && filter.kec) q.set('kec', filter.kec);
   if (filter && filter.kota && filter.kota !== 'ALL') q.set('kota', filter.kota);
   // Karesidenan: satu parameter `kota` berisi DAFTAR kode, dipisah koma. Mengikuti
   // pola `outlets` yang sudah ada di /api/customers/browse — server memvalidasi tiap
@@ -150,6 +158,8 @@ export function fetchMatriks(filter) {
 export function fetchCakupanSumber(filter) {
   const q = new URLSearchParams();
   if (filter && filter.periode) q.set('periode', filter.periode);
+  // Kec (kecamatan ASAL dealer) lebih sempit dari kota: server memakainya lebih dulu.
+  if (filter && filter.kec) q.set('kec', filter.kec);
   if (filter && filter.kota && filter.kota !== 'ALL') q.set('kota', filter.kota);
   // Karesidenan: satu parameter `kota` berisi DAFTAR kode, dipisah koma. Mengikuti
   // pola `outlets` yang sudah ada di /api/customers/browse — server memvalidasi tiap
@@ -162,9 +172,6 @@ export function fetchCakupanSumber(filter) {
   return request(`${API}v1/cakupan-sumber?${q}`);
 }
 
-/** Ambang KPI Jarak yang sedang berlaku, untuk menggambar lingkaran radius di peta. */
-export const fetchKpiJarak = () => request(`${API}v1/konfigurasi/kpi-jarak`);
-
 /**
  * Hitungan titik KTP/Servis/Pengiriman per kelurahan, untuk tiga lapisan peta.
  *
@@ -174,6 +181,8 @@ export const fetchKpiJarak = () => request(`${API}v1/konfigurasi/kpi-jarak`);
 export function fetchTitikPeta(filter) {
   const q = new URLSearchParams();
   if (filter && filter.periode) q.set('periode', filter.periode);
+  // Kec (kecamatan ASAL dealer) lebih sempit dari kota: server memakainya lebih dulu.
+  if (filter && filter.kec) q.set('kec', filter.kec);
   if (filter && filter.kota && filter.kota !== 'ALL') q.set('kota', filter.kota);
   // Karesidenan: satu parameter `kota` berisi DAFTAR kode, dipisah koma. Mengikuti
   // pola `outlets` yang sudah ada di /api/customers/browse — server memvalidasi tiap
@@ -304,6 +313,9 @@ export function browseCustomers(filters) {
   // jadi daftar dealer.
   if (filters.dealerCities && filters.dealerCities.length) {
     query.set('dealerCities', filters.dealerCities.join(','));
+  }
+  if (filters.dealerDistricts && filters.dealerDistricts.length) {
+    query.set('dealerDistricts', filters.dealerDistricts.join(','));
   }
   if (filters.query) query.set('q', filters.query);
   if (filters.offset) query.set('offset', filters.offset);

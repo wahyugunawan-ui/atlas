@@ -14,17 +14,18 @@
  * mengubah angka yang dilihat orang di Master Pos Dealer. Sebelumnya nilainya tinggal
  * di <select> — dan satu set <select> tidak bisa menyimpan empat halaman sekaligus.
  *
- * cityCode/dealerCode/outletCode SALING EKSKLUSIF sejak [tanggal eksekusi] — permintaan
- * langsung Pakbos, membalikkan keputusan 2026-08-30 yang sempat membuat ketiganya
- * independen. Menyetel satu membuang dua lainnya — lihat setScope() di filters.js.
- * `kares` MANDIRI dari ketiganya, cuma mempersempit pilihan kota (lihat filter-bar.js).
+ * kares > cityCode > districtCode > dealerCode > outletCode BERJENJANG sejak 2026-10-11:
+ * memilih yang kecil mengisi yang besar, memilih yang besar mempersempit yang kecil —
+ * lihat setScope() di filters.js. Kota/kec/kares memilih KUMPULAN DEALER terdaftar,
+ * bukan lokasi pelanggan.
  */
 export function makeFilter() {
   return {
     from: 'ALL',        // batas bawah periode 'YYYY-MM', 'ALL' = sejak awal
     to: 'ALL',          // batas atas periode 'YYYY-MM', 'ALL' = sampai terbaru
-    kares: 'ALL',       // MANDIRI — selalu boleh dipakai bersama tiga field di bawah
+    kares: 'ALL',       // tingkat terbesar
     cityCode: 'ALL',
+    districtCode: 'ALL', // Kec — kecamatan ASAL dealer, di antara kota dan dealer
     dealerCode: 'ALL',
     outletCode: 'ALL',
   };
@@ -89,7 +90,6 @@ export const S = {
   lastImport: null,
   hasCustomers: false,
   pendingNames: 0,         // nama kelurahan yang menunggu dicocokkan manusia
-  businessReferencePercent: 1, // acuan bisnis default; ditimpa data.businessReferencePercent
   panelView: null,         // {kind:'dealer'|'city', code} — isi panel geser
 
   // --- indeks, dibangun sekali saat muat ---
@@ -111,16 +111,11 @@ export const S = {
   basemap: 'satelit',
   markers: [],
   dealerMarkers: [],       // titik HQ dealer, terpisah dari titik pos (S.markers)
-  salePoints: null,        // dibangkitkan sekali, dipakai ulang
   // Hitungan titik tiga sumber per kelurahan (docs/FUSION.md 3.1). Diambil dari
   // server saat salah satu togglenya pertama dinyalakan, lalu dipakai ulang; dibuang
   // jadi null waktu filter berubah supaya tidak menampilkan angka periode lama.
   fusionPoints: null,      // {rows:[{villageCode, districtCode, dealerCode, ktp, servis, kirim}]}
   fusionPointsLoading: false,
-  // Ambang KPI Jarak (meter) untuk lingkaran radius di peta. null = belum diambil;
-  // selama masih null lingkarannya TIDAK digambar, bukan digambar dengan tebakan.
-  kpiRadiusM: null,
-  kpiRadiusLoading: false,
 
   // --- pilihan ---
   // Pos yang sedang dipilih TIDAK disimpan di sini: dia bagian dari filter halaman,
@@ -161,10 +156,15 @@ export const S = {
   treemapChart: null,
   treemapCodes: [],
   districtTrendChart: null, // grafik tren bulanan di panel kecamatan
-  // 'relative' (persentil, bawaan) | 'fixed' (interval tetap). Ditulis di sini dari
-  // sekarang supaya panel ringkasan kota/dealer bisa menyebut mode aktif; belum
-  // mengubah warna peta sungguhan sampai togglenya dipasang di bagian berikutnya.
-  heatmapMode: 'relative',
+  // Saklar "Status Kelompok Relatif" di Opsi Peta (nyala bawaan). Mati = peta diwarnai
+  // menurut jumlah unit mutlak. Mode heatmap "Per Nilai Kontribusi" dihapus 2026-10-11.
+  statusRelatif: true,
+  // Kecamatan tempat tiap dealer berada beserta yang berbatasan langsung dengannya:
+  // {dealerCode: [districtCode, ...]} dari server. Bahan kategori Others vs Pelanggaran Wilayah.
+  dealerBorder: {},
+  // SEMUA kecamatan (bukan hanya yang berpenjualan): kode -> {code, name, cityCode}.
+  // Dibutuhkan filter Kec untuk tahu kota sebuah kecamatan.
+  allDistrictByCode: {},
 
   // --- ring dealer & coverage pos: dealerRings[dealerCode][districtCode] = 1|2|3,
   // posCoverage[outletCode][districtCode] = 1..8 ---
@@ -194,5 +194,4 @@ export const S = {
   pickingOnMap: false,     // menunggu klik di peta untuk mengambil koordinat
 
   // --- konsumen kecamatan yang sedang dibuka; diambil per permintaan ---
-  districtCustomers: null,
 };

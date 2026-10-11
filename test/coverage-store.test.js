@@ -117,9 +117,9 @@ async function test() {
     assert.strictEqual(await coverage.isEmpty(), true);
     assert.strictEqual((await repo.summary()).coverageReady, false,
       'server yang belum menghitung harus mengaku belum, bukan melaporkan 0%');
-    assert.strictEqual((await repo.summary()).businessReferencePercent,
-      require('../backend/server/config').config.businessReferencePercent,
-      'summary() tidak mengirim businessReferencePercent dari config.js');
+    // Acuan Bisnis dihapus 2026-10-11: summary() tidak boleh lagi membawanya.
+    assert.ok(!('businessReferencePercent' in (await repo.summary())),
+      'summary() masih mengirim businessReferencePercent — fitur Acuan Bisnis sudah dihapus');
 
     // --- hitung pertama ---
     const first = await coverage.rebuild(config, null);

@@ -311,6 +311,54 @@ cuma perluasan ke Sulawesi ke timur.
 
 ## Selesai
 
+### Sebelas permintaan tim: Kec, periode hanya KTP, buang Acuan Bisnis, Opsi Peta, lima kategori jangkauan (2026-10-11, putaran kedua)
+
+Belum di-commit saat catatan ini ditulis. **52/52 berkas tes** (`business-reference.test.js`
+dihapus bersama fiturnya; `backfill-dealer-city.test.js` dan `dealer-region.test.js`
+diperluas). Alasan, alternatif, dan batas keputusan ada di DECISIONS 2026-10-11 (putaran
+kedua). Diverifikasi juga di Chrome sungguhan (headless, DevTools protocol): semua halaman
+termuat tanpa galat JavaScript, jenjang Kares>Kota>Kec>Dealer>Pos jalan, blok Ring Dealer /
+Kec. Tercover tampil dan hilang menurut pilihan, Opsi Peta tersembunyi bawaan.
+
+- Filter **Kec** (kecamatan asal dealer) + `dealers.district_code`; `npm run
+  backfill-dealer-city` kini mengisi kota DAN kecamatan (78 dari 78 dealer di laptop ini).
+- Periode (Dari–Sampai) hanya untuk data KTP; Servis dan Pengiriman tampil seluruhnya.
+- Mode "Per Nilai Kontribusi", Acuan Bisnis, bagian Business Reference dan daftar Konsumen
+  di panel kecamatan **dihapus**.
+- Saklar "Status Kelompok Relatif"; Opsi Peta tersembunyi bawaan + tombol "Set Tampilan
+  Peta"; Titik Penjualan, radius KPI, dan bagian Dealer dihapus; titik KTP/Servis/Pengiriman
+  nyala bawaan; legenda di kartunya sendiri; kecamatan kosong tanpa isian + garis abu-abu.
+- Ring Dealer / Kec. Tercover jadi blok kontekstual di tengah atas peta.
+- "Coverage" pos jadi **Kec. Tercover**, dua jenis (migrasi menghapus jenis 3–8).
+- Ringkasan jangkauan dealer lima kategori (Ring 1–3, Others, Pelanggaran Wilayah),
+  jumlah selalu 100,0%; perbatasan dihitung server (PostGIS).
+- Kontribusi pos terhadap dealer dan per pos (tertulis "belum tersedia" sampai penjualan
+  dicatat per pos).
+- Uji mutasi: 17 mutan (filters, sales-stats, fusion, routes, repository, map, schema),
+  semuanya merah.
+
+**Belum dilakukan / dicatat apa adanya:**
+- **Di VPS**: `npm run backfill-dealer-city -- "<Dealer & POS.xlsx>"` (sekali; mengisi kota
+  dan kecamatan dealer) dan restart server (migrasi `schema.sql` menghapus Kec. Tercover
+  jenis 3–8 dan menambah kolom). Sebelum itu filter Kota/Kec/Kares kosong dan lima kategori
+  jangkauan memakai kota dealer yang belum ada. **Belum dijalankan di VPS.**
+- **Angka Pelanggaran Wilayah tinggi** (76 dari 78 dealer punya > 0; mis. ASTRA MOTOR CENTER
+  YOGYAKARTA 25,3%). Itu hasil aturan harfiah; definisinya (terutama Ring 1–3) perlu
+  ditinjau tim sebelum dipakai sebagai temuan.
+- Kontribusi pos ke dealer belum bisa berisi angka: 0 dari 78 dealer punya penjualan per
+  pos fisik. Perlu sumber penjualan per pos (belum ada).
+- `GET /api/v1/konfigurasi/kpi-jarak` (server) dan `fetchCustomers()` + `/api/customers`
+  tidak lagi dipanggil frontend; sengaja tidak dihapus (rute PII dijaga CLAUDE.md; ambang KPI
+  dipakai panel telusur Fusion).
+- Titik KTP/Servis/Pengiriman nyala bawaan: beban `/api/v1/peta/titik` pada data KTP penuh
+  dan saat mode LIVE Fusion belum diukur (data KTP di laptop ini kosong).
+- `data/cakupan.pmtiles` 404 di konsol browser (peta dasar "Lokal" tidak ada di
+  `C:\astra-data\geo`); sudah begitu sebelum perubahan ini dan tidak diperbaiki. Bawaan
+  peta Satelit, jadi tidak terlihat.
+- Master Dealer belum punya isian kota/kecamatan di layar (hanya lewat API atau backfill).
+- Membaca Excel Dealer & POS asli (21 MB) dengan `exceljs` kehabisan memori (dicatat di
+  entri sebelumnya, belum diperbaiki); dipakai salinan ringan di `C:\astra-data\sumber\`.
+
 ### Filter Kota/Karesidenan = kumpulan dealer terdaftar; filter berjenjang (2026-10-11)
 
 Belum di-commit. **53/53 berkas tes** di laptop ini (dua dari tiga tes baru

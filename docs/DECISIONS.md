@@ -4565,3 +4565,85 @@ pelanggannya sebenarnya berada). Filter Dealer dan Pos tidak berubah.
   (`PUT /api/dealers/:code` dengan `cityCode`) atau impor ulang.
 - Tes: `test/filters.test.js` (ditulis ulang), `test/dealer-region.test.js` (baru),
   `test/import.test.js` (`dealerCodes` di `browseCustomers`). Semuanya diuji mutasi.
+
+## [2026-10-11, putaran kedua] Filter Kec, periode hanya KTP, buang Acuan Bisnis/mode Static, Opsi Peta kontekstual, lima kategori jangkauan
+
+Sebelas permintaan tim dalam satu putaran. Keputusan user yang menentukan bentuknya:
+kecamatan dealer dari kolom Kecamatan Excel; kontribusi pos "belum tersedia" selama
+penjualan belum per pos; Kec. Tercover hanya dua kolom pertama; perbatasan = kecamatan yang
+bersentuhan dengan kecamatan dealer; Acuan Bisnis dihapus seluruhnya; saklar status
+kelompok relatif (mati = unit mutlak); lapisan Titik Penjualan dihapus; garis abu-abu hanya
+pada kecamatan kosong.
+
+**Keputusan:**
+- **Filter Kec** (`dealers.district_code`, dari kolom Kecamatan Excel Dealer & POS),
+  urutan skala Kares > Kota > Kec > Dealer > Pos, jenjang dua arah seperti Kota. Kec berarti
+  KECAMATAN ASAL DEALER, bukan kecamatan pelanggan. **Hubungan Kota <-> Kec diturunkan dari
+  DEALER TERDAFTAR, bukan dari geografi.** Ditemukan di data sungguhan: 4 dari 78 dealer
+  terdaftar di satu kota tetapi kecamatannya secara geografis di kota tetangga (ASTRA MOTOR
+  BANTUL: Kab. Bantul, kecamatan Mantrijeron di Kota Yogyakarta; tiga dealer Magelang:
+  Kab. Magelang, kecamatan di Kota Magelang). Versi pertama memakai kota geografis
+  kecamatan dan menghilangkan dealer-dealer itu waktu Kec dipilih (jumlah seluruh Kec
+  17.781 dari 18.915); sesudah diperbaiki jumlahnya 18.915. Satu kecamatan bisa jadi milik
+  lebih dari satu kota; kalau begitu Kota dikosongkan, tidak ditebak.
+- **Periode (Dari–Sampai) hanya menyaring data KTP.** Servis dan Pengiriman tidak lagi
+  dikirimi `periodFrom/periodTo` (`saringSumber()` di fusion.js). Server tetap menerimanya
+  (kontrak API tidak diubah). Flag servis/kirim di titik peta dan Venn sudah dihitung dari
+  seluruh data servis/pengiriman, jadi tidak ada yang perlu diubah di sana.
+- **Dihapus seluruhnya:** mode heatmap "Per Nilai Kontribusi" (interval tetap) dan Acuan
+  Bisnis (selisih/rasio/kelompok, badge per pos, `BUSINESS_REFERENCE_PERCENT`, tes
+  `business-reference.test.js`). Posisi Relatif (kuantil) dipertahankan. Dihapus juga dari
+  panel kecamatan: bagian Business Reference dan daftar Konsumen. Rute `/api/customers` dan
+  `fetchCustomers()` SENGAJA dibiarkan (aturan wajib CLAUDE.md); frontend tidak lagi
+  memanggilnya.
+- **Saklar "Status Kelompok Relatif"** (nyala bawaan) menggantikan tombol Mode Heatmap. Nyala:
+  kelas persentil dari Kontribusi Penjualan. Mati: kelas persentil dari jumlah unit mutlak
+  (mesin `unitsForRows` yang sama dipakai filter dealer/pos/kota/kares).
+- **Opsi Peta tersembunyi bawaan**, dibuka tombol "Set Tampilan Peta" (kanan atas). Isinya:
+  Titik KTP/Servis/Pengiriman nyala bawaan; lapisan Titik Penjualan, lingkaran radius KPI
+  Jarak di peta, dan bagian "Dealer" dihapus. Legenda pindah ke kartunya sendiri supaya
+  warna tetap terbaca walau panel tertutup. Di layar penuh panel ini tidak lagi kolom grid
+  (kolom kanan 240 px dibuang), melainkan kartu melayang seperti di mode biasa.
+- **Ring Dealer dan Kec. Tercover jadi blok kontekstual** di tengah atas peta. Ring Dealer
+  hanya saat satu dealer dipilih TANPA pos; Kec. Tercover hanya saat satu pos dipilih. Pos
+  menang karena memilih pos ikut mengisi dealernya (filter berjenjang).
+- **Kecamatan kosong:** tanpa isian (`COLOR_EMPTY` transparan), garis abu-abu lewat lapisan
+  `kec-garis-kosong` di atas `kec-garis` (bukan warna garis berbasis feature-state: tepi
+  bersama dua kecamatan digambar dua kali dan putih tetangga akan menimpa abu-abu).
+- **"Coverage" pos jadi "Kec. Tercover", hanya dua jenis.** Hanya dua kolom pertama
+  "KEC COVER" Excel yang dipakai. Migrasi di `schema.sql` (idempoten): baris jenis 3–8
+  DIHAPUS, bukan dikolaps ke jenis 2, lalu CHECK jadi 1..2. Jumlah baris yang terhapus di
+  database laptop ini tidak sempat dicatat; yang tersisa 105 baris jenis 1 dan 99 jenis 2.
+  Diperbaiki sekalian: importer memampatkan sel kosong (`.filter(Boolean)`) sehingga isian
+  di KEC COVER 2 yang KEC COVER 1-nya kosong salah tercatat sebagai jenis 1; dan
+  `setPerformanceCriteria('coverage')` yang selalu ditolak (urut menurut coverage tidak
+  pernah aktif).
+- **Ringkasan jangkauan dealer = lima kategori saling lepas:** Ring 1, Ring 2, Ring 3 (tidak
+  berubah; ring menang dan boleh lintas kota), Others (di luar ring tapi di kota terdaftar
+  dealer, atau kecamatan yang ditoleransi), Pelanggaran Wilayah (di luar ring, di luar kota
+  dealer, dan bukan kecamatan yang ditoleransi). Jumlah tampilan selalu 100,0% lewat metode
+  sisa terbesar (`balancedPercents`). "Coverage Gabungan Pos" dihapus. **Pengecualian
+  perbatasan** = kecamatan tempat dealer berada + kecamatan yang berbatasan langsung,
+  dihitung server (`dealerBorderDistricts`, PostGIS `ST_DWithin` 100 m pada
+  `district_shapes`; bukan `ST_Touches` murni karena gabungan kelurahan menyisakan celah
+  sempit antar kecamatan). Kota dealer tak tercatat: sisa non-ring masuk Others dan layar
+  menulis "Kota dealer belum tercatat", karena tidak ada dasar menyebutnya pelanggaran.
+- **Kontribusi pos terhadap dealer** (info pos) dan **kontribusi per pos** (kartu dealer dan
+  panel rincian dealer). Penyebut = seluruh penjualan dealer. Penjualan hari ini seluruhnya
+  di baris proxy tingkat dealer (0 dari 78 dealer punya penjualan per pos fisik), jadi layar
+  menulis "belum tersedia" — kode siap, angkanya muncul sendiri begitu penjualan dicatat per pos.
+
+**Yang perlu dibaca sebagai batas keputusan ini:**
+- Dari data Agustus 2026: 76 dari 78 dealer punya Pelanggaran Wilayah > 0, dan contohnya
+  ASTRA MOTOR CENTER YOGYAKARTA 25,3% (terdaftar di Kab. Sleman; penjualannya di Kota
+  Yogyakarta di luar Ring 1–3 dan di luar kecamatan perbatasan terhitung pelanggaran). Itu
+  hasil aturan harfiah dari permintaan; kalau angkanya terasa terlalu tinggi, yang perlu
+  ditinjau adalah definisi ring, bukan kodenya.
+- "Berbatasan langsung" dipahami sebagai kecamatan yang bersentuhan (toleransi 100 m)
+  dengan kecamatan tempat dealer berada. Belum dikonfirmasi user untuk dealer yang
+  koordinatnya tidak jatuh di kecamatan yang sama dengan kolom Kecamatan Excel-nya.
+- Tabel Lokasi Servis dan Pengiriman tetap menyaring kota menurut LOKASI (mereka tidak punya
+  hubungan ke dealer); Kec tidak berlaku di sana.
+- Titik KTP/Servis/Pengiriman nyala bawaan berarti satu permintaan `/api/v1/peta/titik` saat
+  halaman dibuka dan tiap filter berubah, termasuk tiap langkah mode LIVE di halaman Fusion.
+  Belum diukur bebannya pada data KTP penuh (di DB laptop ini data KTP kosong).

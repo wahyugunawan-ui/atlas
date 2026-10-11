@@ -18,16 +18,15 @@ import {
 import { fillFilterBar, onPeriodChange, resetFilters, syncFilterBar } from './filter-bar.js';
 import { activeRows, applyScope, scopeValue } from './filters.js';
 import {
-  addLayers, fitToScope, invalidateSalePoints, redrawMap, refreshMapVisual, setBasemap,
-  setCoverageViewPos, setHeatmapMode, setRingViewDealer, syncGroupControls,
-  syncHeatmapModeButtons, setupMap, toggleFullscreen,
-  toggleFusionPoints,
+  addLayers, fitToScope, redrawMap, refreshMapVisual, setBasemap,
+  setCoverageViewPos, setRingViewDealer, setStatusRelatif, syncGroupControls,
+  setupMap, toggleFullscreen, toggleFusionPoints, toggleOpsiPeta,
 } from './map.js';
 import {
   closeSelectionInfo, selectOutlet, showDistrictTooltip,
 } from './outlets.js';
 import {
-  closeDealerCard, closeTreemapFull, renderDealerCard, renderDealerLegend, renderTopSummary,
+  closeDealerCard, closeTreemapFull, renderDealerCard, renderTopSummary,
   renderLegend, closePerformaFull, filterPerformanceGroup, openPerformaFull,
   openTreemapFull, renderPerformance, renderTreemap, renderWilayah, selectEntity,
   setPerformanceCriteria, setPerformanceCoverageFocus, setTreemapView, syncFullscreenPanels,
@@ -76,8 +75,8 @@ const HANDLERS = {
   startRingEdit, startCoverageEdit, startGroupEdit, cancelRingEdit, saveRingEdit, ringEditing,
   coverageEditing, anyGroupEditing,
   openRingChooser, closeRingChooser, assignRing,
-  redrawMap, setBasemap, setRingViewDealer, setCoverageViewPos, setHeatmapMode,
-  applyScope, toggleFullscreen, fitToScope, toggleFusionPoints,
+  redrawMap, setBasemap, setRingViewDealer, setCoverageViewPos, setStatusRelatif,
+  toggleOpsiPeta, applyScope, toggleFullscreen, fitToScope, toggleFusionPoints,
   // ringkasan
   setTreemapView, selectEntity, closeDealerCard, togglePerformanceSort,
   toggleLivePerforma, openPerformaFull, closePerformaFull,
@@ -119,7 +118,7 @@ const HANDLERS = {
   // memanggilnya lewat window supaya tidak perlu meng-import filter-bar.js —
   // impor itu menarik combobox.js yang menyentuh `document` saat dimuat, dan
   // membuat fusion.js tidak bisa lagi di-import di Node oleh tesnya.
-  renderAll, reloadSummary, syncHeatmapModeButtons, syncGroupControls, syncFilterBar,
+  renderAll, reloadSummary, syncGroupControls, syncFilterBar,
 };
 Object.assign(window, HANDLERS);
 
@@ -169,7 +168,6 @@ export function renderAll() {
   renderWilayah(rows);
   syncFullscreenPanels();
   renderDealerCard();
-  renderDealerLegend(rows);
 
   // Sejak 2026-08-31 sore: ring milik DEALER, coverage milik POS — tombolnya SATU
   // slot per lokasi, tapi label dan aksinya ikut scope yang sedang aktif. Dealer
@@ -180,7 +178,7 @@ export function renderAll() {
   const dealerScope = scopeValue('dealer') !== 'ALL';
   const posScope = scopeValue('pos') !== 'ALL';
   const bisaEditGroup = dealerScope || posScope;
-  const labelGroup = posScope ? 'Edit coverage' : 'Edit ring';
+  const labelGroup = posScope ? 'Edit kec. tercover' : 'Edit ring';
   $('btn-ring-peta').classList.toggle('hidden', !bisaEditGroup);
   $('btn-ring-peta').querySelector('span').textContent = labelGroup;
 
@@ -231,10 +229,11 @@ function buildIndexes(data) {
   S.lastImport = data.lastImport;
   S.hasCustomers = data.hasCustomers;
   S.pendingNames = data.pendingNames || 0;
-  // Acuan bisnis (Business Reference), bukan hasil statistik — lihat config.js.
-  S.businessReferencePercent = data.businessReferencePercent;
 
   S.dealerRings = data.dealerRings || {};
+  // Kecamatan tempat tiap dealer berada + yang berbatasan langsung (dihitung server dari
+  // poligon kecamatan): bahan kategori Others vs Pelanggaran Wilayah. Lihat dealerRingSplit().
+  S.dealerBorder = data.dealerBorder || {};
   S.posCoverage = data.posCoverage || {};
   S.districtNames = {};
   (data.allDistricts || []).forEach((d) => { S.districtNames[d.code] = d.name; });
@@ -256,6 +255,13 @@ function buildIndexes(data) {
     v.cityName = displayCityName(v.cityName);
     S.districtByCode[v.code] = v;
     S.cityNames[v.cityCode] = v.cityName;
+  });
+  // SEMUA kecamatan (bukan hanya yang berpenjualan): filter Kec perlu tahu kota sebuah
+  // kecamatan, dan nama kota dealer yang belum punya penjualan tetap harus terbaca.
+  S.allDistrictByCode = {};
+  (data.allDistricts || []).forEach((d) => {
+    S.allDistrictByCode[d.code] = d;
+    if (d.cityCode && !S.cityNames[d.cityCode]) S.cityNames[d.cityCode] = displayCityName(d.cityName);
   });
 
   S.outletByCode = {};
@@ -304,7 +310,6 @@ export async function reloadSummary() {
     const data = await fetchSummary();
     buildIndexes(data);
     fillFilters();
-    invalidateSalePoints();
     updateStatus();
     renderAll();
   } catch (error) {

@@ -1,6 +1,6 @@
 /**
- * Uji scripts/backfill-dealer-city.js: mengisi dealers.city_code dari kolom "Kabupaten"
- * Excel Dealer & POS, TANPA menyentuh kolom lain.
+ * Uji scripts/backfill-dealer-city.js: mengisi dealers.city_code dan dealers.district_code
+ * dari kolom "Kabupaten" dan "Kecamatan" Excel Dealer & POS, TANPA menyentuh kolom lain.
  *
  * Yang dijaga, semuanya gagal diam kalau salah:
  *
@@ -27,8 +27,8 @@ async function tulisExcel(file, baris) {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Dealer');
   ws.addRow(['DAFTAR DEALER']);
-  ws.addRow(['Kode Dealer', 'Nama Dealer System', 'Alamat', 'Kabupaten', 'Koordinat', 'Koordinat']);
-  baris.forEach((b) => ws.addRow([b.kode, b.nama, 'Alamat Excel', b.kab, '', '']));
+  ws.addRow(['Kode Dealer', 'Nama Dealer System', 'Alamat', 'Kecamatan', 'Kabupaten', 'Koordinat', 'Koordinat']);
+  baris.forEach((b) => ws.addRow([b.kode, b.nama, 'Alamat Excel', b.kec || '', b.kab, '', '']));
   await wb.xlsx.writeFile(file);
 }
 
@@ -42,6 +42,8 @@ async function main() {
                     city_code, city_name, province_code) VALUES (?, ?, ?, ?, ?, ?, ?)`;
     await store.run(db, desa, ['34.04.01.2001', 'Sendangadi', '34.04.01', 'Mlati', '34.04', 'Kabupaten Sleman', '34']);
     await store.run(db, desa, ['33.01.01.2001', 'Cilacap Kota', '33.01.01', 'Cilacap', '33.01', 'Kabupaten Cilacap', '33']);
+    // 'Mlati' ada di DUA kabupaten: nama yang sama harus dipersempit ke kabupaten dealer.
+    await store.run(db, desa, ['33.01.05.2001', 'Mlati Cilacap', '33.01.05', 'Mlati', '33.01', 'Kabupaten Cilacap', '33']);
 
     const dealer = `INSERT INTO dealers (dealer_code, dealer_name, address, lat, lng, legacy_code, city_code)
                     VALUES (?, ?, ?, ?, ?, ?, ?)`;
@@ -52,11 +54,11 @@ async function main() {
     await store.run(db, dealer, ['LIMA', 'DEALER LIMA', 'Alamat Master', null, null, null, null]);
 
     await tulisExcel(file, [
-      { kode: '9', nama: 'DEALER SATU', kab: 'Kab. Sleman' },           // bentuk singkat
-      { kode: '77', nama: 'DEALER DUA', kab: 'Kabupaten Cilacap' },     // bentuk lengkap
-      { kode: '55', nama: 'DEALER TIGA', kab: 'Kab. Sleman' },          // beda dari DB (33.01)
+      { kode: '9', nama: 'DEALER SATU', kab: 'Kab. Sleman', kec: 'Mlati' },   // Mlati ambigu: dipersempit ke Sleman
+      { kode: '77', nama: 'DEALER DUA', kab: 'Kabupaten Cilacap', kec: 'Mlati' }, // Mlati yang LAIN (Cilacap)
+      { kode: '55', nama: 'DEALER TIGA', kab: 'Kab. Sleman', kec: 'Kecamatan Gaib' }, // kota beda dari DB; kecamatan asing
       { kode: '66', nama: 'DEALER EMPAT', kab: 'Kab. Entah Berantah' }, // kabupaten asing
-      { kode: '404', nama: 'DEALER HANTU', kab: 'Kab. Sleman' },        // tak ada di DB
+      { kode: '404', nama: 'DEALER HANTU', kab: 'Kab. Sleman', kec: 'Mlati' },        // tak ada di DB
     ]);
 
     const log = console.log;
@@ -72,6 +74,14 @@ async function main() {
       SATU: '34.04', DUA: '33.01', TIGA: '34.04', EMPAT: null, LIMA: null,
     }, '"Kab. Sleman"/"Kabupaten Cilacap" tidak bertemu, atau kota tidak diisi/diganti');
 
+    // Kecamatan: nama 'Mlati' sama di Sleman DAN Cilacap, jadi harus jatuh ke kecamatan di
+    // kabupaten dealernya masing-masing, bukan tertukar atau ditebak.
+    const kec = Object.fromEntries((await store.all(store.db(),
+      'SELECT dealer_code, district_code FROM dealers')).map((r) => [r.dealer_code, r.district_code]));
+    assert.deepStrictEqual(kec, {
+      SATU: '34.04.01', DUA: '33.01.05', TIGA: null, EMPAT: null, LIMA: null,
+    }, 'kecamatan ambigu tidak dipersempit ke kabupaten dealer, atau kecamatan asing ditebak');
+
     // 2. Kolom lain tidak tersentuh.
     const satu = await store.one(store.db(),
       "SELECT dealer_name, address, lat, lng FROM dealers WHERE dealer_code = 'SATU'");
@@ -82,12 +92,14 @@ async function main() {
     // 3. Pelaporan.
     assert.strictEqual(hasil.dalamExcel, 5);
     assert.strictEqual(hasil.diisi, 3);
-    assert.deepStrictEqual(hasil.berubah, ['DEALER TIGA (33.01 -> 34.04)'],
+    assert.deepStrictEqual(hasil.berubah, ['DEALER TIGA (kota 33.01 -> 34.04)'],
       'kota yang diganti nilai berbeda tidak dilaporkan');
+    assert.deepStrictEqual(hasil.tanpaKecamatan.sort(), ['DEALER EMPAT', 'DEALER TIGA (Kecamatan Gaib)'],
+      'kecamatan yang tak terbaca/asing harus dilaporkan dengan nama dealernya');
     assert.deepStrictEqual(hasil.tanpaKota, ['DEALER EMPAT'],
       'kabupaten asing harus dilaporkan dengan nama dealernya');
     assert.deepStrictEqual(hasil.tidakDiDatabase, ['DEALER HANTU']);
-    assert.deepStrictEqual(hasil.masihKosong.sort(), ['DEALER EMPAT', 'DEALER LIMA'],
+    assert.deepStrictEqual(hasil.masihTanpaKota.sort(), ['DEALER EMPAT', 'DEALER LIMA'],
       'dealer yang masih tanpa kota harus terdaftar, termasuk yang tak ada di Excel');
 
     // 4. Idempoten.
@@ -96,12 +108,14 @@ async function main() {
     let ulang;
     try { ulang = await backfillDealerCity(config, file); } finally { console.log = log; }
     assert.strictEqual(ulang.diisi, 0, 'jalan kedua mengubah sesuatu');
-    assert.strictEqual(ulang.sama, 3);
+    // EMPAT (tak ada yang terbaca) tidak punya apa-apa untuk diubah, jadi ikut "sama".
+    assert.strictEqual(ulang.sama, 4);
+    assert.deepStrictEqual(ulang.tanpaKecamatan.sort(), ['DEALER EMPAT', 'DEALER TIGA (Kecamatan Gaib)']);
     assert.deepStrictEqual(ulang.berubah, []);
 
     // Store sudah ditutup skrip; closeTestDb menutup lagi (idempoten) dan membuang DB.
-    console.log('OK backfill-dealer-city — kota terisi dari kolom Kabupaten (Kab./Kabupaten ' +
-      'bertemu), nama/alamat/koordinat dealer tidak tersentuh, yang tak terbaca dilaporkan ' +
+    console.log('OK backfill-dealer-city — kota dan kecamatan terisi dari kolom Kabupaten dan ' +
+      'Kecamatan (nama kecamatan ambigu dipersempit ke kabupaten dealer), nama/alamat/koordinat dealer tidak tersentuh, yang tak terbaca dilaporkan ' +
       'dengan namanya, idempoten');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

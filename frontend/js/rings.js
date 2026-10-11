@@ -1,9 +1,9 @@
 /**
- * Mode edit ring dealer & coverage pos: pilih satu kecamatan di peta, lalu tentukan
- * kelompoknya (ring 1-3 untuk dealer, coverage 1-8 untuk pos).
+ * Mode edit ring dealer & kec. tercover pos: pilih satu kecamatan di peta, lalu tentukan
+ * kelompoknya (ring 1-3 untuk dealer, kec. tercover 1-2 untuk pos).
  *
  * Sejak 2026-08-31 sore, ring pindah dari POS+KELURAHAN ke DEALER+KECAMATAN, dan pos
- * mendapat konsep baru coverage (1-8, juga kecamatan) — lihat docs/DECISIONS.md dan
+ * mendapat konsep baru coverage (kini disebut Kec. Tercover, 2 jenis, juga kecamatan) — lihat docs/DECISIONS.md dan
  * komentar di backend/server/schema.sql sekitar `dealer_rings`/`pos_coverage_district`.
  *
  * KEDUA editor (dealer-ring, pos-coverage) berbagi SATU mesin (createGroupEditor di
@@ -25,11 +25,11 @@ import { S } from './state.js';
 /** Warna tiap ring dealer. Satu keluarga, makin jauh makin pudar — jaraknya terbaca. */
 export const RING_COLORS = { 1: '#0b2f6b', 2: '#3b6fc4', 3: '#93b4e6' };
 
-/** Warna tiap coverage pos. Delapan warna berbeda — beda dari ring, lebih banyak slot. */
-export const COVERAGE_COLORS = {
-  1: '#0b2f6b', 2: '#1d4ed8', 3: '#3b6fc4', 4: '#0891b2',
-  5: '#0d9488', 6: '#65a30d', 7: '#ca8a04', 8: '#c2410c',
-};
+/**
+ * Warna tiap jenis Kec. Tercover pos. DUA jenis sejak 2026-10-11 (dulu delapan);
+ * warnanya sengaja dari keluarga lain daripada ring dealer supaya keduanya tidak tertukar.
+ */
+export const COVERAGE_COLORS = { 1: '#0891b2', 2: '#ca8a04' };
 
 /**
  * Satu mesin edit, dipakai dua kali (dealer-ring, pos-coverage) dengan konfigurasi
@@ -39,11 +39,11 @@ export const COVERAGE_COLORS = {
  *
  * @param {Object} config
  * @param {'dealer'|'outlet'} config.entityType
- * @param {number} config.groupCount     3 (ring dealer) atau 8 (coverage pos)
+ * @param {number} config.groupCount     3 (ring dealer) atau 2 (kec. tercover pos)
  * @param {Object} config.colors         RING_COLORS atau COVERAGE_COLORS
  * @param {Function} config.saveFn       saveDealerRings atau savePosCoverage
- * @param {string} config.savedLabel     "Ring dealer" atau "Coverage pos", untuk toast
- * @param {string} config.kataKelompok   "ring" atau "coverage", untuk teks status
+ * @param {string} config.savedLabel     "Ring dealer" atau "Kec. tercover pos", untuk toast
+ * @param {string} config.kataKelompok   "ring" atau "kec. tercover", untuk teks status
  */
 function createGroupEditor({ entityType, groupCount, colors, saveFn, savedLabel, kataKelompok }) {
   /** Salinan kerja: {districtCode: number}. Null berarti mode edit sedang mati. */
@@ -164,7 +164,7 @@ function createGroupEditor({ entityType, groupCount, colors, saveFn, savedLabel,
     kontainer.innerHTML = Array.from({ length: groupCount }, (_, i) => i + 1).map((g) => {
       const kode = Object.keys(isi).filter((c) => isi[c] === g);
       const nama = kode.map((c) => S.districtNames[c] || c).sort((a, b) => a.localeCompare(b));
-      const label = entityType === 'dealer' ? `Ring ${g}` : `Cov ${g}`;
+      const label = entityType === 'dealer' ? `Ring ${g}` : `Tercover ${g}`;
       return `<div class="ring-kotak"><span class="text-[10px] uppercase font-bold ` +
         `text-slate-400 tracking-wider">${esc(label)} <span class="n text-slate-800">` +
         `${nama.length}</span></span><span class="isi" title="${esc(nama.join(', '))}">` +
@@ -201,8 +201,8 @@ const dealerRingEditor = createGroupEditor({
 });
 
 const posCoverageEditor = createGroupEditor({
-  entityType: 'outlet', groupCount: 8, colors: COVERAGE_COLORS,
-  saveFn: savePosCoverage, savedLabel: 'Coverage pos', kataKelompok: 'coverage',
+  entityType: 'outlet', groupCount: 2, colors: COVERAGE_COLORS,
+  saveFn: savePosCoverage, savedLabel: 'Kec. tercover pos', kataKelompok: 'kec. tercover',
 });
 
 /** Editor yang sedang aktif, atau null kalau tidak ada satu pun yang sedang disunting. */
@@ -238,7 +238,7 @@ export function startRingEdit(dealerCode) {
 export function startCoverageEdit(outletCode) {
   const code = outletCode || scopeValue('pos');
   if (!code || code === 'ALL') {
-    toast('Pilih pos dulu sebelum menyunting coverage.', 'error');
+    toast('Pilih pos dulu sebelum menyunting kec. tercover.', 'error');
     return undefined;
   }
   return posCoverageEditor.startFor(code);

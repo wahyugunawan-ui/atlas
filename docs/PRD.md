@@ -224,7 +224,8 @@ halaman. Ditambahkan 2026-08-29 atas permintaan tim menjelang presentasi HO.
 | KF-FILTER-5 | Ujung rentang yang menyilang diseret, bukan ditolak — isian tidak pernah jadi jalan buntu | `test/filters.test.js` |
 | KF-FILTER-11 | Memilih tanda hubung berarti "tanpa batas di sisi itu", bukan hasil kosong | `test/filters.test.js` |
 | KF-FILTER-13 | Daftar tahun tidak dibatasi periode yang sudah diimpor | `test/page.test.js` |
-| KF-FILTER-6 | Karesidenan, kota, dealer, dan pos **berjenjang dua arah** (sejak 2026-10-11): memilih yang kecil mengisi yang besar, memilih yang besar mempersempit yang kecil. Kota/Karesidenan memilih **kumpulan dealer yang terdaftar** di wilayah itu (`dealers.city_code`) dan menampilkan SELURUH penjualan mereka, juga yang pelanggannya di luar wilayah itu | `test/filters.test.js`, `test/dealer-region.test.js` |
+| KF-FILTER-6 | Karesidenan, kota, **kecamatan (Kec)**, dealer, dan pos **berjenjang dua arah** (sejak 2026-10-11; urutan skala Kares > Kota > Kec > Dealer > Pos): memilih yang kecil mengisi yang besar, memilih yang besar mempersempit yang kecil. Kota/Karesidenan memilih **kumpulan dealer yang terdaftar** di wilayah itu (`dealers.city_code`) dan menampilkan SELURUH penjualan mereka, juga yang pelanggannya di luar wilayah itu | `test/filters.test.js`, `test/dealer-region.test.js` |
+| KF-FILTER-16 | Filter Periode (Dari–Sampai) HANYA menyaring data KTP; Data Servis dan Pengiriman selalu tampil seluruhnya (frontend tidak lagi mengirim periode ke /v1/servis dan /v1/pengiriman) | 	est/fusion-pesan-kosong.test.js |
 | KF-FILTER-7 | Memilih ulang nilai yang sama mematikan SLOT ITU SAJA, lewat dropdown maupun klik di peta — slot lain tidak ikut terpengaruh | `test/filters.test.js` |
 | KF-FILTER-8 | Rentang periode berlaku sampai ke database untuk halaman Data Konsumen | `test/import.test.js` |
 | KF-FILTER-9 | Rentang periode terbalik ditolak `/api/customers` (400) dan menghasilkan nol baris di `/api/customers/browse` | `test/server-auth.test.js` |
@@ -272,7 +273,10 @@ menjawab pertanyaan yang sama dengan angka yang berbeda.
 | KF-PETA-21 | Daftar performa bisa dibuka layar penuh; isinya dari sumber yang sama dengan panel biasa | `test/page.test.js` |
 | KF-PETA-22 | Tabel master mengisi tinggi yang tersisa, tanpa sisa ruang kosong di bawahnya | `test/page.test.js` |
 | KF-PETA-23 | Panel rincian kelurahan tidak menutupi tombol kendali peta | `test/page.test.js` |
-| KF-PETA-24 | Panel Opsi Peta muat seluruhnya tanpa digulir; legenda dilipat | `test/page.test.js` |
+| KF-PETA-24 | Panel Opsi Peta TERSEMBUNYI bawaan dan dibuka tombol "Set Tampilan Peta" di pojok kanan atas; legenda di kartunya sendiri (terlipat); bagian "Dealer", "Titik Penjualan", dan lingkaran radius KPI dihapus; Titik KTP/Servis/Pengiriman nyala bawaan | `test/page.test.js` |
+| KF-PETA-26 | Kecamatan tanpa penjualan: tanpa isian dan garis ABU-ABU (lapisan `kec-garis-kosong`); kecamatan berisi tetap bergaris putih | `test/page.test.js`, `test/colors.test.js` |
+| KF-PETA-27 | Ring Dealer tampil sebagai blok kontekstual di tengah atas peta HANYA waktu tepat satu dealer dipilih (tanpa pos); Kec. Tercover HANYA waktu tepat satu pos dipilih; keduanya hilang waktu pilihan dibatalkan dan tidak pernah tampil bersamaan (pos menang) | `test/page.test.js` |
+| KF-PETA-28 | "Kec. Tercover" pos (dulu "Coverage") hanya DUA jenis (1 dan 2), dijaga fungsi simpan, CHECK database, dan importer yang hanya membaca dua kolom KEC COVER pertama | `test/import.test.js` |
 | KF-PETA-25 | Di layar penuh, bilah filter satu baris dan dropdown-nya tidak terpotong wadahnya | `test/page.test.js` |
 | KF-FILTER-15 | Bilah filter muat satu baris di layar ~980 px, dan melipat rapi kalau lebih sempit | `test/page.test.js` |
 | KF-FILTER-14 | Dropdown filter selalu muat di layar: tingginya mengikuti ruang yang ada, membuka ke atas kalau perlu | `test/page.test.js` |
@@ -288,30 +292,31 @@ menyaring `layer.source`: lapisan bertipe `background` tidak punya `source`, jad
 penyaring seperti itu melewatkannya dan lapisan abu-abu pekat tetap menutupi citra
 satelit di bawahnya — dengan ubin yang dijawab 200 OK dan tanpa satu pun error.
 
-### KF-PANEL — Panel wilayah: Overview, Sales, Distribution, Business Reference
+### KF-PANEL — Panel wilayah: Overview, Sales, Distribution
 
-Ditambahkan 2026-08-30. Panel kelurahan/kota/dealer dirombak jadi 4 blok berjenjang:
-Identitas Wilayah → Actual Sales → Sales Contribution → Relative Sales Position →
-Business Reference.
+Ditambahkan 2026-08-30. Panel kelurahan/kota/dealer dirombak jadi blok berjenjang:
+Identitas Wilayah → Actual Sales → Sales Contribution → Relative Sales Position.
+Blok Business Reference dan daftar konsumen kecamatan DIHAPUS 2026-10-11.
 
 | ID | Kebutuhan | Dijaga |
 |---|---|---|
 | KF-PANEL-1 | Kontribusi Penjualan kelurahan dihitung terhadap total KOTANYA SENDIRI, bukan total gabungan lintas kota | `test/sales-stats.test.js` |
 | KF-PANEL-2 | Kota/kelurahan tanpa penjualan sama sekali menampilkan "Data belum tersedia", bukan 0% atau `NaN` | `test/sales-stats.test.js` |
 | KF-PANEL-3 | Posisi Relatif: 5 label (Terbawah/Bawah/Tengah/Atas/Teratas), dihitung dari kuantil sebaran Kontribusi Penjualan yang sedang aktif | `test/sales-stats.test.js` |
-| KF-PANEL-4 | Panel kelurahan: kartu ringkas 4 angka (Total, Kontribusi, Posisi Relatif, Business Reference), grafik tren bulanan kalau rentang periode >1 bulan dan ada datanya, Peringkat X/Y di kota, Rata-rata Kota | `test/page.test.js` |
+| KF-PANEL-4 | Panel kecamatan: kartu ringkas 3 angka (Total, Kontribusi, Posisi Relatif; Business Reference dan daftar Konsumen dihapus 2026-10-11), grafik tren bulanan kalau rentang periode >1 bulan dan ada datanya, Peringkat X/Y di kota, Rata-rata Kota | `test/page.test.js` |
 | KF-PANEL-5 | Grafik tren bulanan TIDAK ditampilkan (bukan grafik kosong) kalau data cuma satu bulan | `test/page.test.js` |
 | KF-PANEL-6 | Panel ringkasan kota (baru): total, jumlah kelurahan berpenjualan, rata-rata Kontribusi, distribusi 5 kelompok Posisi Relatif — dipicu memilih kota tanpa kelurahan spesifik aktif | `test/page.test.js` |
 | KF-PANEL-7 | Panel dealer: kartu ringkas gaya sama (total, kelurahan ber-sales, rata-rata Kontribusi) di atas breakdown kota→kelurahan yang sudah ada | `test/page.test.js` |
 | KF-PANEL-8 | ~~Kelurahan yang sedang dibuka jadi di luar filter kota aktif → panel berganti jadi ringkasan kota~~ **Dicabut 2026-10-11**: filter Kota memilih dealer terdaftar, jadi kecamatan pelanggan di luar kota itu sah dan panelnya dibiarkan terbuka | belum dijaga otomatis (diverifikasi manual) |
 | KF-PANEL-9 | Panel kota/dealer yang ditutup manual TIDAK terbuka lagi sendiri selama filter masih aktif | belum dijaga otomatis (diverifikasi manual) |
-| KF-PANEL-10 | Business Reference: nilai acuan bisa dikonfigurasi lewat `BUSINESS_REFERENCE_PERCENT` di `.env`, default 1% | `test/business-reference.test.js` |
-| KF-PANEL-11 | Reference Gap (selisih poin persentase) dan Reference Ratio (%) dihitung terhadap benchmark AKTIF, bukan hardcode 1% | `test/sales-stats.test.js` |
-| KF-PANEL-12 | Business Reference TIDAK memengaruhi Posisi Relatif maupun klasifikasi heatmap kuantil — dua indikator yang sengaja dipisah (data-driven vs business-driven) | `test/sales-stats.test.js` |
-| KF-PANEL-13 | Peta: dua mode heatmap — "Per Peringkat Relatif" (persentil, bawaan) dan "Per Nilai Kontribusi" (6 kelas interval tetap) | `test/colors.test.js` |
-| KF-PANEL-14 | Legenda peta berubah bentuk sesuai mode heatmap aktif (5 kelas persentil vs 6 kelas interval tetap) | belum dijaga otomatis (diverifikasi manual) |
-
-**KF-PANEL-8 dan KF-PANEL-9 belum ada tes otomatisnya** — logikanya di `renderAll()`
+| KF-PANEL-10 | ~~Business Reference lewat `BUSINESS_REFERENCE_PERCENT`~~ **Dicabut 2026-10-11** bersama seluruh fitur Acuan Bisnis (selisih, rasio, kelompok, badge); `summary()` tidak lagi mengirim nilainya | `test/coverage-store.test.js` |
+| KF-PANEL-11 | ~~Reference Gap / Ratio terhadap benchmark~~ **Dicabut 2026-10-11**: fungsinya tidak lagi diekspor `sales-stats.js` | `test/sales-stats.test.js` |
+| KF-PANEL-12 | ~~Business Reference tidak memengaruhi Posisi Relatif~~ **Dicabut 2026-10-11** (tidak ada lagi yang dipisahkan); Posisi Relatif tetap dari kuantil Kontribusi Penjualan | `test/sales-stats.test.js` |
+| KF-PANEL-13 | Peta: SATU cara pewarnaan — kelas persentil ("status kelompok relatif", bawaan nyala; mati = kelas dari jumlah unit). Mode "Per Nilai Kontribusi" (interval tetap) DIHAPUS 2026-10-11 | `test/sales-stats.test.js`, `test/page.test.js` |
+| KF-PANEL-14 | Legenda peta: judul "Status Kelompok Relatif" (atau "Jumlah Unit per Kecamatan" saat saklar mati), lima kelas persentil, di kartunya sendiri (tetap terlihat walau Opsi Peta tertutup) | `test/page.test.js` |
+| KF-PANEL-15 | Ringkasan jangkauan dealer: LIMA kategori saling lepas — Ring 1, Ring 2, Ring 3, Others (di luar ring tapi di kota dealer atau kecamatan perbatasan yang ditoleransi), Pelanggaran Wilayah (di luar ring, di luar kota dealer, bukan perbatasan). Ring menang; jumlah selalu 100,0% tanpa hitung ganda, juga setelah dibulatkan; kota dealer tak tercatat bukan pelanggaran | `test/sales-stats.test.js`, `test/dealer-region.test.js` |
+| KF-PANEL-16 | Kontribusi POS terhadap DEALER-nya (%) tampil di info pos, dan kontribusi tiap pos tampil di analisis dealer (chip dan panel rincian). Penyebut = seluruh penjualan dealer; selama penjualan belum dicatat per pos, tertulis "belum tersedia", bukan 0% | `test/sales-stats.test.js` |
+**KF-PANEL-9 belum ada tes otomatisnya** — logikanya di `renderAll()`
 (`app.js`), yang butuh DOM/MapLibre untuk diuji penuh. Diverifikasi manual di browser
 terhadap data production: pilih kota A → panel kota A; buka kelurahan di kota A →
 panel kelurahan; ganti ke kota B → panel otomatis berganti jadi ringkasan kota B.

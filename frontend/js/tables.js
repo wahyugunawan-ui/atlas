@@ -6,11 +6,11 @@
  */
 import {
   browseCustomers, createDealer, createOutlet, deleteAlias, deleteDealer, fetchAliases,
-  fetchCustomers, resetOutlets, saveAlias, saveDealer, saveOutlet,
+  resetOutlets, saveAlias, saveDealer, saveOutlet,
 } from './api.js';
 import { dealerColor, percentileBreaks } from './colors.js';
 import {
-  CUSTOMER_PANEL_LIMIT, PROVINCE_NAMES, SHOW_ENGINE_NUMBER, SHOW_HOUSE_PHOTO,
+  PROVINCE_NAMES, SHOW_ENGINE_NUMBER, SHOW_HOUSE_PHOTO,
   TABLE_ROW_LIMIT,
 } from './config.js';
 import {
@@ -19,7 +19,7 @@ import {
 import { syncFilterBar } from './filter-bar.js';
 import {
   activeRows, clearScope, dealerBreakdown, dealerCityOf, pageFilters, regionCityCodes,
-  regionDealerCodes, scopeValue, setScope,
+  scopeValue, setScope,
 } from './filters.js';
 // hentikanLiveFusion IKUT di-import. Sampai 2026-09-18 tidak — switchTab()
 // memanggilnya tanpa pernah mengimpornya, jadi SETIAP pindah ke halaman non-Fusion
@@ -32,10 +32,10 @@ import {
   hentikanLiveFusion, renderDeliveryTable, renderFusion, renderServiceTable,
 } from './fusion.js';
 import { selectOutlet } from './outlets.js';
-import { dealerCardHtml } from './render.js';
+import { dealerCardHtml, dealerWideRows } from './render.js';
 import { fitToScope, kembalikanPeta, pinjamPetaKeFusion } from './map.js';
 import {
-  contributionPercent, contributionsForRows, groupByCity, referenceGap, referenceRatio,
+  contributionPercent, contributionsForRows, groupByCity, posContributionInDealer,
   relativePosition,
 } from './sales-stats.js';
 import { S } from './state.js';
@@ -119,13 +119,7 @@ export function openDealerDetail(dealerCode) {
   // Kota/Karesidenan TIDAK menyaring lagi di sini: keduanya memilih dealer mana yang
   // masuk, dan dealer ini sudah dipilih. Seluruh penjualannya ikut, juga yang
   // pelanggannya di luar kota/karesidenan dealer itu.
-  const f = pageFilters();
-  const rows = S.sales.filter((r) => {
-    if (r.dealer !== dealerCode) return false;
-    if (f.from !== 'ALL' && r.period < f.from) return false;
-    if (f.to !== 'ALL' && r.period > f.to) return false;
-    return Boolean(S.districtByCode[r.district]);
-  });
+  const rows = dealerWideRows(dealerCode);
 
   const cities = dealerBreakdown(rows);
   const total = cities.reduce((sum, k) => sum + k.units, 0);
@@ -141,8 +135,8 @@ export function openDealerDetail(dealerCode) {
     : null;
 
   $('kelurahanDetailBack').innerHTML = '';
-  // Ringkasan dealer (avatar, nama, AVG Kontribusi/Posisi Relatif/Acuan Bisnis,
-  // pecahan ring/coverage) digabung ke ATAS rincian per kecamatan yang sudah ada
+  // Ringkasan dealer (avatar, nama, AVG Kontribusi/Posisi Relatif, lima kategori
+  // jangkauan) digabung ke ATAS rincian per kecamatan yang sudah ada
   // di sini — permintaan user: satu panel, bukan dua langkah klik. Dipakai versi
   // compact yang sama dengan strip #fs-kartu (layar penuh), sudah satu baris
   // ramping. Aman dipanggil di sini: dealerCode yang dikirim ke fungsi ini selalu
@@ -164,9 +158,8 @@ export function openDealerDetail(dealerCode) {
     `<div><div class="text-[10px] uppercase font-bold text-slate-400" ` +
     'title="Rata-rata Kontribusi Penjualan seluruh kecamatan yang dilayani dealer ini, terhadap total dealer ini per kota.">Rata-rata Kontribusi</div>' +
     `<div class="text-lg font-extrabold text-slate-900 mono">${esc(formatPercent(avgContribution))}</div></div>` +
-    `<div><div class="text-[10px] uppercase font-bold text-slate-400">Mode Heatmap</div>` +
-    `<div class="text-sm font-bold text-slate-700 mt-0.5">${esc(heatmapModeLabel())}</div></div>` +
     '</div>' +
+    kontribusiPerPosHtml(dealerCode, rows) +
     sectionHeader('buildings', 'Sebaran per Kota', cities.length) +
     (cities.length
       ? cities.map((k) => dealerCityHtml(k, dealerCode)).join('')
@@ -175,9 +168,38 @@ export function openDealerDetail(dealerCode) {
   showPanel();
 }
 
-/** Belum fungsional mengubah warna peta — togglenya dipasang di bagian berikutnya. */
-function heatmapModeLabel() {
-  return S.heatmapMode === 'fixed' ? 'Per Nilai Kontribusi' : 'Per Peringkat Relatif';
+/**
+ * Kontribusi tiap POS terhadap dealer ini (persentase), di panel rincian dealer.
+ *
+ * Penyebutnya SELURUH penjualan dealer (posContributionInDealer()). Sampai penjualan
+ * dicatat per pos, semuanya ada di baris "proxy" tingkat dealer — jadi yang tampil
+ * "belum tersedia", bukan daftar 0% yang menyesatkan.
+ */
+function kontribusiPerPosHtml(dealerCode, rows) {
+  const posDealer = S.realOutlets.filter((o) => o.dealerCode === dealerCode);
+  const share = posContributionInDealer(rows, (code) => {
+    const o = S.outletByCode[code];
+    return Boolean(o) && !o.synthetic;
+  });
+  const judul = sectionHeader('storefront', 'Kontribusi per Pos', posDealer.length);
+  if (!posDealer.length) {
+    return judul + '<p class="text-xs text-slate-400 text-center py-3">Dealer ini belum punya pos.</p>';
+  }
+  if (!share.attributed) {
+    return judul + '<p class="text-xs text-slate-400 py-2 px-1">Kontribusi per pos belum tersedia: ' +
+      'penjualan dealer ini belum dicatat per pos, jadi persentasenya tidak bisa dihitung.</p>';
+  }
+  const baris = posDealer
+    .map((o) => ({ o, pct: share.perOutlet.get(o.code) || 0 }))
+    .sort((a, b) => b.pct - a.pct)
+    .map(({ o, pct }) => `<div class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer" ` +
+      `onclick="applyScope('pos','${esc(o.code)}')">` +
+      `<span class="flex-1 text-xs text-slate-700 truncate">${esc(o.name)}</span>` +
+      `<span class="text-xs font-bold mono text-slate-800">${esc(pct.toFixed(1))}%</span></div>`)
+    .join('');
+  const sisa = share.dealerTotal ? (share.unattributed / share.dealerTotal) * 100 : 0;
+  return judul + baris +
+    `<div class="px-2 pt-1 text-[11px] text-slate-400">Belum terpetakan ke pos: ${esc(sisa.toFixed(1))}%</div>`;
 }
 
 /**
@@ -240,8 +262,6 @@ export function openCitySummary(cityCode) {
     `<div><div class="text-[10px] uppercase font-bold text-slate-400" ` +
     'title="Rata-rata Kontribusi Penjualan seluruh kecamatan berpenjualan di kota ini.">Rata-rata Kontribusi</div>' +
     `<div class="text-lg font-extrabold text-slate-900 mono">${esc(formatPercent(avgContribution))}</div></div>` +
-    `<div><div class="text-[10px] uppercase font-bold text-slate-400">Mode Heatmap</div>` +
-    `<div class="text-sm font-bold text-slate-700 mt-0.5">${esc(heatmapModeLabel())}</div></div>` +
     '</div>' +
 
     `<div class="pb-3">` +
@@ -338,16 +358,8 @@ export function posisiBadgeHtml(label) {
     `${esc(label)}</span>`;
 }
 
-/** '+0,50 poin persentase' / '-0,58 poin persentase' / 'Data belum tersedia'. */
-function formatGap(n) {
-  if (n == null) return 'Data belum tersedia';
-  const tanda = n > 0 ? '+' : '';
-  return tanda + n.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) +
-    ' poin persentase';
-}
-
 /**
- * Semua angka Blok 3 (Distribution) dan Blok 4 (Business Reference) untuk satu
+ * Semua angka Blok 1 (Overview) dan Blok 3 (Distribution) untuk satu
  * kecamatan, dihitung dari `rows` yang SUDAH melewati seluruh filter aktif (periode,
  * kota, dealer, pos, provinsi) — bukan disaring ulang di sini.
  *
@@ -380,7 +392,6 @@ function districtStats(code, rows) {
       : null;
   }
 
-  const benchmark = S.businessReferencePercent;
   return {
     myUnits,
     contribution,
@@ -388,9 +399,6 @@ function districtStats(code, rows) {
     rank,
     rankTotal,
     cityAverage,
-    benchmark,
-    gap: referenceGap(contribution, benchmark),
-    ratio: referenceRatio(contribution, benchmark),
   };
 }
 
@@ -421,8 +429,9 @@ function renderDistrictTrend(trend) {
 }
 
 /**
- * Panel rincian satu kecamatan — 4 blok: Overview, Sales, Distribution, Business
- * Reference (di atas daftar per-pos dan konsumen yang sudah ada sebelumnya).
+ * Panel rincian satu kecamatan — 3 blok: Overview, Sales, Distribution (di atas daftar
+ * per-pos). Blok Business Reference dan daftar Konsumen kecamatan DIHAPUS 2026-10-11
+ * atas permintaan tim.
  *
  * @param {string} code        kode kecamatan
  * @param {string} [fromDealer] kalau dibuka dari panel dealer, kode dealernya —
@@ -461,13 +470,7 @@ export function openDistrictDetail(code, fromDealer) {
     `title="Kontribusi penjualan kecamatan terhadap total penjualan kotanya.">Kontribusi Penjualan</div>` +
     `<div class="text-lg font-extrabold text-slate-900 mono">${esc(formatPercent(stats.contribution))}</div></div>` +
     `<div><div class="text-[10px] uppercase font-bold text-slate-400">Posisi Relatif</div>` +
-    `<div class="mt-0.5">${posisiBadgeHtml(stats.posisi)}</div></div>` +
-    `<div><div class="text-[10px] uppercase font-bold text-slate-400" ` +
-    'title="Acuan bisnis dari Marketing/Head Department, bukan hasil statistik.">Acuan Bisnis</div>' +
-    `<div class="text-sm font-bold text-slate-700 mt-0.5">${
-      stats.ratio == null ? 'Data belum tersedia'
-        : `${esc(formatPercent(stats.ratio, 0))} dari ${esc(formatPercent(stats.benchmark, 0))}`
-    }</div></div></div>` +
+    `<div class="mt-0.5">${posisiBadgeHtml(stats.posisi)}</div></div></div>` +
 
     // --- Blok 2: SALES ---
     `<div class="pb-3 border-b border-slate-200">` +
@@ -504,98 +507,15 @@ export function openDistrictDetail(code, fromDealer) {
         `<div class="text-[10px] text-slate-400 mono">${esc((perOutlet[outletCode] / total * 100).toFixed(0))}%</div>` +
         `</div></div>`;
     }).join('')
-      : '<p class="text-xs text-slate-400 text-center py-4">Tidak ada penjualan pada filter ini.</p>') +
-
-    // --- Blok 4: BUSINESS REFERENCE ---
-    `<div class="pt-3 pb-3 border-b border-slate-200">` +
-    `<div class="text-[11px] uppercase font-bold text-slate-400 mb-2" ` +
-    'title="Acuan bisnis dari Marketing/Head Department, bukan hasil statistik.">Business Reference</div>' +
-    `<div class="text-xs text-slate-600 space-y-1">` +
-    `<div>Acuan aktif: <b class="text-slate-800">${esc(formatPercent(stats.benchmark, 0))}</b></div>` +
-    `<div title="Kontribusi Penjualan dikurangi Acuan Bisnis.">Selisih dari Acuan: ` +
-    `<b class="text-slate-800">${esc(formatGap(stats.gap))}</b></div>` +
-    `<div title="Kontribusi Penjualan dibagi Acuan Bisnis.">Rasio terhadap Acuan: ` +
-    `<b class="text-slate-800">${esc(formatPercent(stats.ratio, 0))}</b></div>` +
-    '</div></div>' +
-
-    (S.hasCustomers
-      ? sectionHeader('users-three', 'Konsumen', 0).replace('>0<', '>…<') +
-        '<p class="text-xs text-slate-400 text-center py-3" id="district-customers">memuat…</p>'
-      : '');
+      : '<p class="text-xs text-slate-400 text-center py-4">Tidak ada penjualan pada filter ini.</p>');
 
   renderDistrictTrend(trend);
   showPanel();
-
-  if (S.hasCustomers) loadDistrictCustomers(code);
 
   // Sejak 2026-09-14: klik kecamatan di peta (dan jumpFromDealer()/jumpToDistrict()
   // yang berujung ke fungsi ini) ikut auto-Fit — jalur ini TIDAK lewat renderAll(),
   // jadi tidak tercakup hook auto-Fit di sana, perlu baris sendiri di sini.
   if (S.layersReady) fitToScope(true);
-}
-
-/**
- * Konsumen diambil per kecamatan, saat dibuka.
- *
- * Bukan sekaligus di awal seperti versi sebelumnya. Bedanya bukan kecepatan: satu akun
- * dipakai bersama, dan tidak boleh ada satu permintaan yang bisa menyedot seluruh
- * basis data konsumen. Server juga menolak permintaan tanpa kode kecamatan.
- *
- * Desa tiap orang TETAP ditulis (villageName dari server): analisis berhenti di
- * kecamatan, tapi keterangan orangnya tidak dipotong.
- */
-async function loadDistrictCustomers(code) {
-  const holder = $('district-customers');
-  if (!holder) return;
-  try {
-    const { from, to } = pageFilters();
-    const { customers, total: totalServer } = await fetchCustomers(code, { from, to });
-    // Kalau orangnya sudah pindah ke kecamatan lain sebelum ini selesai, jangan timpa.
-    if (S.selectedDistrict !== code) return;
-
-    const outletFilter = scopeValue('pos');
-    const dealerFilter = scopeValue('dealer');
-    // Kota/Karesidenan = kumpulan dealer terdaftar di sana; konsumen dealer lain yang
-    // kebetulan tinggal di kecamatan ini tidak ikut.
-    const wilayah = regionDealerCodes();
-    const dealerWilayah = wilayah ? new Set(wilayah) : null;
-    const list = customers.filter((c) => {
-      const outlet = S.outletByCode[c.outlet] || {};
-      if (outletFilter !== 'ALL' && c.outlet !== outletFilter) return false;
-      if (dealerFilter !== 'ALL' && outlet.dealerCode !== dealerFilter) return false;
-      if (dealerWilayah && !dealerWilayah.has(outlet.dealerCode)) return false;
-      return true;
-    });
-
-    const header = holder.previousElementSibling;
-    if (header) header.querySelector('span:last-child').textContent = formatNumber(list.length);
-
-    holder.outerHTML = list.length
-      ? list.slice(0, CUSTOMER_PANEL_LIMIT).map((c) => {
-        const outlet = S.outletByCode[c.outlet] || {};
-        return `<div class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50">` +
-          `<span class="w-2 h-2 rounded-full shrink-0" style="background:${esc(dealerColor(S.registry, outlet.dealerCode))}"></span>` +
-          `<div class="min-w-0 flex-1"><div class="text-sm text-slate-700 truncate">${esc(c.name)}</div>` +
-          `<div class="text-[11px] text-slate-400 truncate">` +
-          `${c.villageName ? `<b class="font-semibold text-slate-500">${esc(c.villageName)}</b> · ` : ''}` +
-          `${esc(c.address)}</div></div></div>`;
-      }).join('') +
-        (list.length > CUSTOMER_PANEL_LIMIT
-          ? `<div class="text-[11px] text-slate-400 px-2 pt-1">Menampilkan ${CUSTOMER_PANEL_LIMIT} dari ${esc(formatNumber(list.length))}.</div>`
-          : '') +
-        // Server memotong di batasnya sendiri (repository.customersInDistrict). Satu
-        // kecamatan bisa melewatinya; dikatakan, bukan dipotong diam-diam.
-        (totalServer > customers.length
-          ? `<div class="text-[11px] text-amber-600 px-2 pt-1">Server hanya mengirim ` +
-            `${esc(formatNumber(customers.length))} dari ${esc(formatNumber(totalServer))} ` +
-            'konsumen kecamatan ini (terbaru dulu). Persempit periode untuk melihat sisanya.</div>'
-          : '')
-      : '<p class="text-xs text-slate-400 text-center py-3">Tidak ada konsumen pada filter ini.</p>';
-  } catch (error) {
-    if (S.selectedDistrict !== code) return;
-    holder.textContent = 'Data konsumen tidak bisa dimuat: ' + error.message;
-    holder.className = 'text-xs text-slate-400 text-center py-3';
-  }
 }
 
 export function closeDistrictDetail() {
@@ -652,8 +572,8 @@ function groupCell(groupMap, group) {
 }
 
 /**
- * Satu sel ringkas coverage (pos, 1-8): total kecamatan di seluruh 8 grup, rincian
- * per grup di tooltip. Delapan kolom terpisah seperti ring dealer tidak muat di
+ * Satu sel ringkas Kec. Tercover (pos, jenis 1-2): total kecamatan di kedua jenis,
+ * rincian per jenis di tooltip. Dua kolom terpisah seperti ring dealer tidak muat di
  * lebar tabel Master Pos Dealer — beda dari groupCell() di atas yang menulis satu
  * ring per kolom.
  */
@@ -665,15 +585,15 @@ function coverageCellRingkas(outletCode) {
   }
 
   const grupTerisi = new Set(Object.values(punya)).size;
-  const tooltip = Array.from({ length: 8 }, (_, i) => i + 1).map((g) => {
+  const tooltip = Array.from({ length: 2 }, (_, i) => i + 1).map((g) => {
     const nama = kodeUnik.filter((c) => punya[c] === g)
       .map((c) => S.districtNames[c] || c).sort((a, b) => a.localeCompare(b));
-    return `Cov${g}: ${nama.length ? nama.join(', ') : '—'}`;
+    return `Tercover ${g}: ${nama.length ? nama.join(', ') : '—'}`;
   }).join(' · ');
 
   return `<td class="px-3 py-2 text-xs text-slate-600" title="${esc(tooltip)}">` +
     `<span class="mono font-bold text-slate-800">${esc(String(kodeUnik.length))}</span> kec · ` +
-    `<span class="text-slate-500">${esc(String(grupTerisi))} grup terisi</span></td>`;
+    `<span class="text-slate-500">${esc(String(grupTerisi))} jenis terisi</span></td>`;
 }
 
 export function renderOutletTable() {
@@ -717,17 +637,17 @@ export function renderOutletTable() {
     (o.lat == null
       ? `<button onclick="promptPin('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-map-pin"></i> Pin</button> `
       : `<button onclick="showOnMap('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-white btn-primary"><i class="ph-fill ph-map-trifold"></i> Lihat di peta</button> `) +
-    `<button onclick="editPosCoverageFromTable('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-target"></i> Coverage</button> ` +
+    `<button onclick="editPosCoverageFromTable('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-target"></i> Kec. Tercover</button> ` +
     `<button onclick="openOutletEditor('${esc(o.code)}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph ph-pencil-simple"></i> Edit</button>` +
     `</td></tr>`).join('')
     : '<tr><td colspan="7" class="text-center py-8 text-slate-400 text-sm">Tidak ada pos yang cocok.</td></tr>';
 }
 
 /**
- * Tombol "Coverage" di tabel pos: pindah ke halaman peta, pilih posnya, lalu buka
- * mode edit coverage.
+ * Tombol "Kec. Tercover" di tabel pos: pindah ke halaman peta, pilih posnya, lalu buka
+ * mode edit kec. tercover.
  *
- * Coverage-nya dipilih dengan mengklik kecamatan di peta, jadi tombol di tabel tidak
+ * Kec. tercover-nya dipilih dengan mengklik kecamatan di peta, jadi tombol di tabel tidak
  * bisa membuka apa pun sendiri — dia mengantar orang ke tempat pemilihannya. Jeda
  * 120 ms yang sama dengan showOnMap(): peta baru bisa dipakai sesudah tabnya benar-
  * benar terlihat dan MapLibre sempat menghitung ulang ukurannya.
@@ -1482,6 +1402,7 @@ export async function renderCustomerTable(keepOffset) {
     periodTo: f.to,
     // Kota/Kares memilih DEALER terdaftar di sana, bukan tempat tinggal konsumen.
     dealerCities: regionCityCodes(f),
+    dealerDistricts: f.districtCode !== 'ALL' ? [f.districtCode] : null,
     query: ($('mkon-search').value || '').trim(),
     // DEALER langsung. Halaman ini membaca customer_ktp sejak 2026-09-18, dan tabel
     // itu punya kolom dealer_code sendiri — jadi terjemahan "dealer -> daftar pos

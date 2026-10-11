@@ -1390,21 +1390,24 @@ export async function renderFusion() {
 let servisOffset = 0;
 let kirimOffset = 0;
 
-/** Saringan dua subhalaman: periode + kota, mengikuti bilah filter bersama. */
 /**
- * Saringan untuk halaman Lokasi Servis dan Lokasi Delivery.
+ * Saringan untuk halaman Lokasi Servis dan Lokasi Delivery: KOTA saja (lokasi servis),
+ * mengikuti bilah filter bersama.
+ *
+ * PERIODE (Dari–Sampai) SENGAJA TIDAK DIKIRIM sejak 2026-10-11 (permintaan tim): rentang
+ * tanggal hanya menyaring data KTP. Data Servis dan Pengiriman selalu tampil seluruhnya,
+ * berapa pun periode yang dipilih. Server tetap menerima periodFrom/periodTo (dipakai
+ * pemanggil lain dan tesnya); yang berubah hanya apa yang dikirim halaman.
  *
  * `kotakCari` menunjuk id kotak pencarian halaman yang bersangkutan — servernya sudah
  * lama menerima parameter `q` (dicocokkan ke nomor mesin atau nama kelurahan), yang
  * belum ada cuma kotaknya di layar. Halaman Pengiriman belum punya kotaknya, jadi
  * argumennya boleh kosong dan saringannya jalan seperti sebelumnya.
  */
-function saringSumber(offset, kotakCari) {
+export function saringSumber(offset, kotakCari) {
   const f = pageFilters();
   const kotak = kotakCari ? $(kotakCari) : null;
   return {
-    periodFrom: f.from !== 'ALL' ? f.from : null,
-    periodTo: f.to !== 'ALL' ? f.to : null,
     city: f.cityCode !== 'ALL' ? f.cityCode : null,
     query: kotak ? kotak.value.trim() : '',
     offset,
@@ -1472,15 +1475,15 @@ export function panelGagal(error) {
  * ikut mempersempit kedua tabel ini. Tabel yang mendadak kosong lalu terbaca sebagai
  * "datanya hilang", padahal saringannya yang dipasang di halaman lain.
  *
- * Yang disebut HANYA Kota dan Periode, karena cuma keduanya yang benar-benar dikirim
- * saringSumber() ke rutenya. Dealer dan Pos TIDAK berlaku di sini — menyebutnya akan
- * membuat orang mengosongkan saringan yang sejak awal tidak berpengaruh.
+ * Yang disebut HANYA Kota, karena cuma itu yang benar-benar dikirim saringSumber() ke
+ * rutenya. Periode, Dealer, dan Pos TIDAK berlaku di sini (periode hanya menyaring data
+ * KTP sejak 2026-10-11) — menyebutnya akan membuat orang mengosongkan saringan yang
+ * sejak awal tidak berpengaruh.
  */
 export function catatanKosongSaringan() {
   const f = pageFilters();
   const aktif = [];
   if (f.cityCode !== 'ALL') aktif.push('Kota');
-  if (f.from !== 'ALL' || f.to !== 'ALL') aktif.push('Periode');
   if (!aktif.length) return '';
 
   return `<div class="rounded-xl border border-slate-200 bg-slate-50 p-3 mb-2">` +
@@ -1488,8 +1491,8 @@ export function catatanKosongSaringan() {
     `<p class="text-[11px] text-slate-600 mt-1 leading-relaxed">Saringan yang sedang ` +
     `berlaku di halaman ini: <b>${esc(aktif.join(' dan '))}</b>. Bilah filter dipakai ` +
     `bersama seluruh halaman, jadi saringan ini bisa saja dipasang di halaman lain. ` +
-    `Kosongkan lewat tombol reset di bilah filter. Saringan Dealer dan Pos tidak ` +
-    `berpengaruh di halaman ini.</p></div>`;
+    `Kosongkan lewat tombol reset di bilah filter. Saringan Periode, Dealer, dan Pos ` +
+    `tidak berpengaruh di halaman ini.</p></div>`;
 }
 
 /** Baris navigasi halaman, dipakai kedua tabel. */

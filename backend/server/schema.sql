@@ -121,6 +121,14 @@ ALTER TABLE dealers ADD COLUMN IF NOT EXISTS legacy_code VARCHAR(32);
 -- mana pun dan dilaporkan oleh importer, bukan ditebak dari koordinat.
 ALTER TABLE dealers ADD COLUMN IF NOT EXISTS city_code VARCHAR(16);
 
+-- Kecamatan ASAL dealer (kode BPS bertitik, mis. '34.04.01'), dari kolom "Kecamatan"
+-- sheet Dealer di Excel yang sama. Dasar tingkat filter "Kec" (kares > kota > kec >
+-- dealer > pos) dan titik tolak toleransi perbatasan untuk kategori Others vs Pelanggaran
+-- Wilayah: kecamatan ini beserta yang berbatasan langsung dengannya tidak dianggap
+-- pelanggaran. NULL = kecamatannya tidak terbaca/tidak cocok; dilaporkan oleh skrip
+-- backfill, bukan ditebak dari koordinat.
+ALTER TABLE dealers ADD COLUMN IF NOT EXISTS district_code VARCHAR(16);
+
 CREATE TABLE IF NOT EXISTS outlets (
   outlet_code VARCHAR(32) NOT NULL PRIMARY KEY,     -- kode POS fisik ("Kode POS OCEAN"),
                                                      -- ATAU legacy_code dealer kalau
@@ -334,22 +342,32 @@ CREATE TABLE IF NOT EXISTS dealer_rings (
 
 CREATE INDEX IF NOT EXISTS idx_dealer_rings_dealer ON dealer_rings (dealer_code);
 
--- Coverage pos: kecamatan mana yang masuk coverage 1..8 milik satu pos.
+-- Kec. Tercover pos: kecamatan mana yang masuk jenis 1..2 milik satu pos.
 --
 -- Konsep BARU, bukan penggantian nama dari tabel `coverage` di bawah — itu rasio
--- jangkauan radius PostGIS lama, dipertahankan terpisah (lihat komentarnya).
--- Delapan slot, bukan tiga: satu pos bisa melayani kecamatan lebih beragam
--- daripada satu dealer per ring.
+-- jangkauan radius PostGIS lama, dipertahankan terpisah (lihat komentarnya). Namanya di
+-- layar "Kec. Tercover" (sejak 2026-10-11); nama tabel/kolom sengaja tidak diganti.
+-- DUA jenis sejak 2026-10-11 (dulu delapan). Migrasi untuk database yang sudah ada ada di
+-- bawah tabel ini.
 CREATE TABLE IF NOT EXISTS pos_coverage_district (
   outlet_code   VARCHAR(32) NOT NULL,
   district_code VARCHAR(16) NOT NULL,
-  coverage_num  SMALLINT NOT NULL CHECK (coverage_num BETWEEN 1 AND 8),
+  coverage_num  SMALLINT NOT NULL CHECK (coverage_num BETWEEN 1 AND 2),
   PRIMARY KEY (outlet_code, district_code),
   CONSTRAINT fk_pos_coverage_outlet FOREIGN KEY (outlet_code)
     REFERENCES outlets(outlet_code) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_pos_coverage_outlet ON pos_coverage_district (outlet_code);
+
+-- Migrasi 8 jenis -> 2 jenis (2026-10-11, keputusan user: hanya dua kolom pertama
+-- Excel "KEC COVER" yang dipakai). Baris jenis 3..8 DIHAPUS, tidak dikolaps ke jenis 2 —
+-- digabungkan diam-diam akan mengubah arti angka yang sudah dilihat orang. Idempoten:
+-- setelah dijalankan sekali DELETE tidak menemukan apa-apa, dan batasnya diganti ke 1..2.
+DELETE FROM pos_coverage_district WHERE coverage_num > 2;
+ALTER TABLE pos_coverage_district DROP CONSTRAINT IF EXISTS pos_coverage_district_coverage_num_check;
+ALTER TABLE pos_coverage_district ADD CONSTRAINT pos_coverage_district_coverage_num_check
+  CHECK (coverage_num BETWEEN 1 AND 2);
 
 -- Sumber yang diimpor: 'sales' (Excel bulanan yang sudah ada), 'ktp', atau 'servis'.
 --

@@ -291,8 +291,8 @@ function build(config) {
   });
 
   /**
-   * Ganti seluruh coverage satu pos. Pola sama persis dengan ring dealer di atas,
-   * bedanya rentang nilai (1..8) dan entitasnya.
+   * Ganti seluruh Kec. Tercover satu pos. Pola sama persis dengan ring dealer di atas,
+   * bedanya rentang nilai (1..2 sejak 2026-10-11) dan entitasnya.
    */
   api.put('/outlets/:code/coverage', async (req, res) => {
     const code = String(req.params.code || '');
@@ -302,7 +302,7 @@ function build(config) {
     const coverage = (req.body || {}).coverage;
     if (!coverage || typeof coverage !== 'object' || Array.isArray(coverage)) {
       return res.status(400).json({
-        error: 'Kirim {coverage: {"kode kecamatan": 1..8}}.',
+        error: 'Kirim {coverage: {"kode kecamatan": 1 atau 2}}.',
       });
     }
     const salah = Object.keys(coverage).filter((c) => !DISTRICT.test(c));
@@ -382,8 +382,12 @@ function build(config) {
     // langsung lebih sempit dan menang.
     const kotaDealer = String(q.dealerCities || '').split(',').map((x) => x.trim())
       .filter((x) => CITY.test(x)).slice(0, 50);
-    const dealerCodes = (!dealerCode && kotaDealer.length)
-      ? await repo.legacyCodesOfCities(kotaDealer) : null;
+    // Kec: kecamatan asal dealer, lebih sempit dari kota -> menang kalau diisi.
+    const kecDealer = String(q.dealerDistricts || '').split(',').map((x) => x.trim())
+      .filter((x) => DISTRICT.test(x)).slice(0, 50);
+    let dealerCodes = null;
+    if (!dealerCode && kecDealer.length) dealerCodes = await repo.legacyCodesOfDistricts(kecDealer);
+    else if (!dealerCode && kotaDealer.length) dealerCodes = await repo.legacyCodesOfCities(kotaDealer);
 
     const result = await repo.browseCustomers({
       periodFrom: PERIOD.test(periodFrom) ? periodFrom : null,
@@ -610,6 +614,7 @@ function build(config) {
         lat: lat === undefined ? null : lat,
         lng: lng === undefined ? null : lng,
         cityCode: CITY.test(String(body.cityCode || '')) ? body.cityCode : null,
+        districtCode: DISTRICT.test(String(body.districtCode || '')) ? body.districtCode : null,
       });
       res.status(201).json({ dealer });
     } catch (error) {
@@ -627,6 +632,9 @@ function build(config) {
     if (patch.cityCode && !CITY.test(String(patch.cityCode))) {
       return res.status(400).json({ error: 'Kode kota harus format BPS bertitik, mis. 34.04.' });
     }
+    if (patch.districtCode && !DISTRICT.test(String(patch.districtCode))) {
+      return res.status(400).json({ error: 'Kode kecamatan harus format BPS bertitik, mis. 34.04.01.' });
+    }
 
     let dealer;
     try {
@@ -637,6 +645,7 @@ function build(config) {
         lng,
         // undefined = tidak diubah; kosong = dikosongkan. Kode tidak sah ditolak di atas.
         cityCode: patch.cityCode === undefined ? undefined : (patch.cityCode || null),
+        districtCode: patch.districtCode === undefined ? undefined : (patch.districtCode || null),
       });
     } catch (error) {
       return res.status(400).json({ error: error.message });
@@ -854,9 +863,14 @@ function build(config) {
     // Dealer yang dipilih juga menentukan dirinya sendiri, jadi kumpulan dealer dari
     // kota tidak ikut menyaring (kalau ikut, dealer berkota kosong lenyap tanpa sebab).
     const dealerCode = outletCode ? null : await dealerFusi(q.dealer);
-    const dealerCodes = (!dealerCode && !outletCode && daftar.length)
-      ? await repo.legacyCodesOfCities(daftar)
-      : null;
+    // Kec (kecamatan asal dealer) lebih sempit dari kota dan menang atas kota/kares.
+    const kec = String(q.kec || '');
+    const kecDipilih = DISTRICT.test(kec) ? kec : null;
+    let dealerCodes = null;
+    if (!dealerCode && !outletCode) {
+      if (kecDipilih) dealerCodes = await repo.legacyCodesOfDistricts([kecDipilih]);
+      else if (daftar.length) dealerCodes = await repo.legacyCodesOfCities(daftar);
+    }
 
     return { dealerCodes, dealerCode, outletCode };
   };

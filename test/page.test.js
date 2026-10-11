@@ -598,10 +598,11 @@ function test() {
   });
 
   // Sejak 2026-08-31 sore, ring pindah ke DEALER (kecamatan) dan pos mendapat
-  // coverage baru (kecamatan, 1-8) — Master Pos Dealer sekarang punya SATU kolom
-  // "Coverage" ringkas (8 kolom terpisah tidak muat), Master Dealer yang punya tiga
-  // kolom Ring 1/2/3. Lihat docs/DECISIONS.md.
-  assert.ok(html.includes('>Coverage</th>'), 'kolom "Coverage" hilang dari tabel pos');
+  // coverage baru (kecamatan) — Master Pos Dealer sekarang punya SATU kolom ringkas,
+  // bernama "Kec. Tercover" dan hanya DUA jenis sejak 2026-10-11 (dulu "Coverage", 8
+  // jenis). Master Dealer yang punya tiga kolom Ring 1/2/3. Lihat docs/DECISIONS.md.
+  assert.ok(html.includes('>Kec. Tercover</th>'), 'kolom "Kec. Tercover" hilang dari tabel pos');
+  assert.ok(!html.includes('>Coverage</th>'), 'kolom lama "Coverage" masih ada — sudah diganti nama');
   ['Ring 1', 'Ring 2', 'Ring 3'].forEach((judul) => {
     assert.ok(html.includes(`>${judul}</th>`), `kolom "${judul}" hilang dari tabel dealer`);
   });
@@ -628,8 +629,8 @@ function test() {
   const coverageCellPotong = coverageCellBody.slice(0, coverageCellBody.indexOf('\n}'));
   assert.match(coverageCellPotong, /S\.posCoverage\[outletCode\]/,
     'coverageCellRingkas tidak lagi membaca S.posCoverage');
-  assert.match(coverageCellPotong, /grup terisi/,
-    'coverageCellRingkas tidak lagi melaporkan jumlah grup terisi');
+  assert.match(coverageCellPotong, /jenis terisi/,
+    'coverageCellRingkas tidak lagi melaporkan jumlah jenis terisi');
 
   // Jumlah kolom <th> harus sama dengan colspan baris kosongnya. Kalau tidak, tabel
   // yang kosong akan melebar atau menyempit sendiri — kecil, tapi terlihat rusak, dan
@@ -670,6 +671,34 @@ function test() {
   assert.ok(!/id: 'kel-isi'/.test(mapSource),
     'isian per DESA (kel-isi) muncul lagi — analisis berhenti di kecamatan, desa ' +
     'tinggal garis referensi');
+  // Kecamatan KOSONG (nol penjualan): TANPA isian dan garisnya ABU-ABU (2026-10-11),
+  // lewat lapisan tersendiri di atas kec-garis supaya putih milik tetangga yang berisi
+  // tidak menimpa abu-abu di tepi yang dipakai bersama. paintChoropleth() yang menandai
+  // `kosong` di feature-state; tanpa tanda itu lapisan abu-abu tidak pernah terlihat.
+  const mapTanpaKomentarBaru = mapSource
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  assert.match(mapTanpaKomentarBaru, /id: 'kec-garis-kosong', type: 'line', source: 'kec'/,
+    'lapisan garis kecamatan kosong (kec-garis-kosong) hilang');
+  assert.match(mapTanpaKomentarBaru, /'line-color': '#94a3b8'/,
+    'garis kecamatan kosong tidak lagi abu-abu');
+  assert.match(mapTanpaKomentarBaru, /id: 'kec-garis', type: 'line', source: 'kec',\s*paint: \{ 'line-color': '#ffffff'/,
+    'garis kecamatan berisi tidak lagi putih');
+  assert.match(mapTanpaKomentarBaru, /\{ warna, kosong: cls < 0 \}/,
+    'paintChoropleth tidak lagi menandai kecamatan kosong di feature-state');
+  assert.match(mapTanpaKomentarBaru, /\['kec-garis', 'kec-garis-kosong', 'kec-nama'\]/,
+    'garis abu-abu tidak ikut sakelar "Batas dan Nama Kecamatan"');
+
+  // Fitur yang DIHAPUS 2026-10-11 tidak boleh hidup lagi di map.js: titik penjualan
+  // (lapisan + pembangkitnya), lingkaran radius KPI Jarak di peta, mode heatmap tetap.
+  ['jual-titik', "getSource('jual')", 'buildSalePoints', 'invalidateSalePoints', 'salePointFilter',
+    'kpi-jarak', 'bangunRadiusKpi', 'fetchKpiJarak', 'fixedContributionClass', 'heatmapMode',
+    'setHeatmapMode'].forEach((kata) => {
+    assert.ok(!mapTanpaKomentarBaru.includes(kata), `"${kata}" muncul lagi di map.js`);
+  });
+  ['toggleOpsiPeta', 'setStatusRelatif'].forEach((nama) => {
+    assert.match(mapSource, new RegExp(`export function ${nama}`), `${nama} hilang dari map.js`);
+    assert.match(source['app.js'], new RegExp(`\\b${nama}\\b`), `${nama} tidak didaftarkan app.js`);
+  });
   assert.ok(!/addDistrictLayers\(\)/.test(ringSource),
     'editor ring masih memuat kecamatan sendiri — lapisannya sudah dipasang di boot');
   // Lapisan desa disimpan (permintaan user: jangan dihapus), tapi MATI bawaan.
@@ -865,9 +894,14 @@ function test() {
     'tombol Ring di tabel dealer tidak lagi mengantar ke peta');
 
   // Tiap dropdown lingkup punya rumahnya sendiri di bilah; isinya dibangun combobox.js.
-  ['kares', 'kota', 'dealer', 'pos'].forEach((nama) => {
+  // Urutan skala: Kares > Kota > Kec > Dealer > Pos (Kec ditambahkan 2026-10-11).
+  const urutanDropdown = ['kares', 'kota', 'kec', 'dealer', 'pos'];
+  urutanDropdown.forEach((nama) => {
     assert.ok(html.includes(`id="pilih-${nama}"`), `dropdown ${nama} hilang dari bilah`);
   });
+  const posisiDropdown = urutanDropdown.map((nama) => html.indexOf(`id="pilih-${nama}"`));
+  assert.deepStrictEqual([...posisiDropdown].sort((a, b) => a - b), posisiDropdown,
+    'urutan dropdown di bilah bukan Kares > Kota > Kec > Dealer > Pos');
 
   // Panel rincian kelurahan tidak boleh menempati sudut yang sama dengan tombol peta.
   // Keduanya `absolute` di dalam #map-shell; waktu top-nya sama, panelnya menutupi
@@ -917,30 +951,47 @@ function test() {
     'panel dropdown memakai backdrop-filter lagi — di atas kanvas peta sebagian ' +
     'driver menggambarnya jadi kosong, dan dropdown-nya terlihat hilang tanpa error');
 
-  // Legenda di panel opsi peta dilipat, kalau tidak panelnya tidak muat dan harus
-  // digulir. Diukur: dengan keduanya terbuka isinya 845 px, sementara yang muat 466 px.
+  // Panel Opsi Peta TERSEMBUNYI bawaan dan dibuka tombol "Set Tampilan Peta" di pojok
+  // kanan atas (2026-10-11). Legenda pindah ke kartunya sendiri supaya warna peta tetap
+  // terbaca walau panel opsi tertutup; bagian "Dealer" di dasar panel dihapus.
+  assert.match(html, /<div id="opsi-peta-panel" class="hidden /,
+    'panel Opsi Peta tidak lagi tersembunyi bawaan');
+  assert.match(html, /<button onclick="toggleOpsiPeta\(\)" id="btn-opsi-peta"[\s\S]*?Set Tampilan Peta/,
+    'tombol "Set Tampilan Peta" hilang');
+  assert.match(html, /id="btn-opsi-peta"[^>]*\n?[^>]*class="[^"]*\btop-6 right-6\b/,
+    'tombol Set Tampilan Peta tidak lagi di pojok kanan atas');
   const opsiBlok = html.slice(html.indexOf('>Opsi Peta<') - 400,
-    html.indexOf('id="legend-dealer"') + 200);
-  // "Legenda" sejak 2026-08-31 judulnya dinamis (id="legend-title", diisi
-  // renderLegend() — "Dynamic..."/"Static Relative Tiering..." tergantung
-  // S.heatmapMode), jadi dicek longgar (boleh dibungkus <span>) — yang dijaga
-  // cuma bahwa dua-duanya TETAP terlipat di dalam <details>.
-  assert.match(opsiBlok, /<details[^>]*>\s*<summary[^>]*><span id="legend-title">/,
-    'bagian Legenda tidak lagi dilipat — panel opsi peta jadi tidak muat dan harus ' +
-    'digulir untuk melihat sisanya');
-  assert.match(opsiBlok, /<details[^>]*>\s*<summary[^>]*>Dealer<\/summary>/,
-    'bagian Dealer tidak lagi dilipat — panel opsi peta jadi tidak muat dan harus ' +
-    'digulir untuk melihat sisanya');
-  // Sejak 2026-09-14: enam grup KENDALI (Tampilan Dasar/Titik/Ring Dealer/
-  // Coverage POS/Mode Heatmap, kecuali Batas Wilayah) SENGAJA <details open>
-  // (dikonfirmasi user) — cuma dua legenda REFERENSI di bawah ini yang harus
-  // tetap terlipat, jadi diperiksa spesifik ke tag pembuka masing-masing,
-  // bukan lagi larangan blanket "<details open>" di seluruh panel.
-  assert.ok(!/<details[^>]*open[^>]*>\s*<summary[^>]*><span id="legend-title">/.test(opsiBlok),
-    'lipatan legenda (atas) terbuka secara bawaan — panelnya kembali tidak muat');
-  assert.ok(!/<details[^>]*open[^>]*>\s*<summary[^>]*>Dealer<\/summary>/.test(opsiBlok),
-    'lipatan legenda Dealer terbuka secara bawaan — panelnya kembali tidak muat');
+    html.indexOf('id="legend-card"'));
+  assert.ok(!/id="legend-dealer"/.test(html), 'bagian Dealer (legend-dealer) muncul lagi');
+  assert.ok(!/<summary[^>]*>Dealer<\/summary>/.test(html),
+    'bagian "Dealer" di dasar Opsi Peta muncul lagi');
+  assert.match(html, /<details id="legend-card"[^>]*>\s*<summary[^>]*><span id="legend-title">/,
+    'legenda tidak lagi dilipat di kartunya sendiri');
+  assert.ok(!/<details id="legend-card"[^>]*open/.test(html),
+    'lipatan legenda terbuka secara bawaan');
+  assert.ok(!/id="legend"/.test(opsiBlok), 'legenda masih tertinggal di dalam panel Opsi Peta');
+  // Isi Opsi Peta: titik penjualan, radius KPI, dan mode heatmap "Per Nilai Kontribusi"
+  // dihapus; tiga titik sumber NYALA bawaan; saklar status kelompok relatif nyala bawaan.
+  ['opt-jual', 'opt-kpi-jarak', 'setHeatmapMode', 'hm-fixed', 'Per Nilai Kontribusi',
+    'Titik Penjualan', 'Radius KPI'].forEach((kata) => {
+    assert.ok(!html.includes(kata), `"${kata}" muncul lagi di index.html`);
+  });
+  ['opt-titik-ktp', 'opt-titik-servis', 'opt-titik-kirim', 'opt-status-relatif'].forEach((id) => {
+    assert.match(html, new RegExp(`id="${id}" checked `),
+      `${id} tidak lagi NYALA bawaan`);
+  });
+  assert.match(html, /<summary[^>]*>Status Kelompok Relatif<\/summary>/,
+    'bagian "Status Kelompok Relatif" hilang dari Opsi Peta');
 
+  // Ring Dealer / Kec. Tercover: blok KONTEKSTUAL di tengah atas peta, bukan bagian
+  // Opsi Peta. Tersembunyi bawaan; syncGroupControls() yang menampilkannya.
+  assert.match(html, /id="blok-ring-dealer" class="hidden /, 'blok Ring Dealer tidak tersembunyi bawaan');
+  assert.match(html, /id="blok-kec-tercover" class="hidden /, 'blok Kec. Tercover tidak tersembunyi bawaan');
+  assert.ok(!/id="grup-ring-dealer"|id="grup-coverage-pos"/.test(html),
+    'grup Ring Dealer/Coverage POS masih ada di dalam Opsi Peta');
+  assert.ok(!/id="cv-[3-8]"/.test(html), 'tombol Kec. Tercover jenis 3..8 masih ada');
+  assert.ok(html.indexOf('id="blok-ring-dealer"') > html.indexOf('id="konteks-peta"'),
+    'blok Ring Dealer tidak berada di dalam #konteks-peta (tengah atas peta)');
   // Rumah bilah filter di layar penuh TIDAK boleh jadi wadah yang menggulir.
   //
   // Aturan `#map-shell.penuh .map-panel { overflow-y: auto }` memberi tiap panel
@@ -1035,9 +1086,12 @@ function test() {
   // Ini pengganti penjaga lama yang memeriksa keberadaan berkas konsumen.json.
   // Arsitekturnya berubah — konsumen sekarang datang dari API per kelurahan — tapi
   // sifat yang dijaga persis sama.
+  // Daftar konsumen di panel kecamatan DIHAPUS 2026-10-11, jadi fetchCustomers() tidak
+  // punya pemanggil lagi (rutenya sengaja dibiarkan, lihat CLAUDE.md). Yang dijaga: kalau
+  // ada yang memanggilnya kembali, kode kecamatan WAJIB ikut — definisinya sendiri tidak
+  // dihitung sebagai pemanggilan.
   const clientCalls = files.flatMap((name) =>
-    [...source[name].matchAll(/fetchCustomers\(([^)]*)\)/g)].map((m) => m[1].trim()));
-  assert.ok(clientCalls.length, 'tidak ada satu pun pemanggilan fetchCustomers');
+    [...source[name].matchAll(/(?<!function )fetchCustomers\(([^)]*)\)/g)].map((m) => m[1].trim()));
   clientCalls.forEach((args) => {
     assert.ok(args && !args.startsWith(','),
       `fetchCustomers dipanggil tanpa kode kecamatan: fetchCustomers(${args})`);
@@ -1224,14 +1278,16 @@ function test() {
     'lapisan lingkaran radius (radius-isi/radius-garis) masih ada di map.js — ' +
     'seharusnya sudah dihapus bersih, bukan cuma tombolnya yang disembunyikan');
 
-  // Penggantinya sejak 2026-08-31 sore: DUA grup terpisah — "Tampilan Ring Dealer"
-  // (Lokasi + Ring 1-3, aktif kalau scope=dealer) dan "Tampilan Coverage POS"
-  // (Lokasi + Cov 1-8, aktif kalau scope=pos) — menyorot KECAMATAN, bukan lingkaran
-  // geometris maupun desa. Ikut redrawMap() lewat syncGroupControls() supaya ganti
-  // dealer/pos otomatis memperbarui sorotan tanpa perlu klik ulang tombolnya.
-  ['id="pilihan-ring-dealer"', 'id="rv-lokasi"', 'id="rv-1"', 'id="rv-2"', 'id="rv-3"',
-    'id="pilihan-coverage-pos"', 'id="cv-lokasi"', 'id="cv-1"', 'id="cv-8"'].forEach((needle) => {
-    assert.ok(html.includes(needle), `${needle} hilang dari markup Tampilan Ring/Coverage`);
+  // Penggantinya sejak 2026-08-31 sore: DUA kontrol terpisah — "Ring Dealer" (Lokasi +
+  // Ring 1-3) dan "Kec. Tercover" (Lokasi + jenis 1-2) — menyorot KECAMATAN, bukan
+  // lingkaran geometris maupun desa. Sejak 2026-10-11 keduanya BLOK KONTEKSTUAL di tengah
+  // atas peta (bukan bagian Opsi Peta): Ring Dealer hanya waktu tepat satu dealer dipilih,
+  // Kec. Tercover hanya waktu tepat satu pos dipilih. Ikut redrawMap() lewat
+  // syncGroupControls() supaya ganti dealer/pos otomatis memperbarui blok dan sorotannya.
+  ['id="blok-ring-dealer"', 'id="pilihan-ring-dealer"', 'id="rv-lokasi"', 'id="rv-1"', 'id="rv-2"',
+    'id="rv-3"', 'id="blok-kec-tercover"', 'id="pilihan-coverage-pos"', 'id="cv-lokasi"',
+    'id="cv-1"', 'id="cv-2"'].forEach((needle) => {
+    assert.ok(html.includes(needle), `${needle} hilang dari markup Ring Dealer/Kec. Tercover`);
   });
   assert.match(source['app.js'], /setRingViewDealer/,
     'setRingViewDealer tidak lagi diimpor/didaftarkan app.js');
@@ -1248,13 +1304,17 @@ function test() {
   assert.match(groupViewBody.slice(0, groupViewBody.indexOf('\n}')),
     /window\.anyGroupEditing && window\.anyGroupEditing\(\)/,
     'paintGroupView tidak lagi mengalah ke mode edit ring/coverage yang sedang aktif');
-  // Kontrol nonaktif kalau scope-nya tidak relevan (ring dealer perlu scope=dealer,
-  // coverage pos perlu scope=pos) — dijaga class CSS .nonaktif, bukan cuma disabled.
-  assert.match(source['map.js'], /classList\.toggle\('nonaktif', !dealerAktif\)/,
-    'kontrol Tampilan Ring Dealer tidak lagi nonaktif waktu scope bukan dealer');
-  assert.match(source['map.js'], /classList\.toggle\('nonaktif', !posAktif\)/,
-    'kontrol Tampilan Coverage POS tidak lagi nonaktif waktu scope bukan pos');
-
+  // Blok tampil/hilang (kelas `hidden`) mengikuti scope: Ring Dealer perlu dealer terpilih
+  // TANPA pos, Kec. Tercover perlu pos terpilih. Pos menang karena memilih pos ikut
+  // mengisi dealernya (filter berjenjang).
+  assert.match(source['map.js'], /classList\.toggle\('hidden', !dealerAktif\)/,
+    'blok Ring Dealer tidak lagi tampil/hilang mengikuti scope dealer');
+  assert.match(source['map.js'], /classList\.toggle\('hidden', !posAktif\)/,
+    'blok Kec. Tercover tidak lagi tampil/hilang mengikuti scope pos');
+  assert.match(source['map.js'], /dealerAktif = scopeValue\('dealer'\) !== 'ALL' && !posAktif/,
+    'Ring Dealer tidak lagi mengalah pada pos — memilih pos akan memunculkan DUA blok');
+  assert.ok(!/classList\.toggle\('nonaktif'/.test(source['map.js']),
+    'kontrol ring/coverage kembali hanya diredupkan (nonaktif), bukan disembunyikan');
   /* ------------------------------------------------------------------------
      12. tooltip peta menghitung dari sumber yang SAMA dengan petanya
      ------------------------------------------------------------------------
