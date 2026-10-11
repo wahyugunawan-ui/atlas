@@ -311,9 +311,53 @@ cuma perluasan ke Sulawesi ke timur.
 
 ## Selesai
 
+### Hover ikon pos/dealer, legenda kiri-bawah, seksi Persentase Keberhasilan Target Penjualan (2026-10-11, putaran ketiga)
+
+**54/54 berkas tes** (baru: `sales-targets.test.js` — Postgres + HTTP, `targets-ui.test.js`;
+diperluas: `sales-stats`, `page`, `dom`). Alasan dan batas keputusan di DECISIONS 2026-10-11
+(putaran ketiga). Diverifikasi di Chrome sungguhan (headless, DevTools protocol) terhadap
+server dan database laptop ini: tanpa galat JavaScript; target diisi, ditimpa (lewat 100%),
+ditolak (1,5 → pesan server tampil, kotak kembali), dan dihapus lewat kotak di halaman —
+tabel `sales_targets` kembali kosong sesudahnya; legenda terukur di kiri-bawah peta (lebar
+170 px tertutup / 208 px terbuka), bergeser ke kanan panel dealer saat panel terbuka, dan
+di layar penuh tetap di kiri-bawah area peta.
+
+1. **Hover ikon pos/dealer** kini menampilkan nama pos / nama dealer, bukan ringkasan
+   kecamatan atau kartu titik orang di bawahnya (`diAtasMarker`; penangan `kec-warna` dan
+   titik Fusion mundur di atas marker). Terverifikasi di Chrome sebelum seksi target dibuat.
+2. **Legenda** di kiri-bawah peta, selebar isinya (maks 13 rem), geser ke kanan panel
+   rincian yang terbuka.
+3. **Seksi Persentase Keberhasilan Target Penjualan** di bawah Analisis Performa Pos dan
+   Penjualan Wilayah: bar total + bar per dealer (dua/tiga kolom di layar lebar), kotak
+   target yang bisa diedit di tempat (hanya saat periode tepat satu bulan), mengikuti
+   filter halaman. Tabel baru `sales_targets`, `PUT /api/targets`, `/api/summary.targets`.
+4. Uji mutasi: 8 mutan logika (`sales-stats`), 8 mutan backend (repository + rute),
+   16 mutan UI (`targets-ui`; 14 merah, 2 sisanya mutan setara/tanpa efek yang dibuang),
+   9 mutan penjaga markup (`page`) — semua yang bermakna merah. Satu celah ditemukan dan
+   ditutup: aturan escape umum di `page.test.js` tidak melihat nama dealer yang sudah
+   ditaruh di variabel; ditambah penjaga khusus untuk `targets.js`.
+5. Diperbaiki sekalian: baris PRD KF-FILTER-16 menunjuk berkas tes dengan karakter TAB
+   nyasar (`\test/...` terbaca jadi tab + `est/...`), sehingga penjaga docs tidak
+   memeriksanya.
+
+**Belum dilakukan / dicatat apa adanya:**
+- **Di VPS:** server harus di-restart agar migrasi `schema.sql` membuat `sales_targets`
+  (idempoten). Belum dilakukan. Target yang diisi di laptop ini tidak ikut ke VPS.
+- Tidak ada impor target dari Excel dan tidak ada riwayat perubahan; mengisi 78 dealer
+  berarti mengetik satu per satu. Setelah tiap simpan daftar digambar ulang dan diurut
+  ulang, jadi fokus papan ketik hilang (Tab ke dealer berikutnya belum nyaman).
+- Seksi target belum dicoba di layar sempit (ponsel/tablet) dan belum ada di mode layar
+  penuh peta (hanya di halaman, di bawah peta).
+- Legenda terlipat bawaan (pil "Status Kelompok Relatif"); isinya terbaca setelah diklik.
+  Saat saklar status relatif dimatikan judulnya berganti ke unit mutlak — sudah ada dari
+  putaran kedua, tidak dicek ulang di sini.
+- Folder `astra-command-center/` (salinan lama proyek ini lengkap dengan `.git` sendiri dan
+  dua berkas Excel 21 MB) ada di dalam proyek dan tidak terlacak git. Bukan buatan sesi ini
+  dan **tidak ikut di-commit**; sebaiknya dipindah atau dihapus oleh yang tahu asalnya.
+
 ### Sebelas permintaan tim: Kec, periode hanya KTP, buang Acuan Bisnis, Opsi Peta, lima kategori jangkauan (2026-10-11, putaran kedua)
 
-Belum di-commit saat catatan ini ditulis. **52/52 berkas tes** (`business-reference.test.js`
+Sudah di-commit (cd98f3a). **52/52 berkas tes** (`business-reference.test.js`
 dihapus bersama fiturnya; `backfill-dealer-city.test.js` dan `dealer-region.test.js`
 diperluas). Alasan, alternatif, dan batas keputusan ada di DECISIONS 2026-10-11 (putaran
 kedua). Diverifikasi juga di Chrome sungguhan (headless, DevTools protocol): semua halaman
@@ -361,7 +405,7 @@ Kec. Tercover tampil dan hilang menurut pilihan, Opsi Peta tersembunyi bawaan.
 
 ### Filter Kota/Karesidenan = kumpulan dealer terdaftar; filter berjenjang (2026-10-11)
 
-Belum di-commit. **53/53 berkas tes** di laptop ini (dua dari tiga tes baru
+Sudah di-commit (f3325b2). **53/53 berkas tes** di laptop ini (dua dari tiga tes baru
 dijalankan penuh; `dealer-region` dan `backfill-dealer-city` butuh PostgreSQL).
 Alasan, alternatif, dan batas keputusan ada di DECISIONS 2026-10-11.
 

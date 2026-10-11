@@ -92,11 +92,12 @@ export function renderLegend(perDistrict, breaks, satuan) {
     `<p class="text-[10px] text-slate-400 pt-1.5 leading-snug">` +
     (used < RAMP.length && values.length
       ? `Sebarannya terlalu sempit untuk lima kelas — ${used} kelas terpakai. ` : '') +
+    // Kalimatnya sengaja pendek: kartu legenda di kiri bawah peta selebar isinya (maks 13 rem),
+    // dan paragraf panjang membuatnya tinggi menutupi peta. Alasan memakai unit mutlak di
+    // lingkup sempit ada di komentar paintChoropleth() (map.js).
     (perUnit
-      ? 'Kelas dihitung dari JUMLAH UNIT per kecamatan pada filter yang sedang aktif ' +
-        '(atau saat Status Kelompok Relatif dimatikan) — bukan kontribusi terhadap kota, ' +
-        'yang di lingkup sesempit itu membuat kecamatan bervolume kecil justru tampil paling gelap.'
-      : 'Kelas dihitung dari sebaran Kontribusi Penjualan yang sedang tampil, jadi ikut berubah waktu filternya diganti.') +
+      ? 'Kelas dari jumlah unit per kecamatan pada filter aktif.'
+      : 'Kelas dari sebaran Kontribusi Penjualan yang tampil.') +
     '</p>';
 }
 /* ==========================================================================

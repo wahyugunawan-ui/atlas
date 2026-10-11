@@ -87,6 +87,9 @@ export const S = {
   // di desa asalnya (map.js buildSalePoints).
   sales: [],               // [{period, district, village, outlet, dealer, units}]
   periods: [],
+  // Target penjualan per bulan per dealer, dalam unit: {'2026-09': {'D001': 1200}}. Dari
+  // /api/summary; diubah di tempat oleh saveTargetInput() (targets.js) setelah server menyimpan.
+  targets: {},
   lastImport: null,
   hasCustomers: false,
   pendingNames: 0,         // nama kelurahan yang menunggu dicocokkan manusia

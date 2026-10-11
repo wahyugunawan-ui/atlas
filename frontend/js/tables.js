@@ -86,6 +86,8 @@ let hideTimer = null;
 /** Tampilkan panel geser, sekaligus batalkan jadwal sembunyi yang masih menggantung. */
 function showPanel() {
   clearTimeout(hideTimer);
+  // Legenda kiri bawah bergeser ke kanan panel (CSS: #map-shell.panel-terbuka).
+  if ($('map-shell')) $('map-shell').classList.add('panel-terbuka');
   const panel = $('kelurahanDetailPanel');
   panel.classList.remove('hidden');
   requestAnimationFrame(() => panel.classList.remove('translate-x-full'));
@@ -519,6 +521,7 @@ export function openDistrictDetail(code, fromDealer) {
 }
 
 export function closeDistrictDetail() {
+  if ($('map-shell')) $('map-shell').classList.remove('panel-terbuka');
   const panel = $('kelurahanDetailPanel');
   panel.classList.add('translate-x-full');
   hideTimer = setTimeout(() => panel.classList.add('hidden'), 300);

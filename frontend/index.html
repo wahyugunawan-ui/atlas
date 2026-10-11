@@ -111,6 +111,12 @@
   .marker-outlet.terpilih { width: 30px; height: 30px; font-size: 16px; box-shadow: 0 0 0 4px rgba(11,47,107,.25), 0 3px 10px rgba(0,0,0,.35); }
 
   #kelurahanDetailPanel { transition: transform 0.3s cubic-bezier(0.16,1,0.3,1); }
+  /* Legenda di kiri bawah peta tertutup panel rincian (kiri, selebar 24 rem) waktu panel
+     itu terbuka, jadi ikut bergeser ke kanan panelnya. Di layar penuh panel rincian jadi
+     kolom grid sendiri di luar kotak peta, jadi legenda tetap di tempat biasa. Kelasnya
+     dipasang showPanel()/closeDistrictDetail() di tables.js. */
+  #map-shell.panel-terbuka #legend-card { left: 26.5rem !important; }
+  #map-shell.penuh.panel-terbuka #legend-card { left: 7.75rem !important; }
   /* Panel telusur Nomor Mesin: pola yang SAMA dengan panel geser kelurahan di atas
      (docs/FUSION.md 3.4 menyebut "panel geser yang sudah ada" sebagai polanya), tapi
      elemen sendiri — yang di atas tinggal di dalam kotak peta, sedangkan yang ini di
@@ -710,7 +716,12 @@
     <!-- Legenda: kartu sendiri di kanan bawah, BUKAN lagi di dalam Opsi Peta — panel itu
          tersembunyi bawaan, dan legenda yang ikut hilang membuat warna peta tidak terbaca.
          Terlipat bawaan; inline style supaya tidak bergantung pada `npm run css`. -->
-    <details id="legend-card" class="map-panel absolute right-6 z-10 p-3 w-52" style="bottom:2.25rem">
+    <!-- Kiri bawah (2026-10-11, permintaan tim), selebar isinya (max-content, tertahan
+         13 rem) dan menggeser ke kanan panel rincian waktu panel itu terbuka — lihat
+         #map-shell.panel-terbuka di blok <style>. left:7.75rem melewati kontrol zoom dan
+         skala peta di pojok kiri bawah. -->
+    <details id="legend-card" class="map-panel absolute z-10 p-3"
+             style="left:7.75rem;bottom:1.25rem;width:max-content;max-width:13rem">
       <summary class="text-[10px] font-bold text-slate-400 uppercase mb-1 cursor-pointer select-none"><span id="legend-title">Status Kelompok Relatif</span></summary>
       <div id="legend" class="space-y-1 mt-1"></div>
     </details>
@@ -806,6 +817,17 @@
     <p class="text-xs text-slate-400 mt-0.5 mb-3">Total sales, %kontribusi, dan kelompok posisi relatif per kecamatan — relatif terhadap dealer/pos yang sedang difilter (atau seluruh yang tampil kalau tidak ada filter dealer/pos). Diurutkan dari penjualan terendah.</p>
     <div id="panel-wilayah" class="overflow-y-auto space-y-2 pr-1" style="max-height:460px"></div>
   </div>
+  </div>
+
+  <!-- Persentase Keberhasilan Target Penjualan (2026-10-11, permintaan tim): bar capaian
+       penjualan terhadap target per dealer + total, targetnya diedit langsung di sini.
+       Isi digambar targets.js; target milik DEALER per bulan, jadi hanya bisa diedit waktu
+       filter periode tepat satu bulan. -->
+  <div id="seksi-target" class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+    <div class="flex items-center gap-2 text-sm font-bold text-slate-700"><i class="ph-fill ph-chart-bar-horizontal"></i> PERSENTASE KEBERHASILAN TARGET PENJUALAN</div>
+    <p id="target-info" class="text-xs text-slate-400 mt-0.5 mb-3"></p>
+    <div id="target-total"></div>
+    <div id="target-isi" class="overflow-y-auto" style="max-height:520px"></div>
   </div>
 
   <!-- Rekap dealer: muncul waktu satu dealer atau satu pos dipilih. -->

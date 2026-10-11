@@ -9,6 +9,24 @@ import { MONTHS } from './config.js';
 
 export const $ = (id) => document.getElementById(id);
 
+/**
+ * Apakah kejadian mouse peta berasal dari kursor yang sedang di atas IKON pos/dealer
+ * (marker DOM `.marker-outlet`).
+ *
+ * Marker duduk di dalam wadah kanvas peta, jadi kejadian mouse di atasnya ikut naik ke peta
+ * dan MapLibre tetap menjalankan penangan `mousemove` lapisan di bawah kursor (poligon
+ * kecamatan, titik KTP/Servis/Pengiriman). Penangan-penangan itu menulis ke #tooltip yang
+ * SAMA dengan tooltip marker dan menimpanya — hover ikon pos/dealer jadi menampilkan
+ * ringkasan kecamatan atau kartu orang dari titik di bawahnya, bukan nama pos/dealer.
+ * Penangan peta WAJIB mundur selama kursor di atas marker.
+ *
+ * @param {MouseEvent} [event]  `originalEvent` dari kejadian peta MapLibre
+ */
+export function diAtasMarker(event) {
+  const target = event && event.target;
+  return Boolean(target && typeof target.closest === 'function' && target.closest('.marker-outlet'));
+}
+
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
 ));

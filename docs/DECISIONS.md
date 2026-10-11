@@ -4647,3 +4647,60 @@ pada kecamatan kosong.
 - Titik KTP/Servis/Pengiriman nyala bawaan berarti satu permintaan `/api/v1/peta/titik` saat
   halaman dibuka dan tiap filter berubah, termasuk tiap langkah mode LIVE di halaman Fusion.
   Belum diukur bebannya pada data KTP penuh (di DB laptop ini data KTP kosong).
+
+## [2026-10-11, putaran ketiga] Hover ikon pos/dealer, legenda kiri-bawah, target penjualan yang diedit di halaman
+
+**Hover ikon.** Marker pos/dealer adalah elemen DOM di dalam wadah kanvas MapLibre, jadi
+kejadian mouse-nya ikut naik ke peta dan penangan `mousemove` lapisan di bawah kursor
+(poligon kecamatan `kec-warna`, titik KTP/Servis/Pengiriman) menulis ke `#tooltip` yang SAMA
+dengan tooltip marker — menimpanya dengan ringkasan kecamatan atau kartu titik orang.
+Dipilih: penangan peta MUNDUR waktu kursor di atas marker (`diAtasMarker(event)` di
+`dom.js`, memeriksa `event.target.closest('.marker-outlet')`). Ditolak: menaruh tooltip
+marker di `z-index` lebih tinggi (yang tertimpa isi teksnya, bukan posisinya) dan
+`pointer-events:none` pada marker (menghilangkan klik pada ikon). Tiga fungsi tooltip
+(`showDealerTooltip`, pos, kecamatan) juga membuang kelas `kartu-orang` yang bisa menempel
+dari hover titik orang sebelumnya.
+
+**Legenda** ("jumlah unit per kecamatan" / status kelompok relatif) di kiri-bawah peta,
+`width:max-content; max-width:13rem`, digeser ke kanan lewat kelas `panel-terbuka` pada
+`#map-shell` waktu panel rincian (dealer/kota/kecamatan) terbuka — kalau tidak, panel yang
+lebarnya ±26 rem menutupinya. `left:7.75rem` supaya tidak menabrak skala dan tombol zoom.
+Kelas dinyalakan di `showPanel()` dan dimatikan di `closeDistrictDetail()` (tables.js).
+
+**Target penjualan = unit per (bulan, dealer)**, tabel `sales_targets`
+(`period`, `dealer_code` FK ke `dealers`, `target_units`, `updated_at`; kunci utama
+`(period, dealer_code)`). Dipilih per dealer per bulan karena itu satuan yang dipakai tim
+channel menetapkan target; per pos tidak mungkin (penjualan belum dicatat per pos, lihat
+catatan kontribusi pos di putaran kedua) dan per kecamatan bukan satuan target.
+- **Persentase = penjualan / target × 100**, boleh lewat 100 (lebar bar dijepit 100%, angkanya
+  tidak). Warna: < 50 merah, 50–<100 kuning, ≥ 100 hijau, tanpa target abu-abu. Ambangnya
+  tetap, bukan persentil — "tercapai" itu pernyataan, bukan posisi relatif.
+- **Dealer tanpa target tidak ikut persentase total** dan jumlahnya ditulis di layar
+  ("77 dealer belum punya target"). Menjumlahkan penjualan mereka ke pembilang
+  menggelembungkan persentase. **Target nol ≠ belum punya target:** nol tersimpan sebagai
+  baris, kotak dikosongkan menghapus baris. Persentase dengan target nol = null (bukan 0%,
+  bukan tak terhingga).
+- **Edit hanya waktu filter periode tepat SATU bulan.** Pada rentang beberapa bulan target
+  ditampilkan sebagai jumlah target bulanannya dan kotak dikunci: "ubah jumlah" tidak
+  menyebut bulan mana yang berubah. Alternatif yang ditolak: membagi rata target ke tiap
+  bulan (angka yang tidak pernah diketik siapa pun).
+- **Filter Pos tidak dipakai** (`activeRows(page, { tanpaPos: true })`): target milik dealer,
+  dan membandingkannya dengan penjualan satu pos saja membuat persentase tampak rendah.
+  Keterangan di layar menyebutnya.
+- `PUT /api/targets` `{period, dealerCode, units}`: bilangan bulat 0–1.000.000
+  (`TARGET_MAKS`, penjaga salah ketik, bukan batas bisnis), `null`/kosong menghapus,
+  pecahan/negatif/di atas batas ditolak 400 alih-alih dibulatkan, dealer tak ada 404.
+  Target ikut `/api/summary.targets` (`{periode: {dealer: unit}}`; kecil, satu angka per
+  dealer per bulan). Satu sandi bersama, jadi tidak ada catatan siapa yang mengubah; hanya
+  `updated_at`.
+
+**Yang perlu dibaca sebagai batas keputusan ini:**
+- Tidak ada riwayat perubahan target dan tidak ada impor target dari Excel — tim mengetik
+  satu per satu (78 dealer × bulan). Kalau jadi beban, impor Excel adalah langkah berikutnya.
+- Setelah menyimpan satu kotak, seluruh daftar digambar ulang dan diurut ulang menurut
+  persentase, jadi fokus papan ketik hilang; mengisi 78 dealer berurutan dengan Tab belum
+  nyaman.
+- Tidak ada target tahunan atau target per kota/karesidenan; total hanya jumlah dealer yang
+  tampil menurut filter.
+- Target disimpan per bulan kalender; bulan tanpa penjualan di tengah rentang tetap
+  membawa targetnya (persentasenya memang harus menanggungnya).

@@ -119,6 +119,9 @@ export function drawDealerMarkers() {
 
 function showDealerTooltip(dealer, units, event) {
   const tip = $('tooltip');
+  // Kartu putih milik titik orang (kartu-orang) bisa masih menempel dari hover sebelumnya;
+  // tooltip ikon memakai teks terang, jadi di atas latar putih tulisannya hilang.
+  tip.classList.remove('kartu-orang');
   tip.innerHTML =
     `<div class="font-bold text-white">${esc(dealer.name)}</div>` +
     `<div class="text-[11px] text-slate-300 mt-0.5">${esc(formatNumber(dealer.outletCount || 0))} pos</div>` +
@@ -130,12 +133,18 @@ function showDealerTooltip(dealer, units, event) {
 
 function showOutletTooltip(outlet, units, event) {
   const tip = $('tooltip');
+  tip.classList.remove('kartu-orang');   // lihat showDealerTooltip()
   tip.innerHTML =
     `<div class="font-bold text-white">${esc(outlet.name)}</div>` +
     `<div class="text-[11px] text-slate-300 flex items-center gap-1.5 mt-0.5">` +
     `<span class="w-2 h-2 rounded-full inline-block" style="background:${esc(dealerColor(S.registry, outlet.dealerCode))}"></span>` +
     `${esc(outlet.dealerName)}</div>` +
-    `<div class="text-[11px] text-slate-300 mt-1.5">${esc(formatNumber(units))} penjualan pada filter ini</div>` +
+    // Penjualan sekarang dicatat di tingkat DEALER (baris proxy), belum per pos. Baris
+    // "0 penjualan" di sini terbaca seperti pos yang tidak laku, jadi hanya ditulis kalau
+    // memang ada angkanya.
+    (units > 0
+      ? `<div class="text-[11px] text-slate-300 mt-1.5">${esc(formatNumber(units))} penjualan pada filter ini</div>`
+      : '') +
     `<div class="text-[10px] text-slate-400 mt-1">klik untuk melihat area layanannya</div>`;
   tip.classList.add('show');
   moveTooltip(event);
@@ -229,6 +238,7 @@ export function showDistrictTooltip(districtCode, event) {
   const d = districtTooltipData(districtCode);
   const tip = $('tooltip');
   if (!d) { tip.classList.remove('show'); return; }
+  tip.classList.remove('kartu-orang');   // lihat showDealerTooltip()
 
   const persen = (inside, covered) =>
     covered ? `${(inside / covered * 100).toFixed(0)}% dalam jangkauan` : null;

@@ -596,6 +596,28 @@ function build(config) {
      rute-rute ini tidak menerima dealerCode di body, cuma di URL untuk PUT/DELETE.
      ------------------------------------------------------------------------ */
 
+  /* ------------------------------------------------------------------------
+     TARGET PENJUALAN — per (bulan, dealer), diedit dari seksi "Persentase Keberhasilan
+     Target Penjualan" di halaman Sales Analytics. Daftarnya ikut /api/summary; rute ini
+     hanya untuk menyimpan satu sel. `units` kosong menghapus target dealer itu.
+     ------------------------------------------------------------------------ */
+  api.put('/targets', async (req, res) => {
+    const body = req.body || {};
+    const period = String(body.period || '');
+    const dealerCode = String(body.dealerCode || '');
+    if (!PERIOD.test(period)) {
+      return res.status(400).json({ error: 'Periode harus format YYYY-MM.' });
+    }
+    if (!DEALER.test(dealerCode)) {
+      return res.status(400).json({ error: 'Kode dealer tidak sah.' });
+    }
+    try {
+      res.json(await repo.saveTarget(period, dealerCode, body.units));
+    } catch (error) {
+      res.status(/tidak ada/.test(error.message) ? 404 : 400).json({ error: error.message });
+    }
+  });
+
   api.post('/dealers', async (req, res) => {
     const body = req.body || {};
     const lat = body.lat === null || body.lat === undefined || body.lat === ''

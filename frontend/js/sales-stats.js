@@ -324,3 +324,105 @@ export function ringCells(split) {
     { label: 'Pelanggaran Wilayah', value: teks(4) },
   ];
 }
+
+/* ==========================================================================
+   TARGET PENJUALAN (2026-10-11)
+   ==========================================================================
+   Target disimpan per (bulan, dealer) dalam UNIT. Seksi "Persentase Keberhasilan Target
+   Penjualan" membandingkan penjualan yang tampil dengan target dealer-dealer pada rentang
+   periode yang sedang dipilih. Murni, diuji test/sales-stats.test.js.
+   ========================================================================== */
+
+/** Batas pengaman jumlah bulan yang dienumerasi (20 tahun) — rentang ngawur tidak membekukan halaman. */
+const MAKS_BULAN = 240;
+
+/**
+ * Daftar bulan 'YYYY-MM' dari `from` sampai `to`, inklusif. Ujung 'ALL' memakai batas data
+ * (`periods`, terurut): "sejak awal" = bulan pertama yang ada datanya, "sampai terbaru" =
+ * bulan terakhir. Tanpa data dan tanpa batas yang jelas -> daftar kosong, bukan tebakan.
+ * Bulan tanpa penjualan di tengah rentang TETAP ikut: targetnya sah walau belum ada
+ * penjualan, dan persentasenya memang harus menanggungnya.
+ *
+ * @param {string} from  'YYYY-MM' atau 'ALL'
+ * @param {string} to    'YYYY-MM' atau 'ALL'
+ * @param {string[]} periods  bulan-bulan yang punya data, terurut naik
+ */
+export function monthsBetween(from, to, periods) {
+  const ada = periods || [];
+  const awal = from && from !== 'ALL' ? from : ada[0];
+  const akhir = to && to !== 'ALL' ? to : ada[ada.length - 1];
+  if (!awal || !akhir || awal > akhir) return [];
+
+  const out = [];
+  let [tahun, bulan] = awal.split('-').map(Number);
+  while (out.length < MAKS_BULAN) {
+    const kode = `${tahun}-${String(bulan).padStart(2, '0')}`;
+    if (kode > akhir) break;
+    out.push(kode);
+    bulan += 1;
+    if (bulan > 12) { bulan = 1; tahun += 1; }
+  }
+  return out;
+}
+
+/**
+ * Persentase keberhasilan target per dealer dan total.
+ *
+ * - `realized` dealer = jumlah unit pada `rows` untuk bulan-bulan `months`.
+ * - `target` dealer = jumlah target bulanannya pada `months`; null kalau tidak ada satu pun
+ *   bulan yang punya target (BELUM PUNYA TARGET, beda dari target nol).
+ * - `percent` = realized / target x 100; null kalau belum punya target atau targetnya nol
+ *   (dibagi nol bukan "0%" dan bukan "tak terhingga"). Boleh melewati 100.
+ * - TOTAL hanya menghitung dealer yang PUNYA target (dan targetnya > 0): menjumlahkan
+ *   penjualan dealer tanpa target ke pembilang menggelembungkan persentasenya. Jumlah dealer
+ *   yang dikecualikan dikembalikan supaya layar bisa mengatakannya.
+ * - Urutan: persentase terendah dulu (yang tertinggal paling atas); yang belum punya target
+ *   di bawah, urut penjualan terbesar.
+ *
+ * @param {{dealerCodes: string[], rows: Array<{dealer, period, units}>,
+ *   targets: Object<string, Object<string, number>>, months: string[]}} masukan
+ */
+export function targetProgress({ dealerCodes, rows, targets, months }) {
+  const bulan = new Set(months);
+  const terjual = {};
+  (rows || []).forEach((r) => {
+    if (bulan.has(r.period)) terjual[r.dealer] = (terjual[r.dealer] || 0) + r.units;
+  });
+
+  const perDealer = (dealerCodes || []).map((code) => {
+    let target = null;
+    months.forEach((m) => {
+      const t = targets && targets[m] ? targets[m][code] : undefined;
+      if (t !== undefined && t !== null) target = (target || 0) + Number(t);
+    });
+    const realized = terjual[code] || 0;
+    return {
+      code,
+      realized,
+      target,
+      percent: target ? (realized / target) * 100 : null,
+    };
+  });
+
+  perDealer.sort((a, b) => {
+    if (a.percent == null && b.percent == null) return b.realized - a.realized;
+    if (a.percent == null) return 1;
+    if (b.percent == null) return -1;
+    return a.percent - b.percent;
+  });
+
+  const bertarget = perDealer.filter((d) => d.target);
+  const targetTotal = bertarget.reduce((s, d) => s + d.target, 0);
+  const realizedBertarget = bertarget.reduce((s, d) => s + d.realized, 0);
+  return {
+    perDealer,
+    total: {
+      realized: perDealer.reduce((s, d) => s + d.realized, 0),
+      realizedBertarget,
+      target: targetTotal,
+      percent: targetTotal ? (realizedBertarget / targetTotal) * 100 : null,
+      dealerTotal: perDealer.length,
+      dealerBertarget: bertarget.length,
+    },
+  };
+}

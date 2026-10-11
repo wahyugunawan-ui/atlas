@@ -1339,6 +1339,63 @@ function test() {
   assert.ok(/showDistrictTooltip/.test(source['app.js']),
     'app.js tidak memanggil showDistrictTooltip');
 
+  /* ------------------------------------------------------------------------
+     2026-10-11 (putaran terakhir): hover ikon pos/dealer, legenda kiri-bawah, target
+     ------------------------------------------------------------------------ */
+
+  // 1. Marker DOM ada DI DALAM wadah kanvas, jadi kejadian mouse-nya naik ke peta dan
+  //    handler layer menimpa #tooltip dengan kartu kecamatan/orang. Nama pos/dealer hanya
+  //    tampil kalau KETIGA handler layer mundur waktu kursor di atas marker.
+  assert.ok(/export function diAtasMarker/.test(source['dom.js']), 'diAtasMarker hilang dari dom.js');
+  assert.strictEqual((source['app.js'].match(/diAtasMarker\(/g) || []).length >= 2, true,
+    'handler mousemove/mouseleave kec-warna tidak lagi mundur di atas marker — hover ikon ' +
+    'menampilkan ringkasan kecamatan, bukan nama pos/dealer');
+  assert.ok(/diAtasMarker\(e\.originalEvent\)/.test(source['map.js']),
+    'handler titik Fusion di map.js tidak mundur di atas marker');
+  assert.strictEqual((source['outlets.js'].match(/classList\.remove\('kartu-orang'\)/g) || []).length >= 3,
+    true, 'tooltip pos/dealer/kecamatan tidak lagi membuang kelas kartu-orang — kartu putih ' +
+    'titik orang bisa menempel di tooltip nama');
+
+  // 2. Legenda ("jumlah unit per kecamatan") di kiri-bawah, ringkas, dan bergeser ke kanan
+  //    panel rincian waktu panel itu terbuka (kalau tidak, panelnya menutup legenda).
+  assert.match(html, /<details id="legend-card"[^>]*style="[^"]*left:7\.75rem;[^"]*bottom:1\.25rem/,
+    'legenda tidak lagi di kiri-bawah peta');
+  assert.match(html, /<details id="legend-card"[^>]*style="[^"]*width:max-content;[^"]*max-width:13rem/,
+    'legenda kembali melebar — harus selebar isinya dengan batas 13rem');
+  assert.match(html, /#map-shell\.panel-terbuka #legend-card \{ left: 26\.5rem !important; \}/,
+    'legenda tidak bergeser dari bawah panel rincian yang terbuka');
+  assert.ok(/classList\.add\('panel-terbuka'\)/.test(source['tables.js']) &&
+    /classList\.remove\('panel-terbuka'\)/.test(source['tables.js']),
+    'tables.js tidak lagi menyalakan/mematikan panel-terbuka di #map-shell');
+
+  // 3. Seksi Persentase Keberhasilan Target Penjualan: markup, gambar ulang tiap filter,
+  //    sumber data, dan penangan simpan terpasang.
+  ['seksi-target', 'target-info', 'target-total', 'target-isi'].forEach((id) => {
+    assert.ok(html.includes(`id="${id}"`), `#${id} hilang dari index.html`);
+  });
+  assert.ok(/PERSENTASE KEBERHASILAN TARGET PENJUALAN/.test(html), 'judul seksi target hilang');
+  assert.ok(/renderTargets\(\)/.test(source['app.js']),
+    'renderAll() tidak menggambar ulang seksi target — barnya tidak ikut filter');
+  assert.ok(/S\.targets = data\.targets/.test(source['app.js']),
+    'buildIndexes tidak mengisi S.targets dari /api/summary');
+  assert.ok(/saveTargetInput/.test(source['app.js']) && /onchange="saveTargetInput\(/.test(source['targets.js']),
+    'kotak target tidak terhubung ke saveTargetInput');
+  assert.ok(/activeRows\(undefined, \{ tanpaPos: true \}\)/.test(source['targets.js']),
+    'seksi target memakai penjualan yang sudah disaring sampai POS, padahal target milik dealer');
+  assert.ok(/tanpaPos/.test(source['filters.js']), 'activeRows kehilangan opsi tanpaPos');
+  // Aturan escape umum (nomor 6) hanya melihat S.dealerNames[...] di baris yang sama, jadi
+  // tidak melihat nama dealer yang sudah ditaruh di variabel. Seksi target menyusun HTML dari
+  // nama/kode dealer (sumbernya Excel), jadi di sini dijaga satu per satu.
+  assert.ok(!/\$\{(nama|keterangan|nilai|judulInput)\}/.test(source['targets.js']) &&
+    !/\$\{d\.code\}/.test(source['targets.js']),
+  'targets.js memasukkan nama/kode dealer ke HTML tanpa esc()');
+  assert.ok(/title="\$\{esc\(nama\)\}">\$\{esc\(nama\)\}</.test(source['targets.js']),
+    'nama dealer di seksi target tidak lagi lewat esc()');
+  // Kotak target hanya boleh diedit saat TEPAT satu bulan terpilih; selain itu terkunci.
+  assert.ok(/dapatDiedit = months\.length === 1/.test(source['targets.js']) &&
+    /if \(months\.length !== 1\) return;/.test(source['targets.js']),
+    'penguncian edit target pada rentang beberapa bulan hilang');
+
   const totalLines = files.reduce((sum, f) => sum + source[f].split('\n').length, 0);
   console.log(`OK page — ${files.length} modul (${totalLines} baris), ` +
     `${new Set(handlers).size} handler terdaftar, ${new Set(usedIds).size} id, ` +

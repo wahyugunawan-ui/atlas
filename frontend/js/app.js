@@ -8,7 +8,7 @@
  */
 import { fetchGeo, fetchSummary } from './api.js';
 import { buildColorRegistry } from './colors.js';
-import { $, bbox, displayCityName, esc, formatNumber, monthLabel, toast } from './dom.js';
+import { $, bbox, diAtasMarker, displayCityName, esc, formatNumber, monthLabel, toast } from './dom.js';
 import { chooseCombo, comboSearch, toggleCombo } from './combobox.js';
 import {
   anyGroupEditing, assignRing, cancelRingEdit, closeRingChooser,
@@ -33,6 +33,7 @@ import {
   togglePerformanceSort, toggleLivePerforma, toggleLiveWilayah,
 } from './render.js';
 import { S } from './state.js';
+import { renderTargets, saveTargetInput } from './targets.js';
 import {
   acceptMapPoint, closeOutletEditor, closeDistrictDetail, jumpToDistrict,
   openDealerDetail, openCitySummary, toggleDealerCity, jumpFromDealer,
@@ -82,6 +83,8 @@ const HANDLERS = {
   toggleLivePerforma, openPerformaFull, closePerformaFull,
   setPerformanceCriteria, setPerformanceCoverageFocus, filterPerformanceGroup,
   openTreemapFull, closeTreemapFull, toggleLiveWilayah,
+  // target penjualan (seksi Persentase Keberhasilan Target)
+  saveTargetInput,
   // sunting pos
   openOutletEditor, closeOutletEditor, pickFromMap, saveOutletEditor, dealerChoiceChanged,
   // peta dan outlet
@@ -166,6 +169,7 @@ export function renderAll() {
   renderTreemap(rows);
   renderPerformance(rows);
   renderWilayah(rows);
+  renderTargets();
   syncFullscreenPanels();
   renderDealerCard();
 
@@ -226,6 +230,7 @@ function buildIndexes(data) {
   S.dealers = data.dealers || [];
   S.sales = data.sales;
   S.periods = data.periods;
+  S.targets = data.targets || {};
   S.lastImport = data.lastImport;
   S.hasCustomers = data.hasCustomers;
   S.pendingNames = data.pendingNames || 0;
@@ -411,12 +416,16 @@ async function boot() {
   // sebelah — salah baca yang tidak pernah terasa seperti bug.
   S.map.on('mousemove', 'kec-warna', (e) => {
     if (S.pickingOnMap || editorAktif()) return;
+    // Di atas ikon pos/dealer yang menang tooltip ikonnya (nama pos/dealer), bukan kecamatan.
+    if (diAtasMarker(e.originalEvent)) return;
     if (e.features && e.features.length) {
       showDistrictTooltip(e.features[0].properties.kode, e.originalEvent);
     }
   });
 
-  S.map.on('mouseleave', 'kec-warna', () => {
+  S.map.on('mouseleave', 'kec-warna', (e) => {
+    // Kursor pindah ke ikon: tooltip ikon baru saja tampil, jangan disembunyikan.
+    if (diAtasMarker(e && e.originalEvent)) return;
     S.map.getCanvas().style.cursor = '';
     $('tooltip').classList.remove('show');
   });

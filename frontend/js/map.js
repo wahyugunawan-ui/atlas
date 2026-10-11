@@ -5,7 +5,9 @@ import {
   ATTRIBUTION, ATTRIBUTION_SATELLITE, BASEMAP_PMTILES, BASEMAP_SATELLITE,
 } from './config.js';
 import { classOf, dealerColor, percentileBreaks, RAMP, COLOR_EMPTY } from './colors.js';
-import { $, bbox, displayCityName, esc, formatNumber, sumBy, toast } from './dom.js';
+import {
+  $, bbox, diAtasMarker, displayCityName, esc, formatNumber, sumBy, toast,
+} from './dom.js';
 import { fetchDistrictCustomers, fetchTitikPeta } from './api.js';
 import {
   activeRows, fusionFilterPeta, pageFilters, regionDealerCodes, scopeValue,
@@ -333,9 +335,13 @@ export function addLayers() {
     S.map.on('mouseenter', layerId, () => { S.map.getCanvas().style.cursor = 'pointer'; });
     S.map.on('mousemove', layerId, (e) => {
       if (!e.features || !e.features.length) return;
+      // Di atas ikon pos/dealer yang menang tooltip ikonnya (nama pos/dealer); hitungan mundur
+      // kartu orang (rute PII) juga dibatalkan: kursor itu tidak sedang menunjuk titik.
+      if (diAtasMarker(e.originalEvent)) { batalkanKartuTitik(); return; }
       hoverTitik(jenis, e.features[0].properties, e.originalEvent);
     });
-    S.map.on('mouseleave', layerId, () => {
+    S.map.on('mouseleave', layerId, (e) => {
+      if (diAtasMarker(e && e.originalEvent)) { batalkanKartuTitik(); return; }
       S.map.getCanvas().style.cursor = '';
       const tip = $('tooltip');
       if (tip) { tip.classList.remove('show'); tip.classList.remove('kartu-orang'); }

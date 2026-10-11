@@ -74,3 +74,21 @@ assert.strictEqual(labelKota(null, '  '), '—',
 
 console.log('OK dom — labelKota menjelaskan kota luar cakupan dengan kodenya tetap ' +
   'tersebut, dan tidak menyentuh kota yang namanya memang ada');
+
+/* --------------------------------------------------------------------------
+   diAtasMarker — penangan peta mundur selama kursor di atas ikon pos/dealer
+   --------------------------------------------------------------------------
+   Tanpa ini penangan mousemove poligon kecamatan dan titik KTP/Servis menimpa tooltip
+   ikon (nama pos/dealer) dengan ringkasan kecamatan atau kartu orang. Fungsinya kecil, tapi
+   kalau salah, hover ikon tampak "tidak berfungsi" tanpa satu pun galat.
+   -------------------------------------------------------------------------- */
+const { diAtasMarker } = require('../frontend/js/dom.js');
+const fakeEl = (cocok) => ({ closest: (sel) => (sel === '.marker-outlet' && cocok ? {} : null) });
+assert.strictEqual(diAtasMarker({ target: fakeEl(true) }), true,
+  'kursor di atas ikon (atau anaknya, mis. <i>) tidak dikenali sebagai marker');
+assert.strictEqual(diAtasMarker({ target: fakeEl(false) }), false,
+  'kursor di atas kanvas dikira di atas marker — tooltip kecamatan tidak akan pernah tampil');
+assert.strictEqual(diAtasMarker(undefined), false, 'tanpa kejadian tidak boleh melempar galat');
+assert.strictEqual(diAtasMarker({}), false, 'kejadian tanpa target tidak boleh melempar galat');
+assert.strictEqual(diAtasMarker({ target: {} }), false, 'target tanpa closest() tidak boleh melempar galat');
+console.log('OK dom — diAtasMarker mengenali kursor di atas ikon pos/dealer, aman terhadap masukan kosong');

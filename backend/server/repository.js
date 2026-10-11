@@ -144,6 +144,8 @@ async function summary() {
     // Kecamatan tempat tiap dealer berada + yang berbatasan langsung (dihitung dari poligon
     // kecamatan): bahan kategori Others vs Pelanggaran Wilayah di ringkasan jangkauan dealer.
     dealerBorder: await dealerBorderDistricts(),
+    // Target penjualan per (bulan, dealer): seksi Persentase Keberhasilan Target.
+    targets: await allTargets(),
   };
 }
 
@@ -1374,6 +1376,53 @@ async function legacyCodesOfCities(cityCodes) {
 }
 
 /**
+ * Seluruh target penjualan, dibentuk targets[period][dealerCode] = unit.
+ * Kecil (satu angka per dealer per bulan), jadi ikut dikirim bersama /api/summary.
+ */
+async function allTargets() {
+  const rows = await store.all(store.db(),
+    'SELECT period, dealer_code AS "dealerCode", target_units AS units FROM sales_targets');
+  const out = {};
+  rows.forEach((r) => { (out[r.period] || (out[r.period] = {}))[r.dealerCode] = Number(r.units); });
+  return out;
+}
+
+/** Batas atas target satu dealer per bulan. Jauh di atas penjualan nyata; hanya penjaga salah ketik. */
+const TARGET_MAKS = 1000000;
+
+/**
+ * Simpan (atau hapus) target satu dealer pada satu bulan.
+ *
+ * `units` null/'' = HAPUS targetnya (dealer kembali "belum punya target"). Nol itu target
+ * yang sah dan BEDA dari kosong: nol menyisakan baris, kosong menghapusnya. Angka tak bulat,
+ * negatif, atau di atas TARGET_MAKS ditolak, bukan dibulatkan diam-diam.
+ *
+ * @return {{period, dealerCode, units: number|null}}
+ */
+async function saveTarget(period, dealerCode, units) {
+  const db = store.db();
+  const dealer = await store.one(db, 'SELECT dealer_code FROM dealers WHERE dealer_code = ?', [dealerCode]);
+  if (!dealer) throw new Error(`Dealer ${dealerCode} tidak ada.`);
+
+  if (units === null || units === undefined || units === '') {
+    await store.run(db, 'DELETE FROM sales_targets WHERE period = ? AND dealer_code = ?',
+      [period, dealerCode]);
+    return { period, dealerCode, units: null };
+  }
+  const angka = Number(units);
+  if (!Number.isInteger(angka) || angka < 0 || angka > TARGET_MAKS) {
+    throw new Error(`Target harus bilangan bulat 0 sampai ${TARGET_MAKS.toLocaleString('id-ID')}.`);
+  }
+  await store.run(db, `
+    INSERT INTO sales_targets (period, dealer_code, target_units, updated_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT (period, dealer_code) DO UPDATE SET
+      target_units = EXCLUDED.target_units, updated_at = EXCLUDED.updated_at`,
+  [period, dealerCode, angka, new Date().toISOString()]);
+  return { period, dealerCode, units: angka };
+}
+
+/**
  * Sama seperti legacyCodesOfCities(), untuk filter Kec: kode numerik Excel seluruh dealer
  * yang TERDAFTAR di salah satu kecamatan (dealers.district_code).
  */
@@ -2134,7 +2183,7 @@ module.exports = {
   fusionDistrictCustomers,
   latestFusionPeriod, fusionTotals, fusionRows, fusionByCity, fusionByDealer,
   fusionEngineDetail, setAppConfig, fusionMatrix, fusionOverlap, legacyDealerCode,
-  legacyCodesOfCities, legacyCodesOfDistricts, dealerBorderDistricts,
+  legacyCodesOfCities, legacyCodesOfDistricts, dealerBorderDistricts, allTargets, saveTarget,
   fusionSourceCoverage, fusionVillagePoints,
   summary, unmatched, imports, periodSummary, periodDataSummary,
   serviceVisits, deliveryPings, deleteSourcePeriod,

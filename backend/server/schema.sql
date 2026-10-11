@@ -369,6 +369,21 @@ ALTER TABLE pos_coverage_district DROP CONSTRAINT IF EXISTS pos_coverage_distric
 ALTER TABLE pos_coverage_district ADD CONSTRAINT pos_coverage_district_coverage_num_check
   CHECK (coverage_num BETWEEN 1 AND 2);
 
+-- Target penjualan: berapa UNIT yang ditargetkan satu dealer pada satu bulan (2026-10-11,
+-- seksi "Persentase Keberhasilan Target Penjualan"). Diisi dan diubah dari seksi itu di
+-- halaman Sales Analytics, bukan dari Excel. Satu baris = satu (bulan, dealer); dealer yang
+-- belum punya baris artinya BELUM PUNYA TARGET, bukan target nol — seksinya mengecualikan
+-- mereka dari persentase dan mengatakannya. Dealer dihapus -> targetnya ikut hilang.
+CREATE TABLE IF NOT EXISTS sales_targets (
+  period       VARCHAR(7)  NOT NULL CHECK (period ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'),
+  dealer_code  VARCHAR(64) NOT NULL,
+  target_units INTEGER     NOT NULL CHECK (target_units >= 0),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (period, dealer_code),
+  CONSTRAINT fk_sales_targets_dealer FOREIGN KEY (dealer_code)
+    REFERENCES dealers(dealer_code) ON DELETE CASCADE
+);
+
 -- Sumber yang diimpor: 'sales' (Excel bulanan yang sudah ada), 'ktp', atau 'servis'.
 --
 -- Ditambah waktu penyatuan tiga sumber masuk (docs/FUSION.md Tahap C). Tanpa kolom

@@ -463,3 +463,15 @@ export async function fetchGeo(name) {
   }
   return response.json();
 }
+
+/**
+ * Simpan target penjualan satu dealer pada satu bulan (unit). `units` null menghapus
+ * targetnya. Server menolak yang bukan bilangan bulat 0..1.000.000.
+ */
+export function saveTarget(period, dealerCode, units) {
+  return request(`${API}targets`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ period, dealerCode, units }),
+  });
+}

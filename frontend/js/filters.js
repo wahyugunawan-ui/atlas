@@ -419,7 +419,14 @@ export function kotaBerikutnya(sekarang, daftar) {
   return putaran[(posisi + 1) % putaran.length];
 }
 
-export function activeRows(page) {
+/**
+ * Baris penjualan yang lolos filter halaman.
+ *
+ * `tanpaPos`: abaikan filter Pos. Dipakai seksi target penjualan — target milik DEALER, jadi
+ * penjualan yang dibandingkan juga harus milik dealer utuh; kalau hanya satu pos yang
+ * dihitung, persentasenya tampak rendah padahal yang kurang cuma pembilangnya.
+ */
+export function activeRows(page, { tanpaPos = false } = {}) {
   const f = pageFilters(page);
   // Kota/Karesidenan = KUMPULAN DEALER terdaftar di sana (dealers.city_code), BUKAN
   // kecamatan tempat penjualannya terjadi. Penjualan dealer-dealer itu ikut seluruhnya,
@@ -436,7 +443,7 @@ export function activeRows(page) {
     if (f.from !== 'ALL' && row.period < f.from) return false;
     if (f.to !== 'ALL' && row.period > f.to) return false;
     if (f.dealerCode !== 'ALL' && row.dealer !== f.dealerCode) return false;
-    if (f.outletCode !== 'ALL' && row.outlet !== f.outletCode) return false;
+    if (!tanpaPos && f.outletCode !== 'ALL' && row.outlet !== f.outletCode) return false;
     if (regionSet && !regionSet.has(row.dealer)) return false;
     // Kecamatan yang tidak dikenal tetap tidak bisa digambar/dihitung per wilayah.
     return Boolean(S.districtByCode[row.district]);

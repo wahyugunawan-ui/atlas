@@ -29,6 +29,7 @@ async function test() {
     contributionsByOutlet, contributionsByDistrict, groupSplit,
     unitsForRows,
     dealerRingSplit, balancedPercents, posContributionInDealer, ringCells,
+    monthsBetween, targetProgress,
   } = await import(url('sales-stats.js'));
   const salesStats = await import(url('sales-stats.js'));
   const { percentileBreaks } = await import(url('colors.js'));
@@ -286,6 +287,86 @@ async function test() {
   assert.strictEqual(belum.attributed, 0);
   assert.strictEqual(belum.perOutlet.size, 0, 'pos tanpa penjualan tercatat tampil 0% palsu');
   assert.strictEqual(posContributionInDealer([], () => true).dealerTotal, 0);
+
+  /* ------------------------------------------------------------------
+     8. Target penjualan (2026-10-11): monthsBetween + targetProgress
+     ------------------------------------------------------------------ */
+  const ada = ['2026-01', '2026-02', '2026-03', '2026-04'];
+  assert.deepStrictEqual(monthsBetween('2026-02', '2026-03', ada), ['2026-02', '2026-03']);
+  assert.deepStrictEqual(monthsBetween('2026-03', '2026-03', ada), ['2026-03'], 'satu bulan = satu elemen');
+  assert.deepStrictEqual(monthsBetween('ALL', 'ALL', ada), ada, "'ALL' = batas data");
+  assert.deepStrictEqual(monthsBetween('2026-11', '2027-02', ada),
+    ['2026-11', '2026-12', '2027-01', '2027-02'], 'rentang melewati pergantian tahun');
+  assert.deepStrictEqual(monthsBetween('2026-01', '2026-04', ['2026-01', '2026-04']), ada,
+    'bulan tanpa data di tengah rentang tetap ikut');
+  assert.deepStrictEqual(monthsBetween('2026-05', '2026-02', ada), [], 'rentang terbalik kosong');
+  assert.deepStrictEqual(monthsBetween('ALL', 'ALL', []), [], 'tanpa data dan tanpa batas = kosong, bukan tebakan');
+  assert.ok(monthsBetween('2000-01', '2099-12', ada).length <= 240, 'rentang ngawur ada batas pengaman');
+
+  const barisT = [
+    { dealer: 'D1', period: '2026-03', units: 40 },
+    { dealer: 'D1', period: '2026-04', units: 60 },
+    { dealer: 'D2', period: '2026-03', units: 30 },
+    { dealer: 'D3', period: '2026-03', units: 500 },     // tanpa target
+    { dealer: 'D1', period: '2026-02', units: 999 },     // di luar bulan
+  ];
+  const targetT = {
+    '2026-03': { D1: 100, D2: 60, D4: 0 },
+    '2026-04': { D1: 100 },
+  };
+  const satuBulan = targetProgress({
+    dealerCodes: ['D1', 'D2', 'D3', 'D4'], rows: barisT, targets: targetT, months: ['2026-03'],
+  });
+  const per = Object.fromEntries(satuBulan.perDealer.map((d) => [d.code, d]));
+  assert.strictEqual(per.D1.realized, 40, 'penjualan bulan lain ikut terhitung');
+  assert.strictEqual(per.D1.percent, 40);
+  assert.strictEqual(per.D2.percent, 50);
+  assert.strictEqual(per.D3.target, null, 'belum punya target harus null, bukan 0');
+  assert.strictEqual(per.D3.percent, null);
+  assert.strictEqual(per.D4.target, 0, 'target nol adalah target yang sah');
+  assert.strictEqual(per.D4.percent, null, 'dibagi nol bukan 0% dan bukan Infinity');
+  // Persentase terendah dulu (yang tertinggal paling atas); tanpa persentase di bawah, dan di
+  // antara mereka (D3 500 unit, D4 0 unit) yang penjualannya terbesar dulu.
+  assert.deepStrictEqual(satuBulan.perDealer.map((d) => d.code), ['D1', 'D2', 'D3', 'D4']);
+  const terbalik = targetProgress({
+    dealerCodes: ['D2', 'D1'], rows: barisT, targets: { '2026-03': { D1: 100, D2: 40 } }, months: ['2026-03'],
+  });
+  assert.deepStrictEqual(terbalik.perDealer.map((d) => d.code), ['D1', 'D2'],
+    'D1 40% harus di atas D2 75% walau urutan masukan sebaliknya');
+
+  // TOTAL tidak boleh memasukkan penjualan dealer tanpa target ke pembilang.
+  assert.strictEqual(satuBulan.total.target, 160);
+  assert.strictEqual(satuBulan.total.realizedBertarget, 70);
+  assert.strictEqual(satuBulan.total.percent, 43.75);
+  assert.strictEqual(satuBulan.total.realized, 570, 'realized total tetap seluruh dealer');
+  assert.strictEqual(satuBulan.total.dealerTotal, 4);
+  assert.strictEqual(satuBulan.total.dealerBertarget, 2, 'target nol tidak dihitung punya target');
+
+  // Rentang dua bulan: target dijumlahkan per bulan, penjualan juga.
+  const duaBulan = targetProgress({
+    dealerCodes: ['D1'], rows: barisT, targets: targetT, months: ['2026-03', '2026-04'],
+  });
+  assert.strictEqual(duaBulan.perDealer[0].realized, 100);
+  assert.strictEqual(duaBulan.perDealer[0].target, 200);
+  assert.strictEqual(duaBulan.perDealer[0].percent, 50);
+  // Target hanya ada di satu dari dua bulan: tetap dihitung, bukan dianggap "belum punya".
+  const sebagian = targetProgress({
+    dealerCodes: ['D2'], rows: barisT, targets: targetT, months: ['2026-03', '2026-04'],
+  });
+  assert.strictEqual(sebagian.perDealer[0].target, 60);
+
+  // Melewati 100% tidak dijepit di hitungan (penjepitan hanya urusan lebar bar).
+  const lewat = targetProgress({
+    dealerCodes: ['D1'], rows: [{ dealer: 'D1', period: '2026-03', units: 150 }],
+    targets: { '2026-03': { D1: 100 } }, months: ['2026-03'],
+  });
+  assert.strictEqual(lewat.perDealer[0].percent, 150);
+
+  // Tanpa target sama sekali: total null (bukan 0%), seluruh dealer dilaporkan tak bertarget.
+  const kosongT = targetProgress({ dealerCodes: ['D1', 'D2'], rows: barisT, targets: {}, months: ['2026-03'] });
+  assert.strictEqual(kosongT.total.percent, null);
+  assert.strictEqual(kosongT.total.dealerBertarget, 0);
+  assert.strictEqual(kosongT.total.dealerTotal, 2);
 
   console.log('OK sales-stats — kontribusi dihitung per kota (bukan global), total ' +
     'nol menghasilkan null, mode Static dan Acuan Bisnis sudah hilang, kontribusi per ' +
