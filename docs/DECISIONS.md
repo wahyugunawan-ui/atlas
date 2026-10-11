@@ -4704,3 +4704,52 @@ catatan kontribusi pos di putaran kedua) dan per kecamatan bukan satuan target.
   tampil menurut filter.
 - Target disimpan per bulan kalender; bulan tanpa penjualan di tengah rentang tetap
   membawa targetnya (persentasenya memang harus menanggungnya).
+
+## [2026-10-11, putaran keempat] Tooltip ikon biru muda; garis kecamatan dan titik pos/dealer yang tidak terkait filter dihilangkan
+
+**Tooltip ikon pos/dealer biru muda** (`#c9e2ff`, teks `#0b2f6b`) lewat kelas
+`.float-tooltip.kartu-marker`; tooltip kecamatan tetap biru tua dan kartu orang tetap putih.
+Satu elemen `#tooltip` dipakai semua penangan, jadi jenisnya disetel lewat
+`setTooltipJenis(tip, 'ringkasan'|'marker'|'orang')` (dom.js) yang membuang kelas jenis
+sebelumnya — menggantikan `classList.remove('kartu-orang')` yang tersebar. Ditolak:
+menimpa warna lewat kelas Tailwind (teks terang bawaan tidak terbaca di biru muda) dan
+`backdrop-filter` pada varian ini (biru muda harus pekat, bukan kaca).
+
+**Garis kecamatan tak terkait hilang** waktu ada filter RUANG LINGKUP (Kares/Kota/Kec/
+Dealer/Pos; periode tidak dihitung — dia mengubah isi peta, bukan "siapa yang terkait").
+Lapisan `kec-garis`, `kec-garis-kosong`, dan `kec-nama` diberi filter lapisan
+`kode IN terkait`, bukan opasitas 0: fitur yang tersaring tidak digambar dan tidak ikut
+berebut tempat label. Dipilih `setFilter`, bukan feature-state: ekspresi filter tidak boleh
+membaca feature-state, tapi daftar kode ~14–70 kecamatan murah dikirim ulang tiap render.
+**"Terkait"** = gabungan (`relatedDistricts`, sales-stats.js): kecamatan berpenjualan pada
+filter, kecamatan tempat dealer terfokus terdaftar, ring 1–3 mereka (walau tanpa
+penjualan), Kec. Tercover pos terpilih, dan kecamatan tempat titik dealer/pos terpilih
+sungguh berada (`districtAt`, hanya untuk SATU dealer/pos — dia memindai semua poligon).
+Selagi mode EDIT ring/Kec. Tercover aktif semua garis ditampilkan lagi, karena orang perlu
+mengklik kecamatan di luar yang terkait untuk memasukkannya ke ring.
+- **Nama kecamatan ikut disembunyikan**, bukan hanya garisnya. Itu tafsiran saya atas
+  "garis batas": satu sakelar Opsi Peta mengatur garis dan nama bersama, dan nama yang
+  tertinggal tanpa batasnya membingungkan. Kalau yang diinginkan hanya garis, cukup
+  keluarkan `kec-nama` dari daftar di `terapkanBatasKecamatan()` (map.js).
+- Kecamatan tak terkait yang tersisa adalah yang berisi warna (berpenjualan), jadi tidak
+  ada isian yang kehilangan garisnya.
+
+**Pos dan dealer yang tidak terkait tidak digambar** (sebelumnya diabukan). Himpunan yang
+digambar = `focusDealerSet()` (filters.js; dipindah dari `focusDealers()` di outlets.js):
+pos terpilih → dealer pemiliknya, dealer terpilih → dealer itu, selain itu dealer
+TERDAFTAR di Kec/Kota/Kares terpilih. Contoh yang diminta berlaku apa adanya: pos A dari
+dealer C yang punya pos B → pos A (terpilih), pos B (lebih kecil), dan dealer C. Himpunan
+kosong (filter tanpa dealer) = tidak ada titik, BUKAN semua titik. **`fitToScope()` ikut
+diubah:** dulu satu pos dipilih → peta mendekat ke pos itu saja (skala ~500 m), sehingga
+pos saudara dan dealernya digambar tapi jatuh di luar layar (terukur di Chrome: x sampai
+2569 px pada kanvas 1435 px). Sekarang peta dipas-kan ke semua titik yang digambar.
+
+**Batas keputusan ini:**
+- Titik KTP/Servis/Pengiriman (lapisan titik tiga sumber) tidak disentuh; keduanya sudah
+  punya saringan sendiri (`tandaSaringPeta`) dan di peta Agustus 2026 masih terlihat sebaran
+  titik di luar kecamatan terkait.
+- Garis "kecamatan terkait" memakai kecamatan ASAL dealer dari kolom Kecamatan Excel
+  (`dealers.district_code`), bukan dihitung dari koordinat, kecuali untuk satu dealer/pos
+  terpilih (geometri). Dealer yang kolom Kecamatannya kosong tidak menambah kecamatan asal.
+- Filter Kota/Kares dengan banyak dealer menyatukan ring SEMUA dealer itu, jadi garis yang
+  tersisa bisa banyak (kota 33.23: 67 kecamatan).

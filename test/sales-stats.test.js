@@ -29,7 +29,7 @@ async function test() {
     contributionsByOutlet, contributionsByDistrict, groupSplit,
     unitsForRows,
     dealerRingSplit, balancedPercents, posContributionInDealer, ringCells,
-    monthsBetween, targetProgress,
+    monthsBetween, targetProgress, relatedDistricts,
   } = await import(url('sales-stats.js'));
   const salesStats = await import(url('sales-stats.js'));
   const { percentileBreaks } = await import(url('colors.js'));
@@ -367,6 +367,28 @@ async function test() {
   assert.strictEqual(kosongT.total.percent, null);
   assert.strictEqual(kosongT.total.dealerBertarget, 0);
   assert.strictEqual(kosongT.total.dealerTotal, 2);
+
+  /* ------------------------------------------------------------------
+     9. relatedDistricts (2026-10-11): garis kecamatan yang tetap tampil saat difilter
+     ------------------------------------------------------------------ */
+  const terkait = relatedDistricts({
+    salesDistricts: ['K-JUAL-1', 'K-JUAL-2'],
+    dealerCodes: ['D1', 'D2'],
+    dealerHome: { D1: 'K-ASAL-1', D2: 'K-ASAL-2', D9: 'K-LAIN' },
+    dealerRings: { D1: { 'K-RING-1': 1, 'K-JUAL-1': 2 }, D2: {}, D9: { 'K-RING-LAIN': 1 } },
+    posCoverage: { P1: { 'K-COVER-1': 1 }, P9: { 'K-COVER-LAIN': 2 } },
+    outletCodes: ['P1'],
+    extra: ['K-TITIK', null, undefined, ''],
+  });
+  assert.deepStrictEqual([...terkait].sort(), [
+    'K-ASAL-1', 'K-ASAL-2', 'K-COVER-1', 'K-JUAL-1', 'K-JUAL-2', 'K-RING-1', 'K-TITIK',
+  ], 'kecamatan terkait salah: harus penjualan + asal dealer + ring dealer + Kec. Tercover pos ' +
+    'terpilih + kecamatan titik, tanpa duplikat dan tanpa nilai kosong');
+  assert.ok(!terkait.has('K-LAIN') && !terkait.has('K-RING-LAIN') && !terkait.has('K-COVER-LAIN'),
+    'dealer/pos di luar yang difokuskan ikut membuat kecamatannya terkait');
+  assert.strictEqual(relatedDistricts({}).size, 0, 'tanpa masukan harus himpunan kosong, bukan galat');
+  assert.deepStrictEqual([...relatedDistricts({ salesDistricts: ['A'], dealerCodes: ['D1'] })], ['A'],
+    'dealer tanpa asal/ring tidak boleh menambah apa pun');
 
   console.log('OK sales-stats — kontribusi dihitung per kota (bukan global), total ' +
     'nol menghasilkan null, mode Static dan Acuan Bisnis sudah hilang, kontribusi per ' +

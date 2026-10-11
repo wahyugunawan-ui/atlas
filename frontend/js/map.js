@@ -6,11 +6,11 @@ import {
 } from './config.js';
 import { classOf, dealerColor, percentileBreaks, RAMP, COLOR_EMPTY } from './colors.js';
 import {
-  $, bbox, diAtasMarker, displayCityName, esc, formatNumber, sumBy, toast,
+  $, bbox, diAtasMarker, displayCityName, esc, formatNumber, setTooltipJenis, sumBy, toast,
 } from './dom.js';
 import { fetchDistrictCustomers, fetchTitikPeta } from './api.js';
 import {
-  activeRows, fusionFilterPeta, pageFilters, regionDealerCodes, scopeValue,
+  activeRows, focusDealerSet, fusionFilterPeta, hasScopeFilter, pageFilters, scopeValue,
 } from './filters.js';
 import { circle, EMPTY_COLLECTION } from './geo.js';
 import {
@@ -19,7 +19,7 @@ import {
 import { fiturTelusur } from './fusion-alasan.js';
 // Cuma tabel warna+nama golongan (data murni, tanpa DOM) — bukan lingkaran modul.
 import { SEGMENTS } from './fusion-segments.js';
-import { contributionsForRows, unitsForRows } from './sales-stats.js';
+import { contributionsForRows, relatedDistricts, unitsForRows } from './sales-stats.js';
 // outlets.js TIDAK meng-import berkas ini (ia cuma memakai colors, dom, filters, dan
 // state), jadi impor ini tidak membuat lingkaran modul. Lihat catatan serupa di
 // outlets.js yang memakai window.openDealerDetail justru untuk menghindari lingkaran
@@ -344,7 +344,7 @@ export function addLayers() {
       if (diAtasMarker(e && e.originalEvent)) { batalkanKartuTitik(); return; }
       S.map.getCanvas().style.cursor = '';
       const tip = $('tooltip');
-      if (tip) { tip.classList.remove('show'); tip.classList.remove('kartu-orang'); }
+      if (tip) { tip.classList.remove('show'); setTooltipJenis(tip, 'ringkasan'); }
       batalkanKartuTitik();
     });
     // Klik = riwayat LENGKAP orang itu, bukan sekadar kartunya. Pewaktunya dibatalkan
@@ -547,6 +547,7 @@ export function carikanBagianTitikFusi(rows, district, dealer) {
 function tampilkanTooltipTitikFusi(jenis, properties, event) {
   const tip = $('tooltip');
   if (!tip) return;
+  setTooltipJenis(tip, 'ringkasan');
   // Yang disebut KECAMATAN, bukan desa: titiknya memang disebar di desa asalnya
   // (supaya sebarannya aktual), tapi satuan analisis yang boleh tampil di peta
   // berhenti di kecamatan (2026-10-10). Nama desa per orang tetap ada di daftar
@@ -684,7 +685,7 @@ function tampilkanKartuOrang(jenis, orang, event) {
   const servis = Number(orang.serviceCount) || 0;
   const kirim = Number(orang.deliveryCount) || 0;
 
-  tip.classList.add('kartu-orang');
+  setTooltipJenis(tip, 'orang');
   tip.innerHTML =
     `<div class="font-extrabold text-[13px] leading-tight">${
       esc(orang.name || 'Nama tidak ada di data KTP')}</div>` +
@@ -997,6 +998,8 @@ const LOKASI_WARNA = '#0f172a';
  */
 export function setGroupPaint(draft, colors) {
   if (!kecamatanSiap) return;
+  // Mode edit hidup/mati mengubah apakah garis kecamatan di luar yang terkait ditampilkan.
+  terapkanBatasKecamatan();
 
   S.map.setLayoutProperty('kec-isi', 'visibility', draft ? 'visible' : 'none');
   if (!draft) return;
@@ -1207,10 +1210,75 @@ export function paintChoropleth(rows) {
       { warna, kosong: cls < 0 });
   });
 
+  kecTerkait = hasScopeFilter() ? hitungKecamatanTerkait([...kontribusi.keys()]) : null;
+  terapkanBatasKecamatan();
+
   // `satuan` ikut dikembalikan supaya legenda MENYEBUT apa yang sedang diukur. Tanpa
   // itu, angka yang sama ("12") berarti "12% kontribusi" di satu keadaan dan "12 unit"
   // di keadaan lain, di kotak legenda yang bentuknya persis sama.
   return { perDistrict, breaks, satuan: pakaiUnit ? 'unit' : 'persen' };
+}
+
+/**
+ * Kecamatan yang "terkait" dengan filter ruang lingkup terakhir, atau null kalau tidak ada
+ * filter (semua kecamatan bergaris). Diisi paintChoropleth(), dibaca terapkanBatasKecamatan().
+ * @type {Set<string>|null}
+ */
+let kecTerkait = null;
+
+/**
+ * Kecamatan yang terkait dengan filter aktif: yang BERPENJUALAN pada filter itu (yang
+ * diwarnai), kecamatan tempat dealer terdaftar dan ring 1-3 dealernya, Kec. Tercover pos
+ * terpilih, dan kecamatan tempat titik dealer/pos terpilih sungguh berada. Hitungannya
+ * murni di relatedDistricts() (sales-stats.js); di sini hanya bahan-bahannya dikumpulkan.
+ *
+ * districtAt() dipakai HANYA untuk satu dealer / satu pos terpilih: dia memindai seluruh
+ * poligon, dan memanggilnya untuk semua dealer di tiap renderAll() terlalu mahal.
+ */
+function hitungKecamatanTerkait(salesDistricts) {
+  const focus = focusDealerSet();
+  const dealerCodes = focus ? [...focus] : [];
+  const posKode = scopeValue('pos');
+  const dealerHome = {};
+  S.dealers.forEach((d) => { if (d.districtCode) dealerHome[d.code] = d.districtCode; });
+
+  const extra = [];
+  if (dealerCodes.length === 1) {
+    const dealer = S.dealerByCode[dealerCodes[0]] || {};
+    extra.push(districtAt(dealer.lat, dealer.lng));
+  }
+  if (posKode !== 'ALL') {
+    const outlet = S.outletByCode[posKode] || {};
+    extra.push(districtAt(outlet.lat, outlet.lng));
+  }
+  return relatedDistricts({
+    salesDistricts, dealerCodes, dealerHome, dealerRings: S.dealerRings,
+    posCoverage: S.posCoverage, outletCodes: posKode !== 'ALL' ? [posKode] : [], extra,
+  });
+}
+
+/**
+ * Sembunyikan garis dan nama kecamatan yang TIDAK terkait filter (2026-10-11): ketiga
+ * lapisan memakai filter `kode IN terkait`, jadi fiturnya benar-benar tidak digambar (juga
+ * tidak ikut berebut tempat label). Tanpa filter ruang lingkup, filternya dilepas.
+ *
+ * Selagi mode EDIT ring/Kec. Tercover aktif semuanya ditampilkan lagi: orang perlu
+ * melihat dan mengklik kecamatan di luar yang terkait untuk memasukkannya ke ring.
+ * Dipanggil paintChoropleth() dan setGroupPaint() (yang jalan tiap mode edit hidup/mati).
+ */
+function terapkanBatasKecamatan() {
+  if (!kecamatanSiap) return;
+  const menyunting = Boolean(window.anyGroupEditing && window.anyGroupEditing());
+  let filter = null;
+  if (kecTerkait && !menyunting) {
+    // `in` dengan daftar kosong tidak sah di ekspresi; kosong = tidak ada yang cocok.
+    filter = kecTerkait.size
+      ? ['in', ['get', 'kode'], ['literal', [...kecTerkait]]]
+      : ['==', ['get', 'kode'], ''];
+  }
+  ['kec-garis', 'kec-garis-kosong', 'kec-nama'].forEach((id) => {
+    if (S.map.getLayer(id)) S.map.setFilter(id, filter);
+  });
 }
 
 /** Saklar "Status Kelompok Relatif" di Opsi Peta (nyala bawaan). Mati = peta dalam unit. */
@@ -1405,9 +1473,9 @@ export function toggleFullscreen(force) {
  * Bawa peta ke data yang SEDANG TAMPIL, bukan selalu ke seluruh wilayah.
  *
  * Kalau satu pos dipilih, yang dipas-kan adalah pos itu beserta seluruh kecamatan yang
- * dilayaninya — sekali klik langsung kelihatan seberapa jauh pelanggannya menyebar, dan
- * itu justru pertanyaan pokoknya. Zoom ke titik posnya saja malah membuang yang di luar
- * radius keluar layar.
+ * dilayaninya, pos saudara sedealernya, dan titik dealernya — sekali klik langsung
+ * kelihatan seberapa jauh pelanggannya menyebar, dan itu justru pertanyaan pokoknya. Zoom
+ * ke titik posnya saja malah membuang yang di luar radius keluar layar.
  *
  * @param {boolean} [auto] Sejak 2026-09-14: `true` waktu dipanggil OTOMATIS sesudah
  *   aksi yang mengubah tampilan peta (renderAll(), openDistrictDetail() — lihat
@@ -1425,19 +1493,21 @@ export function fitToScope(auto) {
     if (district && district.lat != null) points.push([district.lng, district.lat]);
   });
 
-  // Pos dari dealer-dealer yang terpilih ikut dipas-kan, supaya letak dealernya sendiri
-  // terlihat bersama sebaran pelanggannya (kota/kares: seluruh dealer terdaftar di sana).
-  const outlet = scopeValue('pos');
-  const dealer = scopeValue('dealer');
-  const wilayah = regionDealerCodes();
-  const dealerWilayah = wilayah ? new Set(wilayah) : null;
-  S.outlets.forEach((o) => {
-    if (o.lat == null) return;
-    const included = outlet !== 'ALL' ? o.code === outlet
-      : dealer !== 'ALL' ? o.dealerCode === dealer
-        : dealerWilayah ? dealerWilayah.has(o.dealerCode) : false;
-    if (included) points.push([o.lng, o.lat]);
-  });
+  // Titik yang DIGAMBAR karena filter — pos dan titik dealer dari focusDealerSet() (dealer
+  // terpilih, dealer pemilik pos terpilih, atau dealer terdaftar di Kec/Kota/Kares) — ikut
+  // dipas-kan, supaya letak dealernya sendiri terlihat bersama sebaran pelanggannya. Waktu
+  // SATU pos dipilih, pos saudaranya dan titik dealernya juga ikut (2026-10-11): ketiganya
+  // memang ditampilkan, dan peta yang hanya mendekat ke satu pos menyembunyikannya di luar
+  // layar. Tanpa filter ruang lingkup (focus null) tidak ada titik tambahan.
+  const focus = focusDealerSet();
+  if (focus) {
+    S.outlets.forEach((o) => {
+      if (o.lat != null && focus.has(o.dealerCode)) points.push([o.lng, o.lat]);
+    });
+    S.dealers.forEach((d) => {
+      if (d.lat != null && focus.has(d.code)) points.push([d.lng, d.lat]);
+    });
+  }
 
   if (!points.length) {
     // Peta kosong yang di-zoom ke tempat entah di mana lebih membingungkan daripada

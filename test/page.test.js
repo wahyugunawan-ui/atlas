@@ -1352,9 +1352,61 @@ function test() {
     'menampilkan ringkasan kecamatan, bukan nama pos/dealer');
   assert.ok(/diAtasMarker\(e\.originalEvent\)/.test(source['map.js']),
     'handler titik Fusion di map.js tidak mundur di atas marker');
-  assert.strictEqual((source['outlets.js'].match(/classList\.remove\('kartu-orang'\)/g) || []).length >= 3,
-    true, 'tooltip pos/dealer/kecamatan tidak lagi membuang kelas kartu-orang — kartu putih ' +
-    'titik orang bisa menempel di tooltip nama');
+  // Jenis tooltip disetel lewat SATU fungsi yang membuang kelas jenis sebelumnya: kartu
+  // putih titik orang menempel di tooltip nama (tulisan hilang), biru muda ikon menempel di
+  // tooltip kecamatan (dua jenis jadi sama).
+  assert.ok(/export function setTooltipJenis/.test(source['dom.js']), 'setTooltipJenis hilang dari dom.js');
+  assert.strictEqual((source['outlets.js'].match(/setTooltipJenis\(tip, 'marker'\)/g) || []).length, 2,
+    'tooltip pos dan dealer tidak sama-sama memakai jenis marker (biru muda)');
+  assert.ok(/setTooltipJenis\(tip, 'ringkasan'\)/.test(source['outlets.js']),
+    'tooltip kecamatan tidak lagi mereset jenisnya ke biru tua');
+  assert.ok(/setTooltipJenis\(tip, 'orang'\)/.test(source['map.js']) &&
+    /setTooltipJenis\(tip, 'ringkasan'\)/.test(source['map.js']),
+  'tooltip titik orang/agregat di map.js tidak menyetel jenisnya');
+  assert.ok(!/classList\.(add|remove)\('kartu-(orang|marker)'\)/.test(
+    source['outlets.js'] + source['map.js']),
+  'kelas jenis tooltip diubah langsung, bukan lewat setTooltipJenis()');
+
+  /* ------------------------------------------------------------------------
+     2026-10-11 (putaran keempat): tooltip ikon BIRU MUDA, garis kecamatan tak terkait
+     hilang, pos/dealer tak terkait hilang
+     ------------------------------------------------------------------------ */
+  // Warna blok hover pos/dealer: biru MUDA (terang, dominan biru) dan beda dari tooltip
+  // kecamatan (biru tua, bawaan .float-tooltip).
+  const aturanMarker = html.match(/\.float-tooltip\.kartu-marker\s*\{[^}]*background:\s*#([0-9a-fA-F]{6})/);
+  assert.ok(aturanMarker, 'aturan CSS .float-tooltip.kartu-marker (latar biru muda) hilang');
+  const [mr, mg, mb] = [0, 2, 4].map((i) => parseInt(aturanMarker[1].slice(i, i + 2), 16));
+  assert.ok(mb >= 0xe0 && mb > mr && mb >= mg && mr >= 0x90 && mg >= 0xa0,
+    `latar tooltip pos/dealer #${aturanMarker[1]} bukan biru muda`);
+  const dasar = html.match(/\.float-tooltip\s*\{[^}]*background:\s*rgba\((\d+),\s*(\d+),\s*(\d+)/);
+  assert.ok(dasar && Number(dasar[1]) < 40 && Number(dasar[3]) < 100,
+    'tooltip kecamatan tidak lagi biru tua — tidak berbeda dari tooltip pos/dealer');
+  const tooltipIkon = source['outlets.js'].slice(
+    source['outlets.js'].indexOf('function showDealerTooltip'),
+    source['outlets.js'].indexOf('export function moveTooltip'));
+  assert.ok(tooltipIkon.length > 200 && !/text-white|text-slate-[123]00/.test(tooltipIkon),
+    'tooltip pos/dealer memakai teks terang — tidak terbaca di atas biru muda');
+
+  // Titik pos/dealer yang tidak terkait filter TIDAK digambar (bukan diabukan).
+  const dm = source['outlets.js'].slice(source['outlets.js'].indexOf('export function drawMarkers'));
+  assert.strictEqual((dm.match(/if \(focus && !focus\.has\(/g) || []).length, 2,
+    'drawMarkers/drawDealerMarkers tidak sama-sama membuang titik yang tidak terkait filter');
+  assert.ok(!/\babu\b/.test(dm), 'titik tidak terkait kembali digambar abu-abu, bukan dihilangkan');
+
+  // Garis dan nama kecamatan di luar yang terkait disembunyikan lewat filter lapisan.
+  assert.ok(/relatedDistricts/.test(source['map.js']) && /hasScopeFilter\(\)/.test(source['map.js']),
+    'map.js tidak menghitung kecamatan terkait filter');
+  assert.ok(/\['kec-garis', 'kec-garis-kosong', 'kec-nama'\]\.forEach\(\(id\) => \{\s*if \(S\.map\.getLayer\(id\)\) S\.map\.setFilter\(id, filter\)/
+    .test(source['map.js']), 'ketiga lapisan kecamatan tidak sama-sama disaring');
+  assert.ok(/kecTerkait = hasScopeFilter\(\) \? hitungKecamatanTerkait\(\[\.\.\.kontribusi\.keys\(\)\]\) : null;\s*terapkanBatasKecamatan\(\);/
+    .test(source['map.js']),
+    'paintChoropleth tidak menerapkan batas kecamatan terkait');
+  assert.ok(/const menyunting = Boolean\(window\.anyGroupEditing && window\.anyGroupEditing\(\)\);\s*let filter = null;\s*if \(kecTerkait && !menyunting\)/
+    .test(source['map.js']),
+  'selagi mode edit ring/Kec. Tercover aktif garis kecamatan tidak ditampilkan semua — ' +
+    'kecamatan di luar yang terkait tidak bisa dipilih untuk dimasukkan ke ring');
+  assert.ok(/export function setGroupPaint[\s\S]{0,300}terapkanBatasKecamatan\(\)/.test(source['map.js']),
+    'mode edit ring tidak memulihkan seluruh garis kecamatan (kecamatan baru tak bisa dipilih)');
 
   // 2. Legenda ("jumlah unit per kecamatan") di kiri-bawah, ringkas, dan bergeser ke kanan
   //    panel rincian waktu panel itu terbuka (kalau tidak, panelnya menutup legenda).

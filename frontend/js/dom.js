@@ -27,6 +27,27 @@ export function diAtasMarker(event) {
   return Boolean(target && typeof target.closest === 'function' && target.closest('.marker-outlet'));
 }
 
+/** Kelas penanda tiap jenis tooltip peta. 'ringkasan' (biru tua, bawaan) tidak punya kelas. */
+const KELAS_TOOLTIP = { orang: 'kartu-orang', marker: 'kartu-marker' };
+
+/**
+ * Setel JENIS tooltip peta: 'ringkasan' (biru tua; kecamatan dan titik agregat),
+ * 'marker' (biru MUDA; nama pos/dealer) atau 'orang' (putih; satu orang).
+ *
+ * Satu elemen `#tooltip` dipakai bersama semua penangan hover, jadi kelas jenis sebelumnya
+ * WAJIB dibuang sebelum yang baru dipasang — kalau tidak, kartu putih milik titik orang
+ * menempel di tooltip pos (tulisannya hilang di atas latar putih) dan biru muda milik ikon
+ * menempel di tooltip kecamatan (dua jenis jadi tak terbedakan, padahal itu inti warnanya).
+ *
+ * @param {{classList: DOMTokenList}} tip
+ * @param {'ringkasan'|'marker'|'orang'} jenis
+ */
+export function setTooltipJenis(tip, jenis) {
+  if (!tip) return;
+  Object.values(KELAS_TOOLTIP).forEach((kelas) => tip.classList.remove(kelas));
+  if (KELAS_TOOLTIP[jenis]) tip.classList.add(KELAS_TOOLTIP[jenis]);
+}
+
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
 ));

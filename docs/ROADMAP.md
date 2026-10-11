@@ -311,6 +311,36 @@ cuma perluasan ke Sulawesi ke timur.
 
 ## Selesai
 
+### Tooltip ikon biru muda; garis kecamatan dan titik pos/dealer tak terkait filter dihilangkan (2026-10-11, putaran keempat)
+
+**55/55 berkas tes** (baru: `peta-terkait-filter.test.js`; diperluas: `dom`, `sales-stats`,
+`page`). Alasan dan batas keputusan di DECISIONS 2026-10-11 (putaran keempat). Diverifikasi di
+Chrome sungguhan (headless) terhadap server dan data laptop ini, tanpa galat JavaScript:
+tooltip pos/dealer berlatar `rgb(201, 226, 255)` dan tooltip kecamatan tetap `rgba(7, 28, 66,
+0.9)` (kelas jenis tidak saling menempel); tanpa filter 109 pos + 78 dealer tampil dan filter
+lapisan kecamatan kosong; dealer Kompo Motor Purbalingga → 4 pos + 1 dealer dan 49 kecamatan
+bergaris; satu pos (dealer itu punya 4 pos) → 1 pos terpilih + 3 pos saudara + 1 dealer, 14
+kecamatan bergaris, kelimanya di dalam layar; mode edit ring → semua garis kembali, batal edit
+→ tersaring lagi; filter Kota 33.23 → 10 pos + 5 dealer; reset → semua kembali.
+
+1. **Tooltip ikon pos/dealer biru muda**, beda dari kecamatan (biru tua) dan orang (putih).
+2. **Garis dan nama kecamatan tak terkait hilang** waktu ada filter ruang lingkup.
+3. **Pos/dealer tak terkait hilang** (bukan diabukan); satu pos → pos itu + pos saudara +
+   dealernya. `fitToScope()` ikut diubah supaya semuanya masuk layar (sebelumnya mendekat
+   ke satu pos saja, dan saudara/dealernya jatuh di luar layar).
+4. Uji mutasi: 23 mutan (logika filter, himpunan kecamatan terkait, jenis tooltip, fit, dan
+   penjaga markup/CSS). Satu awalnya HIJAU — "mode edit tetap tersaring" (tidak ada tes yang
+   melihat pengecualian mode edit) — dan ditutup dengan penjaga di `page.test.js`.
+
+**Belum dilakukan / dicatat apa adanya:**
+- **Nama kecamatan ikut disembunyikan**, bukan hanya garis — tafsiran saya atas "garis batas";
+  cara mengembalikannya satu baris (DECISIONS).
+- Titik KTP/Servis/Pengiriman tidak ikut disaring oleh perubahan ini; di peta masih terlihat
+  sebaran titik di luar kecamatan yang bergaris.
+- Belum dicoba: layar penuh dengan filter aktif, dan mengklik kecamatan baru untuk dimasukkan
+  ke ring selagi mode edit (yang diperiksa hanya bahwa garis kembali semua).
+- Push ke GitHub: lihat catatan di entri sebelum ini — status terbaru ada di akhir sesi.
+
 ### Hover ikon pos/dealer, legenda kiri-bawah, seksi Persentase Keberhasilan Target Penjualan (2026-10-11, putaran ketiga)
 
 **54/54 berkas tes** (baru: `sales-targets.test.js` — Postgres + HTTP, `targets-ui.test.js`;

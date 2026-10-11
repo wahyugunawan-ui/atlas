@@ -92,3 +92,33 @@ assert.strictEqual(diAtasMarker(undefined), false, 'tanpa kejadian tidak boleh m
 assert.strictEqual(diAtasMarker({}), false, 'kejadian tanpa target tidak boleh melempar galat');
 assert.strictEqual(diAtasMarker({ target: {} }), false, 'target tanpa closest() tidak boleh melempar galat');
 console.log('OK dom — diAtasMarker mengenali kursor di atas ikon pos/dealer, aman terhadap masukan kosong');
+
+/* --------------------------------------------------------------------------
+   setTooltipJenis — tooltip pos/dealer biru MUDA, kecamatan biru tua, orang putih
+   --------------------------------------------------------------------------
+   Satu elemen #tooltip dipakai semua penangan hover. Kalau kelas jenis sebelumnya tidak
+   dibuang, biru muda milik ikon menempel di tooltip kecamatan (dua jenis jadi sama, padahal
+   perbedaan warna itu seluruh permintaannya) dan kartu putih titik orang menempel di
+   tooltip nama (tulisan terang di atas putih tidak terbaca).
+   -------------------------------------------------------------------------- */
+const { setTooltipJenis } = require('../frontend/js/dom.js');
+const fakeTip = () => {
+  const kelas = new Set(['float-tooltip', 'show']);
+  return { kelas, classList: { add: (k) => kelas.add(k), remove: (k) => kelas.delete(k) } };
+};
+const tip = fakeTip();
+setTooltipJenis(tip, 'marker');
+assert.deepStrictEqual([...tip.kelas].sort(), ['float-tooltip', 'kartu-marker', 'show'],
+  'jenis marker harus memasang kartu-marker dan membiarkan kelas lain');
+setTooltipJenis(tip, 'orang');
+assert.ok(tip.kelas.has('kartu-orang') && !tip.kelas.has('kartu-marker'),
+  'kartu-marker menempel waktu berganti ke kartu orang');
+setTooltipJenis(tip, 'marker');
+assert.ok(tip.kelas.has('kartu-marker') && !tip.kelas.has('kartu-orang'),
+  'kartu-orang menempel di tooltip pos/dealer — tulisannya hilang di atas putih');
+setTooltipJenis(tip, 'ringkasan');
+assert.deepStrictEqual([...tip.kelas].sort(), ['float-tooltip', 'show'],
+  'jenis ringkasan (kecamatan) harus polos: tanpa kelas jenis apa pun');
+setTooltipJenis(null, 'marker');   // elemen tidak ada: tidak melempar galat
+console.log('OK dom — setTooltipJenis memasang tepat satu jenis tooltip (marker biru muda / orang putih / ' +
+  'ringkasan polos) dan membuang jenis sebelumnya');

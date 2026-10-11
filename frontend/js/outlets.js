@@ -6,48 +6,40 @@
  * sebabnya titik penjualan memakai lapisan circle di map.js.
  */
 import { dealerColor } from './colors.js';
-import { $, esc, formatNumber, sumBy } from './dom.js';
+import { $, esc, formatNumber, setTooltipJenis, sumBy } from './dom.js';
 import {
-  activeRows, applyScope, clearScope, regionDealerCodes, scopeValue, splitByCoverage,
+  activeRows, applyScope, clearScope, focusDealerSet, scopeValue, splitByCoverage,
 } from './filters.js';
 import { S } from './state.js';
 
 /**
- * Himpunan dealer yang "dalam fokus" di peta, atau null kalau tidak ada filter wilayah
- * sama sekali. Dealer/pos terpilih -> dealer itu saja; kalau tidak, dealer yang
- * terdaftar di Kota/Karesidenan terpilih. Selain himpunan ini diredupkan.
+ * Titik pos.
+ *
+ * Waktu ada filter wilayah/dealer/pos, pos milik dealer LAIN tidak digambar sama sekali
+ * (2026-10-11; sebelumnya hanya diabukan). Himpunan yang digambar = `focusDealerSet()`:
+ * dealer terpilih, dealer pemilik pos terpilih, atau dealer terdaftar di Kec/Kota/Kares
+ * terpilih. Akibatnya waktu satu pos dianalisis: pos itu, saudara-saudara sedealernya
+ * (lebih kecil, kelas `sedang`), dan titik dealernya tetap tampil.
  */
-function focusDealers() {
-  const posFilter = scopeValue('pos');
-  const focusDealer = posFilter !== 'ALL'
-    ? (S.outletByCode[posFilter] || {}).dealerCode : scopeValue('dealer');
-  if (focusDealer && focusDealer !== 'ALL') return new Set([focusDealer]);
-  const wilayah = regionDealerCodes();
-  return wilayah ? new Set(wilayah) : null;
-}
-
 export function drawMarkers() {
   S.markers.forEach((m) => m.remove());
   S.markers = [];
 
   const perOutlet = sumBy(activeRows(), 'outlet');
   const posFilter = scopeValue('pos');
-  const focus = focusDealers();
+  const focus = focusDealerSet();
 
   S.outlets.forEach((outlet) => {
     if (outlet.lat == null) return;
+    if (focus && !focus.has(outlet.dealerCode)) return;      // tidak terkait filter: hilang
     const selected = posFilter === outlet.code;
-    // Tiga tingkat, bukan dua: pos terpilih penuh, saudara sedealer tetap berwarna
-    // tapi lebih kecil, sisanya abu. Waktu menekan satu pos, pos lain milik dealer
-    // yang sama tetap harus kelihatan.
-    const sameDealer = Boolean(focus) && focus.has(outlet.dealerCode);
-    const grey = Boolean(focus) && !sameDealer;
-    const medium = sameDealer && posFilter !== 'ALL' && !selected;
+    // Pos terpilih penuh, saudara sedealernya tetap berwarna tapi lebih kecil. Waktu
+    // menekan satu pos, pos lain milik dealer yang sama tetap harus kelihatan.
+    const medium = posFilter !== 'ALL' && !selected;
 
     const el = document.createElement('div');
-    el.className = 'marker-outlet pos' + (grey ? ' abu' : '') +
-      (medium ? ' sedang' : '') + (selected ? ' terpilih' : '');
-    el.style.background = grey ? '' : dealerColor(S.registry, outlet.dealerCode);
+    el.className = 'marker-outlet pos' + (medium ? ' sedang' : '') + (selected ? ' terpilih' : '');
+    el.style.background = dealerColor(S.registry, outlet.dealerCode);
     el.innerHTML = '<i class="ph-fill ph-storefront"></i>';
 
     el.addEventListener('mouseenter', (e) =>
@@ -76,7 +68,7 @@ export function drawDealerMarkers() {
   S.dealerMarkers = [];
 
   const perDealer = sumBy(activeRows(), 'dealer');
-  const focus = focusDealers();
+  const focus = focusDealerSet();
   const dealerFilter = scopeValue('dealer');
   const posFilter = scopeValue('pos');
   const focusDealer = posFilter !== 'ALL'
@@ -84,14 +76,14 @@ export function drawDealerMarkers() {
 
   S.dealers.forEach((dealer) => {
     if (dealer.lat == null) return;
-    // "terpilih" hanya untuk SATU dealer yang dipilih langsung; dealer anggota
-    // kota/karesidenan terpilih tampil berwarna biasa, sisanya diredupkan.
+    if (focus && !focus.has(dealer.code)) return;            // tidak terkait filter: hilang
+    // "terpilih" hanya untuk SATU dealer yang dipilih langsung (atau pemilik pos terpilih);
+    // dealer anggota kota/karesidenan terpilih tampil berwarna biasa.
     const selected = focusDealer !== 'ALL' && focusDealer === dealer.code;
-    const grey = Boolean(focus) && !focus.has(dealer.code);
 
     const el = document.createElement('div');
-    el.className = 'marker-outlet dealer' + (grey ? ' abu' : '') + (selected ? ' terpilih' : '');
-    el.style.background = grey ? '' : dealerColor(S.registry, dealer.code);
+    el.className = 'marker-outlet dealer' + (selected ? ' terpilih' : '');
+    el.style.background = dealerColor(S.registry, dealer.code);
     el.innerHTML = '<i class="ph-fill ph-buildings"></i>';
 
     el.addEventListener('mouseenter', (e) =>
@@ -119,33 +111,33 @@ export function drawDealerMarkers() {
 
 function showDealerTooltip(dealer, units, event) {
   const tip = $('tooltip');
-  // Kartu putih milik titik orang (kartu-orang) bisa masih menempel dari hover sebelumnya;
-  // tooltip ikon memakai teks terang, jadi di atas latar putih tulisannya hilang.
-  tip.classList.remove('kartu-orang');
+  // Biru MUDA (kartu-marker), supaya tooltip ikon pos/dealer langsung beda dari tooltip
+  // kecamatan yang biru tua. Warna teksnya dari CSS (.km-*), bukan kelas Tailwind terang.
+  setTooltipJenis(tip, 'marker');
   tip.innerHTML =
-    `<div class="font-bold text-white">${esc(dealer.name)}</div>` +
-    `<div class="text-[11px] text-slate-300 mt-0.5">${esc(formatNumber(dealer.outletCount || 0))} pos</div>` +
-    `<div class="text-[11px] text-slate-300 mt-1.5">${esc(formatNumber(units))} penjualan pada filter ini</div>` +
-    `<div class="text-[10px] text-slate-400 mt-1">klik untuk melihat seluruh pos dealer ini</div>`;
+    `<div class="km-judul">${esc(dealer.name)}</div>` +
+    `<div class="km-sub text-[11px] mt-0.5">${esc(formatNumber(dealer.outletCount || 0))} pos</div>` +
+    `<div class="km-sub text-[11px] mt-1.5">${esc(formatNumber(units))} penjualan pada filter ini</div>` +
+    `<div class="km-info text-[10px] mt-1">klik untuk melihat seluruh pos dealer ini</div>`;
   tip.classList.add('show');
   moveTooltip(event);
 }
 
 function showOutletTooltip(outlet, units, event) {
   const tip = $('tooltip');
-  tip.classList.remove('kartu-orang');   // lihat showDealerTooltip()
+  setTooltipJenis(tip, 'marker');   // lihat showDealerTooltip()
   tip.innerHTML =
-    `<div class="font-bold text-white">${esc(outlet.name)}</div>` +
-    `<div class="text-[11px] text-slate-300 flex items-center gap-1.5 mt-0.5">` +
+    `<div class="km-judul">${esc(outlet.name)}</div>` +
+    `<div class="km-sub text-[11px] flex items-center gap-1.5 mt-0.5">` +
     `<span class="w-2 h-2 rounded-full inline-block" style="background:${esc(dealerColor(S.registry, outlet.dealerCode))}"></span>` +
     `${esc(outlet.dealerName)}</div>` +
     // Penjualan sekarang dicatat di tingkat DEALER (baris proxy), belum per pos. Baris
     // "0 penjualan" di sini terbaca seperti pos yang tidak laku, jadi hanya ditulis kalau
     // memang ada angkanya.
     (units > 0
-      ? `<div class="text-[11px] text-slate-300 mt-1.5">${esc(formatNumber(units))} penjualan pada filter ini</div>`
+      ? `<div class="km-sub text-[11px] mt-1.5">${esc(formatNumber(units))} penjualan pada filter ini</div>`
       : '') +
-    `<div class="text-[10px] text-slate-400 mt-1">klik untuk melihat area layanannya</div>`;
+    `<div class="km-info text-[10px] mt-1">klik untuk melihat area layanannya</div>`;
   tip.classList.add('show');
   moveTooltip(event);
 }
@@ -238,9 +230,9 @@ export function showDistrictTooltip(districtCode, event) {
   const d = districtTooltipData(districtCode);
   const tip = $('tooltip');
   if (!d) { tip.classList.remove('show'); return; }
-  tip.classList.remove('kartu-orang');   // lihat showDealerTooltip()
+  setTooltipJenis(tip, 'ringkasan');   // biru tua bawaan; lihat showDealerTooltip()
 
-  const persen = (inside, covered) =>
+  const persen =(inside, covered) =>
     covered ? `${(inside / covered * 100).toFixed(0)}% dalam jangkauan` : null;
   const kecPersen = persen(d.inside, d.covered);
   const kabPersen = persen(d.city.inside, d.city.covered);

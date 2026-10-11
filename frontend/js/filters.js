@@ -113,6 +113,38 @@ export function regionDealerCodes(f) {
 }
 
 /**
+ * Apakah ada filter RUANG LINGKUP (Kares/Kota/Kec/Dealer/Pos) yang menyala. Periode sengaja
+ * tidak dihitung: dia mengubah isi peta, bukan "siapa yang terkait".
+ */
+export function hasScopeFilter(f) {
+  const filters = f || pageFilters();
+  return ['kares', 'cityCode', 'districtCode', 'dealerCode', 'outletCode']
+    .some((kunci) => filters[kunci] !== 'ALL');
+}
+
+/**
+ * Himpunan dealer yang TERKAIT dengan filter ruang lingkup, atau null kalau tidak ada
+ * filter sama sekali (semua dealer/pos tampil).
+ *
+ * - Pos terpilih -> dealer pemilik pos itu (jadi satu pos yang dianalisis tetap membawa
+ *   titik dealernya dan semua pos dealer itu).
+ * - Dealer terpilih -> dealer itu saja.
+ * - Selain itu -> dealer yang TERDAFTAR di Kec/Kota/Kares terpilih (kumpulan dealer, bukan
+ *   lokasi pelanggan; lihat regionDealerCodes()).
+ *
+ * Titik dealer dan pos di luar himpunan ini tidak digambar di peta (2026-10-11).
+ * @returns {Set<string>|null}
+ */
+export function focusDealerSet(f) {
+  const filters = f || pageFilters();
+  const dealerCode = filters.outletCode !== 'ALL'
+    ? (S.outletByCode[filters.outletCode] || {}).dealerCode : filters.dealerCode;
+  if (dealerCode && dealerCode !== 'ALL') return new Set([dealerCode]);
+  const wilayah = regionDealerCodes(filters);
+  return wilayah ? new Set(wilayah) : null;
+}
+
+/**
  * Pilihan yang masih masuk akal di dropdown Kota/Kec/Dealer/Pos, mengikuti tingkat di
  * atasnya: karesidenan mempersempit kota, kota mempersempit kecamatan, kecamatan
  * mempersempit dealer, dealer mempersempit pos. Murni (tanpa DOM) supaya aturannya bisa

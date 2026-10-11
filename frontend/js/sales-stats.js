@@ -426,3 +426,38 @@ export function targetProgress({ dealerCodes, rows, targets, months }) {
     },
   };
 }
+
+/**
+ * Kecamatan yang TERKAIT dengan ruang lingkup yang sedang difilter — yang garis dan namanya
+ * tetap digambar di peta; selebihnya disembunyikan (2026-10-11).
+ *
+ * Gabungan dari:
+ * - `salesDistricts`: kecamatan yang berpenjualan pada filter itu (yang sedang diwarnai);
+ * - tiap dealer di `dealerCodes`: kecamatan tempatnya terdaftar (`dealerHome`) dan seluruh
+ *   kecamatan ring 1-3-nya (`dealerRings[dealer]` = {kecamatan: ring}) — walau belum ada
+ *   penjualan di sana, itu wilayah layanan dealer;
+ * - tiap pos di `outletCodes`: Kec. Tercovernya (`posCoverage[pos]` = {kecamatan: jenis});
+ * - `extra`: kode tambahan, mis. kecamatan tempat titik dealer/pos sungguh berada. Nilai
+ *   kosong (titik di luar semua poligon) dilewati.
+ *
+ * Murni dan tanpa filter: pemanggil yang memutuskan apakah ada filter sama sekali (tanpa
+ * filter, semua kecamatan tampil dan fungsi ini tidak dipanggil).
+ *
+ * @returns {Set<string>}
+ */
+export function relatedDistricts({
+  salesDistricts, dealerCodes, dealerHome, dealerRings, posCoverage, outletCodes, extra,
+}) {
+  const out = new Set();
+  (salesDistricts || []).forEach((kode) => out.add(kode));
+  (dealerCodes || []).forEach((dealer) => {
+    const asal = dealerHome && dealerHome[dealer];
+    if (asal) out.add(asal);
+    Object.keys((dealerRings && dealerRings[dealer]) || {}).forEach((kode) => out.add(kode));
+  });
+  (outletCodes || []).forEach((pos) => {
+    Object.keys((posCoverage && posCoverage[pos]) || {}).forEach((kode) => out.add(kode));
+  });
+  (extra || []).forEach((kode) => { if (kode) out.add(kode); });
+  return out;
+}
