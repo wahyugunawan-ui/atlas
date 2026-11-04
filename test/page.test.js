@@ -826,31 +826,12 @@ function test() {
   /* --------------------------------------------------------------------
      BLOK ANALISIS PENJUALAN WILAYAH (putaran ketiga, 2026-08-31)
      -------------------------------------------------------------------- */
-  ['panel-wilayah', 'fs-wilayah', 'fs-performa-grup', 'fs-wilayah-grup',
-    'btn-live-wilayah', 'btn-live-wilayah-fs'].forEach((id) => {
-    assert.ok(html.includes(`id="${id}"`), `elemen ${id} hilang dari markup`);
+  ["panel-ring-stats", "fs-ring-stats", "fs-performa-grup", "fs-ring-stats-group"].forEach((id) => {
+    assert.ok(html.includes(`id="${id}"`), `elemen ${id} hilang`);
   });
-
-  // Auto-loop SENDIRI — beda dari blok Performa Pos yang manual (Live). Dijaga oleh
-  // DUA state: liveWilayah (sedang jalan atau tidak) dan liveWilayahPaused (user
-  // pernah menekan Pause) — tanpa yang kedua, render ulang akan menyalakan lagi
-  // interval yang sengaja dihentikan orang.
-  assert.match(renderSource, /if \(S\.liveWilayah \|\| S\.liveWilayahPaused\) return;/,
-    'auto-start Wilayah tidak lagi menghormati Pause yang sudah ditekan orang');
-  assert.match(renderSource, /S\.liveWilayahPaused = true;/,
-    'toggleLiveWilayah tidak lagi mencatat bahwa orang menekan Pause');
-
-  // Panel kiri layar penuh peta: satu slot, dua grup — Wilayah tampil waktu dealer
-  // ATAU pos difilter, Performa tampil sisanya. Kalau tidak pernah ditoggle
-  // bersyarat, dua-duanya bisa tampil sekaligus dan menumpuk di satu slot sempit.
-  const fsPanelBody = renderSource.slice(renderSource.indexOf('export function syncFullscreenPanels'));
-  const syncPotong = fsPanelBody.slice(0, fsPanelBody.indexOf('\n}'));
-  assert.match(syncPotong, /scopeValue\('dealer'\) !== 'ALL' \|\| scopeValue\('pos'\) !== 'ALL'/,
-    'syncFullscreenPanels tidak lagi menimbang scope dealer ATAU pos');
-  assert.match(syncPotong, /fs-performa-grup[^;]*hidden['"], wilayah\)/,
-    'grup Performa tidak lagi disembunyikan waktu Wilayah tampil');
-  assert.match(syncPotong, /fs-wilayah-grup[^;]*hidden['"], !wilayah\)/,
-    'grup Wilayah tidak lagi disembunyikan waktu Performa tampil');
+  assert.ok(!html.includes('id="panel-wilayah"'), "analisis wilayah lama masih tampil");
+  assert.ok(renderSource.includes("ringStatisticsHtml(rows)"), "statistik ring tidak dihitung");
+  assert.ok(!renderSource.includes("setInterval(() => {\n    const panel = panelWilayahAktif"), "timer wilayah lama tertinggal");
 
   // Tombol urut membalik urutan, tidak cuma mengganti tulisannya.
   assert.ok(html.includes('id="btn-urut-performa"'), 'tombol urut hilang dari panel performa');

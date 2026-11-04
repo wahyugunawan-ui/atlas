@@ -14,7 +14,7 @@ import { closeCombo, fillCombo, setComboValue } from './combobox.js';
 import { KARESIDENAN, MONTHS } from './config.js';
 import { $, esc } from './dom.js';
 import {
-  clearScope, pageFilters, scopeOptions, scopeValue, setKares, setPeriod, setScope,
+  pageFilters, scopeOptions, scopeValue, setKares, setPeriod, setScope, undoNavigation,
 } from './filters.js';
 import { S } from './state.js';
 
@@ -157,7 +157,7 @@ function isiComboBerjenjang(paksa) {
 
   const opsi = scopeOptions(f);
 
-  fillCombo('kota', 'Kota', opsi.cities
+  fillCombo('kota', 'Kabupaten', opsi.cities
     .sort((a, b) => namaKota(a).localeCompare(namaKota(b)))
     .map((c) => [c, namaKota(c)]), 'Semua', (value) => {
       setScope('kota', value, true);
@@ -171,7 +171,7 @@ function isiComboBerjenjang(paksa) {
     });
 
   // Kec = kecamatan ASAL dealer (dealers.district_code), bukan kecamatan pelanggan.
-  fillCombo('kec', 'Kec', opsi.districts
+  fillCombo('kec', 'Kecamatan', opsi.districts
     .sort((a, b) => namaKec(a).localeCompare(namaKec(b)))
     .map((k) => [k, namaKec(k)]), 'Semua', (value) => {
       setScope('kec', value, true);
@@ -188,6 +188,7 @@ function isiComboBerjenjang(paksa) {
   fillCombo('pos', 'Pos', S.realOutlets.filter((o) => opsi.outlets.has(o.code))
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((o) => [o.code, o.name]), 'Semua', pilihLingkup('pos'));
+
 }
 
 /**
@@ -238,6 +239,7 @@ export function syncFilterBar() {
 
   setComboValue('kares', f.kares);
   SCOPE_KINDS.forEach((kind) => setComboValue(kind, scopeValue(kind, f)));
+  if ($('btn-undo')) $('btn-undo').disabled = S.navigationHistory.length === 0;
 
   // Pos TIDAK berlaku di Confidence Fusion (permintaan tim 2026-09-18), jadi pilnya
   // disembunyikan di sana — bukan dibiarkan tampil tapi tidak berefek. Presedennya
@@ -274,7 +276,14 @@ export function onPeriodChange(which, el) {
 export function resetFilters() {
   closeCombo();
   setKares('ALL');
-  clearScope();
-  if (window.closeDistrictDetail) window.closeDistrictDetail();
+  if (window.closeDistrictDetail) window.closeDistrictDetail(false);
+  repaint(false);
+}
+
+export function undoFilters() {
+  closeCombo();
+  if (window.anyGroupEditing && window.anyGroupEditing()) return;
+  if (!undoNavigation()) return;
+  if (!S.panelView && window.closeDistrictDetail) window.closeDistrictDetail(false);
   repaint(false);
 }

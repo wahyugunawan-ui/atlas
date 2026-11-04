@@ -25,7 +25,7 @@ export function makeFilter() {
     to: 'ALL',          // batas atas periode 'YYYY-MM', 'ALL' = sampai terbaru
     kares: 'ALL',       // tingkat terbesar
     cityCode: 'ALL',
-    districtCode: 'ALL', // Kec — kecamatan ASAL dealer, di antara kota dan dealer
+    districtCode: 'ALL', // Kec — kecamatan LOKASI PENJUALAN (sejak 2026-11-04), di dalam kota terpilih
     dealerCode: 'ALL',
     outletCode: 'ALL',
   };
@@ -125,6 +125,7 @@ export const S = {
   // dibaca lewat scopeValue('pos'). Menyimpannya lagi di sini berarti dua sumber
   // kebenaran untuk fakta yang sama, dan yang satu selalu bisa ketinggalan.
   selectedDistrict: null,
+  navigationHistory: [],
   // Urutan daftar Analisis Performa Pos: 'asc' = persentase terkecil di atas.
   // Bawaannya yang terkecil, karena yang dicari orang di panel ini adalah pos yang
   // paling bermasalah — bukan yang paling baik.
@@ -137,15 +138,11 @@ export const S = {
   performanceCriteria: 'units',
   performanceCoverageFocus: 1, // 1..8 — dipakai waktu performanceCriteria==='coverage'
   performanceGroupFilter: null, // salah satu POSISI_LABEL, atau null = semua kelompok
-  // Auto-loop SENDIRI begitu ada isinya (sama seperti liveWilayah di bawah) —
+  // Auto-loop sendiri begitu ada isinya —
   // livePerformaPaused membedakan "belum pernah mulai" (biarkan auto-start jalan) dari
   // "user menekan Pause" (jangan auto-mulai lagi).
   livePerforma: null,      // id interval gulir otomatis; null berarti mati
   livePerformaPaused: false,
-  // Blok Analisis Penjualan Wilayah (Bagian H): pola sama persis dengan livePerforma
-  // di atas.
-  liveWilayah: null,
-  liveWilayahPaused: false,
   // Mode Live halaman Confidence Fusion (docs/FUSION.md 3.5) — pola penamaan sama
   // dengan dua di atas. BEDA sifatnya: dua yang di atas cuma menggulir piksel tiap
   // 40 ms, yang ini memindahkan filter Kota tiap ~3,5 detik dan tiap perpindahan

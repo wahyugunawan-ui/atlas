@@ -4753,3 +4753,62 @@ pos saudara dan dealernya digambar tapi jatuh di luar layar (terukur di Chrome: 
   terpilih (geometri). Dealer yang kolom Kecamatannya kosong tidak menambah kecamatan asal.
 - Filter Kota/Kares dengan banyak dealer menyatukan ring SEMUA dealer itu, jadi garis yang
   tersisa bisa banyak (kota 33.23: 67 kecamatan).
+
+## [2026-11-04] Data server laptop diganti dari NewData/; master dipertahankan dari Excel, data lama jadi dump
+
+**Keputusan.** Isi database laptop (`astra` port 5433) diganti dari `NewData/`:
+master 78 dealer + 109 pos dari `Dealer & POS (dgn koordinat dealer).xlsx`, ring dari
+`NewData/Data Ring to Wahyu.xlsx`, penjualan + konsumen dari
+`NewData/CDB Full Agustus 2026 ...xlsx` lewat jalur KTP (`runSourceImport`, sumber
+`ktp`). Keadaan sebelumnya disimpan sebagai `pg_dump -Fc` kedua database di
+`C:\astra-data\backup\sebelum-newdata-2026-11-04\` (di luar git dan OneDrive).
+
+**Kenapa begini.** Database laptop ternyata masih skema lama (52 dealer tanpa
+`legacy_code`, 79 pos kode cabang, ring dan coverage kosong), jadi "pertahankan master"
+tidak mungkin — master lengkap hanya ada di Excel folder proyek. Skrip
+`import-dealer-pos-rings.js` dipakai apa adanya, dengan berkas ring baru
+(kolom A–E sama dengan `Ring dealer.xls`).
+
+**Jangan diulang:** `npm run import` (`import-cli.js`) adalah jalur PENJUALAN lama dan
+salah untuk berkas CDB — memetakan kolom keliru (0 baris terpakai) dan membuat 8 pos
+serta 3 dealer sampah dari kode kota. Sudah dibersihkan manual. Berkas format KTP/CDB
+harus lewat `runSourceImport({source:'ktp'})` atau halaman Import Data.
+
+**Batas yang disengaja:**
+- Penjualan tetap menempel ke outlet proxy dealer (kolom Kode Dealer). Kolom `POS Code`
+  di CDB (3.072 dari 19.598 baris terisi) belum dipakai. Akibatnya `seed-coverage`
+  melaporkan 0% penjualan dalam jangkauan: outlet proxy tidak punya koordinat. Ini
+  sifat rancangan proxy 2026-08-31, bukan hasil impor ini.
+- Sheet Focus Area belum diimpor: jenis "Kec. Tercover" tujuannya belum diputuskan.
+
+## [2026-11-04] Filter "Kecamatan peta" dihapus; Kec. jadi lokasi penjualan, klik peta mengisi Kec. + Kabupaten
+
+**Keputusan.** Dropdown "Kecamatan peta" (`mapDistrictCode`) dihapus. Klik kecamatan di peta
+(poligon, tabel, kartu dealer; semuanya lewat `openDistrictDetail()` →
+`selectDistrictFromMap()` di `filters.js`) mengisi filter **Kec.** dan **Kabupaten** sekaligus,
+Kabupaten diambil dari letak GEOGRAFIS kecamatan (`cityOfDistrict()`), jadi peta dan kedua
+filter selalu cocok (Somagede → Kec. Somagede, Kabupaten Banyumas).
+
+**Arti filter berubah, hanya untuk Kec.** Kabupaten/Kares tetap = kumpulan dealer yang
+terdaftar di sana. Kec. sekarang = kecamatan tempat PENJUALAN terjadi (`row.district` di
+`activeRows()`), bukan kecamatan asal dealer. Ini membalik sebagian keputusan 2026-10-11
+dan 2026-11-03 ("pilihan geografis tersendiri"). Akibatnya:
+- Dropdown Kec. berisi kecamatan berpenjualan: semuanya bila Kabupaten = Semua, hanya yang
+  berada di kabupaten itu bila Kabupaten dipilih. Kabupaten hasil klik di luar 14 kota dealer
+  ikut ditambahkan ke pilihan.
+- **Dealer/pos terpilih tidak lagi mengisi Kec.** (hanya Kabupaten dan Kares). Fokus dealer
+  ditunjukkan sorotan peta yang sudah ada, dan Kec. dibiarkan "Semua". Alasan dari pengguna:
+  fokus pengguna Astra adalah dealer, bukan kecamatan.
+- Klik peta TIDAK membuang dealer yang sedang dianalisis walau kabupaten kecamatan itu beda
+  dari kabupaten terdaftar dealer (ring dealer bisa lintas kabupaten): dealer terpilih
+  menentukan dirinya sendiri di `activeRows()` dan tetap muncul di `scopeOptions()`.
+- Panel kecamatan dan ringkasan atas memakai `activeRows(undefined, {tanpaKecamatan: true})`
+  untuk penyebut kontribusi/peringkat/tren. Tanpa itu, Kec. yang sudah terisi membuat
+  kontribusi kecamatan ke kabupaten tampak 100%.
+- `fusionFilter()` tidak lagi meneruskan Kec. layar ke server: di server `kec` berarti
+  kecamatan ASAL dealer (`saringFusi`, routes.js), dan keduanya tidak boleh tertukar. Titik tiga
+  sumber di peta tetap disaring Kota/Dealer/Pos.
+
+**Batas yang diketahui:** klik kecamatan di kabupaten yang tidak punya dealer terdaftar
+mengisi Kabupaten itu, dan karena Kabupaten menyaring dealer terdaftar, angka peta bisa kosong
+untuk kombinasi itu sementara panel kecamatan (penyebut netral) tetap berisi.

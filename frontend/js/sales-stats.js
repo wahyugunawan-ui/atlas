@@ -240,6 +240,36 @@ export function balancedPercents(values, decimals = 1) {
  * @return {{total, units: {1,2,3,others,violation}, percent1, percent2, percent3,
  *   percentOthers, percentViolation, kotaTakDikenal: boolean}}
  */
+/** Tren kontribusi kecamatan terhadap kabupatennya, dengan pembagi tiap bulan. */
+export function districtContributionTrend(rows, districtCode, districts) {
+  const cityCode = (districts[districtCode] || {}).cityCode;
+  if (!cityCode) return [];
+  const periods = new Map();
+  rows.forEach((row) => {
+    if ((districts[row.district] || {}).cityCode !== cityCode) return;
+    const item = periods.get(row.period) || { units: 0, total: 0 };
+    item.total += row.units;
+    if (row.district === districtCode) item.units += row.units;
+    periods.set(row.period, item);
+  });
+  return [...periods].sort(([a], [b]) => a.localeCompare(b)).map(([period, item]) => ({
+    period, contribution: contributionPercent(item.units, item.total),
+  }));
+}
+
+/** Daftar dealer dan bagiannya terhadap seluruh baris yang diberikan. */
+export function dealerSalesBreakdown(rows) {
+  const units = new Map();
+  let total = 0;
+  rows.forEach((row) => {
+    units.set(row.dealer, (units.get(row.dealer) || 0) + row.units);
+    total += row.units;
+  });
+  return [...units].map(([code, count]) => ({
+    code, units: count, contribution: contributionPercent(count, total),
+  })).sort((a, b) => b.units - a.units || String(a.code).localeCompare(String(b.code)));
+}
+
 export function dealerRingSplit(rows, ringMap, dealer) {
   const info = dealer || {};
   const units = { 1: 0, 2: 0, 3: 0, others: 0, violation: 0 };

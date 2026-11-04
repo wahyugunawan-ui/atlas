@@ -11,7 +11,7 @@ import {
 } from './filters.js';
 import {
   contributionsByOutlet, contributionsByDistrict, dealerRingSplit, groupSplit, POSISI_LABEL,
-  posContributionInDealer, relativePosition, ringCells,
+  posContributionInDealer, relativePosition, ringCells, contributionPercent,
 } from './sales-stats.js';
 import { posisiBadgeHtml } from './tables.js';
 import { S } from './state.js';
@@ -408,6 +408,34 @@ export function dealerRegionInfo(code) {
   };
 }
 
+/** Gabungkan kategori tiap dealer tanpa menerapkan ring dealer lain kepadanya. */
+export function ringStatisticsHtml(rows) {
+  const grouped = new Map();
+  rows.forEach((row) => {
+    if (!grouped.has(row.dealer)) grouped.set(row.dealer, []);
+    grouped.get(row.dealer).push(row);
+  });
+  const units = { 1: 0, 2: 0, 3: 0, others: 0, violation: 0 };
+  let total = 0;
+  let unknown = false;
+  grouped.forEach((dealerRows, code) => {
+    const split = dealerRingSplit(dealerRows, S.dealerRings[code], dealerRegionInfo(code));
+    total += split.total;
+    unknown ||= split.kotaTakDikenal;
+    Object.keys(units).forEach((key) => { units[key] += split.units[key]; });
+  });
+  const pct = (key) => contributionPercent(units[key], total) || 0;
+  const split = { total, percent1: pct(1), percent2: pct(2), percent3: pct(3),
+    percentOthers: pct('others'), percentViolation: pct('violation') };
+  return '<div class="space-y-2">' + ringCells(split).map((cell, i) => {
+    const count = Object.values(units)[i];
+    return '<div class="flex justify-between gap-2 text-xs">' +
+      `<span class="text-slate-500">${esc(cell.label)}</span>` +
+      `<span class="mono text-slate-800"><b>${esc(cell.value)}</b> · ${esc(formatNumber(count))} unit</span></div>`;
+  }).join('') + '</div>' +
+    (unknown ? '<p class="text-[10px] text-amber-700 mt-2">Kabupaten dealer belum tercatat; bagian di luar ring dikelompokkan sebagai Others.</p>' : '');
+}
+
 /**
  * Kontribusi satu pos terhadap dealer-nya, sebagai teks siap tampil. Selama penjualan
  * belum dicatat per pos (semuanya di baris proxy tingkat dealer), angkanya memang belum
@@ -501,6 +529,34 @@ function scopeSummary(rows) {
  * filter dihitung dari SELURUH data, kartunya tetap 4 field yang sama.
  */
 function topScopeSummary(rows) {
+  const view = S.panelView;
+  if (view && view.kind === 'district') {
+    const district = S.districtByCode[view.code] || {};
+    // Kec. sudah terisi kecamatan ini, jadi `rows` hanya memuat kecamatan itu; penyebut
+    // kontribusi harus seluruh kabupaten, maka dihitung ulang tanpa saringan Kec.
+    rows = activeRows(undefined, { tanpaKecamatan: true });
+    const own = rows.filter((r) => r.district === view.code);
+    const units = own.reduce((sum, r) => sum + r.units, 0);
+    const cityTotal = rows.filter((r) => (S.districtByCode[r.district] || {}).cityCode === district.cityCode)
+      .reduce((sum, r) => sum + r.units, 0);
+    const contribution = contributionPercent(units, cityTotal);
+    return summaryGridHtml([
+      { label: 'Kecamatan', value: district.name || '—' },
+      { label: 'Total Penjualan', value: formatNumber(units) },
+      { label: 'Kontribusi ke Kabupaten', value: formatPercent(contribution) },
+      { label: 'Total Dealer', value: formatNumber(new Set(own.map((r) => r.dealer)).size) },
+    ]);
+  }
+  if ((view && view.kind === 'city') || scopeValue('kota') !== 'ALL' && scopeValue('dealer') === 'ALL') {
+    const city = view && view.kind === 'city' ? view.code : scopeValue('kota');
+    const own = rows.filter((r) => dealerCityOf(r.dealer) === city);
+    return summaryGridHtml([
+      { label: 'Kabupaten', value: S.cityNames[city] || '—' },
+      { label: 'Total Penjualan Dealer', value: formatNumber(own.reduce((sum, r) => sum + r.units, 0)) },
+      { label: 'Dealer Terdaftar', value: formatNumber(S.dealers.filter((d) => d.cityCode === city).length) },
+      { label: 'Kecamatan Terlayani', value: formatNumber(new Set(own.map((r) => r.district)).size) },
+    ]);
+  }
   if (scopeValue('pos') !== 'ALL') return posScopeSummary(rows);
   if (scopeValue('dealer') !== 'ALL') {
     return summaryGridHtml(dealerScopeBaseCells(rows, scopeValue('dealer')));
@@ -696,103 +752,27 @@ function districtSalesRows(rows) {
   return { list, breaks };
 }
 
-function wilayahLokasi(item) {
-  return item.cityName || '';
-}
-
-/** Baris lebar: kartu normal (SELALU tampil, tidak bergantung filter). */
-function wilayahRowWide(item) {
-  return `<div class="baris-pos rounded-xl px-3 py-2.5">` +
-    `<div class="flex items-center gap-3 flex-wrap">` +
-    `<div class="min-w-0" style="flex:2 1 160px">` +
-    `<div class="text-sm font-semibold text-slate-800 truncate">${esc(item.name)}</div>` +
-    `<div class="text-[11px] text-slate-400 truncate">${esc(wilayahLokasi(item))}</div></div>` +
-    `<div class="text-right shrink-0"><div class="text-sm font-bold mono text-slate-800">` +
-    `${esc(formatNumber(item.units))}</div><div class="text-[9px] text-slate-400">total sales</div></div>` +
-    `<div class="text-right shrink-0 w-14"><div class="text-sm font-bold mono text-slate-800">` +
-    `${item.contribution == null ? '—' : esc(item.contribution.toFixed(2)) + '%'}</div>` +
-    `<div class="text-[9px] text-slate-400">kontribusi</div></div>` +
-    posisiBadgeHtml(item.posisi) +
-    `</div></div>`;
-}
-
-/** Baris ringkas: layar penuh peta (`w-80`, TIDAK BOLEH mengubah lebar panel). */
-function wilayahRowCompact(item) {
-  return `<div class="baris-pos rounded-xl px-2.5 py-2">` +
-    `<div class="flex items-center gap-1.5">` +
-    `<span class="flex-1 text-xs font-semibold text-slate-800 truncate">${esc(item.name)}</span>` +
-    `<span class="text-[10px] text-slate-400 mono shrink-0">${esc(formatNumber(item.units))}</span></div>` +
-    `<div class="text-[10px] text-slate-400 truncate">${esc(wilayahLokasi(item))}</div>` +
-    `<div class="flex items-center justify-between mt-1">` +
-    `<span class="text-[10px] mono text-slate-500">${item.contribution == null ? '—' : esc(item.contribution.toFixed(2)) + '% kontribusi'}</span>` +
-    posisiBadgeHtml(item.posisi) +
-    `</div></div>`;
-}
-
-export function renderWilayah(rows) {
-  const { list } = districtSalesRows(rows);
-  const kosong = '<p class="text-center text-slate-400 text-sm py-8">Tidak ada kecamatan pada filter ini.</p>';
-  const bodyWide = list.length ? list.map(wilayahRowWide).join('') : kosong;
-  const bodyCompact = list.length ? list.map(wilayahRowCompact).join('') : kosong;
-
-  if ($('panel-wilayah')) $('panel-wilayah').innerHTML = bodyWide;
-  if ($('fs-wilayah')) $('fs-wilayah').innerHTML = bodyCompact;
-
-  autoStartWilayah();
-  syncWilayahButtons();
+export function renderRingStatistics() {
+  const code = scopeValue('dealer');
+  const active = code !== 'ALL';
+  if ($('panel-ring-stats-group')) $('panel-ring-stats-group').classList.toggle('hidden', !active);
+  const rows = active ? dealerWideRows(code) : [];
+  const body = `<div class="font-bold text-sm mb-2">${esc(S.dealerNames[code] || '')}</div>` +
+    '<p class="text-[10px] text-slate-400 mb-3">Seluruh penjualan dealer pada periode aktif; tidak dipersempit oleh ring atau kecamatan peta.</p>' +
+    ringStatisticsHtml(rows);
+  ['panel-ring-stats', 'fs-ring-stats'].forEach((id) => {
+    if ($(id)) $(id).innerHTML = active ? body : '';
+  });
 }
 
 /**
- * Panel kiri layar penuh peta cuma punya SATU slot — jadi begitu dealer/pos
- * difilter, "Analisis Penjualan Wilayah" (per kecamatan, relevan untuk melihat wilayah
- * SATU dealer/pos itu) menggantikan "Analisis Performa Pos" (per pos, lebih relevan
- * waktu melihat semua pos/kota) di slot yang sama. Dipanggil dari renderAll().
+ * Panel kiri layar penuh berisi statistik ring saat dealer/pos dipilih,
+ * dan performa pos untuk lingkup yang lebih luas.
  */
 export function syncFullscreenPanels() {
   const wilayah = scopeValue('dealer') !== 'ALL' || scopeValue('pos') !== 'ALL';
   if ($('fs-performa-grup')) $('fs-performa-grup').classList.toggle('hidden', wilayah);
-  if ($('fs-wilayah-grup')) $('fs-wilayah-grup').classList.toggle('hidden', !wilayah);
-}
-
-/** Wadah daftar yang sedang terlihat — sama seperti panelPerformaAktif() tapi tanpa tampilan besar (blok ini tidak punya versi itu). */
-function panelWilayahAktif() {
-  return S.fullscreen ? $('fs-wilayah') : $('panel-wilayah');
-}
-
-function startLiveWilayah() {
-  S.liveWilayah = setInterval(() => {
-    const panel = panelWilayahAktif();
-    if (!panel) return;
-    const sisa = panel.scrollHeight - panel.clientHeight;
-    if (sisa <= 4) return;
-    panel.scrollTop = panel.scrollTop >= sisa - 1 ? 0 : panel.scrollTop + 1;
-  }, 40); // sama persis dengan interval toggleLivePerforma — kecepatan gulir konsisten
-}
-
-/** Dipanggil tiap renderWilayah() — aman dipanggil berkali-kali, dijaga oleh dua state. */
-function autoStartWilayah() {
-  if (S.liveWilayah || S.liveWilayahPaused) return;
-  startLiveWilayah();
-}
-
-function syncWilayahButtons() {
-  [$('btn-live-wilayah'), $('btn-live-wilayah-fs')].filter(Boolean).forEach((b) => {
-    b.querySelector('i').className = S.liveWilayah ? 'ph ph-pause' : 'ph ph-play';
-    b.classList.toggle('live-nyala', Boolean(S.liveWilayah));
-  });
-}
-
-/** Tombol Pause/Lanjut — beda dari toggleLivePerforma: default-nya JALAN, bukan mati. */
-export function toggleLiveWilayah() {
-  if (S.liveWilayah) {
-    clearInterval(S.liveWilayah);
-    S.liveWilayah = null;
-    S.liveWilayahPaused = true;
-  } else {
-    S.liveWilayahPaused = false;
-    startLiveWilayah();
-  }
-  syncWilayahButtons();
+  if ($('fs-ring-stats-group')) $('fs-ring-stats-group').classList.toggle('hidden', !wilayah);
 }
 
 /* ==========================================================================

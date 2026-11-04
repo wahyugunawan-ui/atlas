@@ -15,7 +15,7 @@ import {
   openRingChooser, ringEditing, coverageEditing, saveRingEdit, startRingEdit,
   startCoverageEdit, startGroupEdit,
 } from './rings.js';
-import { fillFilterBar, onPeriodChange, resetFilters, syncFilterBar } from './filter-bar.js';
+import { fillFilterBar, onPeriodChange, resetFilters, syncFilterBar, undoFilters } from './filter-bar.js';
 import { activeRows, applyScope, scopeValue } from './filters.js';
 import {
   addLayers, fitToScope, redrawMap, refreshMapVisual, setBasemap,
@@ -28,14 +28,14 @@ import {
 import {
   closeDealerCard, closeTreemapFull, renderDealerCard, renderTopSummary,
   renderLegend, closePerformaFull, filterPerformanceGroup, openPerformaFull,
-  openTreemapFull, renderPerformance, renderTreemap, renderWilayah, selectEntity,
+  openTreemapFull, renderPerformance, renderTreemap, renderRingStatistics, selectEntity,
   setPerformanceCriteria, setPerformanceCoverageFocus, setTreemapView, syncFullscreenPanels,
-  togglePerformanceSort, toggleLivePerforma, toggleLiveWilayah,
+  togglePerformanceSort, toggleLivePerforma,
 } from './render.js';
 import { S } from './state.js';
 import { renderTargets, saveTargetInput } from './targets.js';
 import {
-  acceptMapPoint, closeOutletEditor, closeDistrictDetail, jumpToDistrict,
+  acceptMapPoint, closeOutletEditor, closeDistrictDetail, hideDetailPanel, jumpToDistrict,
   openDealerDetail, openCitySummary, toggleDealerCity, jumpFromDealer,
   closeNewOutlet, closeMatchNames, confirmMatch, customerPage, dealerChoiceChanged,
   newOutletDealerChanged, openMatchNames, undoMatch,
@@ -72,7 +72,7 @@ import {
 
 const HANDLERS = {
   // filter dan peta
-  onPeriodChange, toggleCombo, comboSearch, chooseCombo, resetFilters,
+  onPeriodChange, toggleCombo, comboSearch, chooseCombo, resetFilters, undoFilters,
   startRingEdit, startCoverageEdit, startGroupEdit, cancelRingEdit, saveRingEdit, ringEditing,
   coverageEditing, anyGroupEditing,
   openRingChooser, closeRingChooser, assignRing,
@@ -82,7 +82,7 @@ const HANDLERS = {
   setTreemapView, selectEntity, closeDealerCard, togglePerformanceSort,
   toggleLivePerforma, openPerformaFull, closePerformaFull,
   setPerformanceCriteria, setPerformanceCoverageFocus, filterPerformanceGroup,
-  openTreemapFull, closeTreemapFull, toggleLiveWilayah,
+  openTreemapFull, closeTreemapFull,
   // target penjualan (seksi Persentase Keberhasilan Target)
   saveTargetInput,
   // sunting pos
@@ -168,7 +168,7 @@ export function renderAll() {
   renderTopSummary(rows);
   renderTreemap(rows);
   renderPerformance(rows);
-  renderWilayah(rows);
+  renderRingStatistics();
   renderTargets();
   syncFullscreenPanels();
   renderDealerCard();
@@ -209,6 +209,8 @@ export function renderAll() {
     // diganti ringkasan kota. Sejak 2026-10-11 itu SALAH: filter Kota memilih DEALER
     // terdaftar di kota itu, dan pelanggan mereka sah berada di kecamatan kota lain.
     openDistrictDetail(S.selectedDistrict);
+  } else {
+    hideDetailPanel();
   }
 
   // Sejak 2026-09-14: peta ikut "Fit" otomatis (auto=true — animasi 900ms yang
@@ -403,8 +405,8 @@ async function boot() {
     if (editorAktif()) return;
     if (e.features && e.features.length) {
       const code = e.features[0].properties.kode;
-      S.map.setFilter('kec-terpilih', ['==', ['get', 'kode'], code]);
       openDistrictDetail(code);
+      renderAll();
     }
   });
   S.map.on('mouseenter', 'kec-warna', () => {

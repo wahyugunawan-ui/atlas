@@ -224,16 +224,41 @@ async function test() {
   assert.strictEqual(scopeValue('dealer'), 'D2', 'klik pos di peta membuang dealer pemiliknya');
   assert.ok(repaints > 0, 'applyScope tidak menggambar ulang apa pun');
 
-  // Klik poligon kecamatan menyetel KOTA-nya, dan dipaksa: mengklik kecamatan kedua
-  // di kabupaten yang sama tidak boleh mematikan kabupatennya. Dealer D2 (Cilacap)
-  // tidak ada di Sleman, jadi terlepas.
-  setScope('dealer', 'D2');
+  // Klik kecamatan di peta mengisi Kec. DAN Kabupaten (letak geografis kecamatan), tanpa
+  // mengganti dealer yang dianalisis — fokus produk ini dealer, bukan wilayah.
+  setScope('dealer', 'D2', true);
+  assert.strictEqual(scopeValue('kota'), '33.01');
   applyScope('kecamatan', '34.04.01');
-  assert.strictEqual(scopeValue('kota'), '34.04');
-  assert.strictEqual(scopeValue('dealer'), 'ALL', 'dealer dari kota lain tidak dilepas');
+  assert.strictEqual(scopeValue('kec'), '34.04.01', 'klik peta tidak mengisi Kec.');
+  assert.strictEqual(scopeValue('kota'), '34.04', 'klik peta tidak mengisi Kabupaten dari letak kecamatan');
+  assert.strictEqual(scopeValue('dealer'), 'D2', 'pilihan dealer tidak boleh berganti diam-diam');
+  assert.strictEqual(units(activeRows()), 0, 'D2 tidak punya penjualan di 34.04.01: Kec. harus menyaring lokasi penjualan');
   applyScope('kecamatan', '34.04.02');
-  assert.strictEqual(scopeValue('kota'), '34.04',
-    'kecamatan kedua di kabupaten yang sama justru mematikan filter kabupatennya');
+  assert.strictEqual(scopeValue('kec'), '34.04.02');
+  assert.deepStrictEqual(activeRows().map((r) => r.units), [4], 'baris D2 di 34.04.02');
+  // Kecamatan tanpa dealer terdaftar tetap mengisi keduanya.
+  reset();
+  applyScope('kecamatan', '34.04.01');
+  assert.deepStrictEqual([scopeValue('kota'), scopeValue('kec')], ['34.04', '34.04.01']);
+  // tanpaKecamatan melewati HANYA saringan Kec.: D1 (Sleman) menjual di dua kecamatan.
+  const salesAsli = S.sales;
+  S.sales = SALES.concat([{ period: '2026-08', district: '34.04.02', village: '34.04.02.2002',
+    outlet: 'O01', dealer: 'D1', units: 16 }]);
+  assert.deepStrictEqual(activeRows().map((r) => r.units), [1, 2], 'Kec. menyaring lokasi penjualan');
+  assert.deepStrictEqual(activeRows(undefined, { tanpaKecamatan: true }).map((r) => r.units), [1, 2, 16],
+    'tanpaKecamatan harus melewati saringan Kec. saja, kabupaten tetap berlaku');
+  S.sales = salesAsli;
+  // Dealer/pos tidak mengisi Kec.; Kabupaten tetap kota terdaftar dealer.
+  setScope('dealer', 'D1', true);
+  assert.deepStrictEqual([scopeValue('kota'), scopeValue('kec')], ['34.04', 'ALL']);
+  // Opsi Kec. = kecamatan berpenjualan, mengikuti Kabupaten (bukan kecamatan asal dealer).
+  reset();
+  assert.deepStrictEqual(scopeOptions().districts.sort(), ['33.01.01', '34.04.01', '34.04.02']);
+  setScope('kota', '34.04', true);
+  assert.deepStrictEqual(scopeOptions().districts.sort(), ['34.04.01', '34.04.02'],
+    'Kec. harus mengikuti Kabupaten, kecamatan kabupaten lain tidak ikut');
+  setScope('kota', '33.01', true);
+  assert.deepStrictEqual(scopeOptions().districts, ['33.01.01']);
 
   /* --- pilihan di dropdown mengikuti tingkat di atasnya --- */
   reset();
@@ -266,41 +291,39 @@ async function test() {
   assert.deepStrictEqual(regionCityCodes(), ['34.04'], 'kota yang dipilih harus menang atas kares');
 
   /* ------------------------------------------------------------------
-     1b. KEC — tingkat baru di antara Kota dan Dealer (2026-10-11)
+     1b. KEC — kecamatan LOKASI PENJUALAN, di dalam Kabupaten (2026-11-04)
      ------------------------------------------------------------------
-     Kares > Kota > Kec > Dealer > Pos. Kec = KECAMATAN ASAL dealer (dealers.district_code),
-     bukan kecamatan pelanggan: seluruh penjualan dealer yang terdaftar di kecamatan itu ikut.
+     Kares > Kota > Kec > Dealer > Pos. Kota/Kares = dealer yang TERDAFTAR di sana; Kec =
+     kecamatan tempat penjualan terjadi, dengan Kota diisi dari letak geografis kecamatan.
+     Dealer/pos tidak pernah mengisi Kec.: fokus dealer ditunjukkan sorotan di peta.
      ------------------------------------------------------------------ */
   reset();
   setScope('kec', '34.04.01');
   assert.strictEqual(scopeValue('kec'), '34.04.01');
-  assert.strictEqual(scopeValue('kota'), '34.04', 'memilih Kec tidak mengisi kotanya');
-  assert.strictEqual(pageFilters().kares, 'yogyakarta', 'memilih Kec tidak mengisi karesidenannya');
-  assert.deepStrictEqual(regionDealerCodes(), ['D1'],
-    'Kec harus memilih dealer yang TERDAFTAR di kecamatan itu (D1), bukan seluruh dealer kota');
+  assert.strictEqual(scopeValue('kota'), '34.04', 'memilih Kec harus mengisi kabupaten geografisnya');
+  assert.strictEqual(pageFilters().kares, 'yogyakarta', 'memilih Kec harus mengisi karesidennya');
+  assert.deepStrictEqual(regionDealerCodes(), ['D1', 'D3'],
+    'Kec tidak boleh menyempitkan dealer: yang berlaku dealer terdaftar di KOTA');
   assert.strictEqual(units(activeRows()), 3,
-    'penjualan dealer D1 di kecamatannya: 3 unit (D2 yang menjual di Depok tidak ikut)');
+    'penjualan di 34.04.01 dari dealer Sleman: 3 unit (baris D2 di Depok tidak ikut)');
 
-  // Kec lain di kota yang sama = dealer lain; D3 tidak punya penjualan.
+  // Kec lain di kota yang sama: tidak ada penjualan dealer Sleman di sana.
   setScope('kec', '34.04.02', true);
-  assert.deepStrictEqual(regionDealerCodes(), ['D3']);
   assert.strictEqual(units(activeRows()), 0);
 
-  // Memilih DEALER mengisi kecamatannya (urutan: dealer -> kec -> kota -> kares).
+  // Dealer/pos mengisi Kota dan Kares, BUKAN Kec.
   reset();
   setScope('dealer', 'D2');
-  assert.strictEqual(scopeValue('kec'), '33.01.01', 'memilih dealer tidak mengisi kecamatan asalnya');
+  assert.strictEqual(scopeValue('kec'), 'ALL', 'memilih dealer tidak boleh mengisi Kec');
   assert.strictEqual(scopeValue('kota'), '33.01');
   assert.strictEqual(pageFilters().kares, 'banyumas');
-  // ... dan pos mengisi semuanya.
   reset();
   setScope('pos', 'O01');
-  assert.strictEqual(scopeValue('kec'), '34.04.01', 'memilih pos tidak mengisi kecamatan dealernya');
+  assert.strictEqual(scopeValue('kec'), 'ALL', 'memilih pos tidak boleh mengisi Kec');
   assert.strictEqual(scopeValue('dealer'), 'D1');
-  // Dealer tanpa kecamatan tercatat: Kec dikosongkan, bukan sisa pilihan lama.
   setScope('kec', '34.04.01', true);
   setScope('dealer', 'D4', true);
-  assert.strictEqual(scopeValue('kec'), 'ALL', 'dealer tanpa kecamatan memegang Kec lama');
+  assert.strictEqual(scopeValue('kec'), 'ALL', 'dealer yang dipilih harus mengosongkan Kec');
 
   // Kota/Kares MEMPERSEMPIT Kec: kecamatan di luar kota dilepas.
   reset();
@@ -312,11 +335,21 @@ async function test() {
   assert.strictEqual(scopeValue('kec'), 'ALL', 'kecamatan di luar karesidenan baru tidak dilepas');
   assert.strictEqual(scopeValue('kota'), 'ALL');
 
-  // Kec MEMPERSEMPIT Dealer/Pos: dealer di kecamatan lain dilepas, yang cocok dipertahankan.
+  // Kabupaten di luar ketiga karesidenan: hanya aturan kota yang bisa melepas Kec.
+  S.districtByCode['99.01.01'] = { code: '99.01.01', cityCode: '99.01' };
+  reset();
+  setScope('kec', '99.01.01');
+  assert.strictEqual(scopeValue('kota'), '99.01');
+  assert.strictEqual(pageFilters().kares, 'ALL');
+  setScope('kota', '99.02', true);
+  assert.strictEqual(scopeValue('kec'), 'ALL', 'Kec di kabupaten lain (tanpa karesidenan) tidak dilepas');
+  delete S.districtByCode['99.01.01'];
+
+  // Kec (lewat kotanya) MEMPERSEMPIT Dealer/Pos: dealer kota lain dilepas, yang cocok tetap.
   reset();
   setScope('pos', 'O02');
   setScope('kec', '34.04.01', true);
-  assert.strictEqual(scopeValue('dealer'), 'ALL', 'dealer dari kecamatan lain tidak dilepas');
+  assert.strictEqual(scopeValue('dealer'), 'ALL', 'dealer dari kota lain tidak dilepas');
   assert.strictEqual(scopeValue('pos'), 'ALL');
   reset();
   setScope('pos', 'O01');
@@ -331,77 +364,57 @@ async function test() {
   assert.strictEqual(scopeValue('pos'), 'ALL');
   assert.strictEqual(scopeValue('kota'), '34.04', 'membuka Kec ikut membuka Kota di atasnya');
 
-  // Pilihan dropdown mengikuti jenjang.
+  // Pilihan dropdown mengikuti jenjang: Kec = kecamatan berpenjualan di kabupaten terpilih.
   reset();
   assert.deepStrictEqual(scopeOptions().districts.sort(), ['33.01.01', '34.04.01', '34.04.02'],
-    'kecamatan yang ditawarkan = tempat ada dealer terdaftar');
+    'Kabupaten Semua: semua kecamatan berpenjualan');
   setKares('yogyakarta');
   assert.deepStrictEqual(scopeOptions().districts.sort(), ['34.04.01', '34.04.02']);
   reset();
   setScope('kota', '34.04', true);
   assert.deepStrictEqual(scopeOptions().districts.sort(), ['34.04.01', '34.04.02'],
-    'pilihan Kec tidak dipersempit ke kota terpilih');
+    'Kec harus mengikuti Kabupaten');
+  setScope('kota', '33.01', true);
+  assert.deepStrictEqual(scopeOptions().districts, ['33.01.01']);
   reset();
   setScope('kec', '34.04.01');
-  assert.deepStrictEqual([...scopeOptions().dealers], ['D1'],
-    'pilihan Dealer tidak dipersempit ke kecamatan terpilih');
+  assert.deepStrictEqual([...scopeOptions().dealers].sort(), ['D1', 'D3'],
+    'pilihan Dealer mengikuti Kota, bukan Kec');
   assert.deepStrictEqual([...scopeOptions().outlets], ['O01']);
 
   // Label dan parameter Fusion.
   reset();
   setScope('kec', '34.04.01');
-  assert.match(scopeLabel(), /Kec\. Mlati/, 'label tidak menyebut Kec');
+  assert.match(scopeLabel(), /Kec. Mlati/, 'label tidak menyebut Kec');
   const ff = fusionFilter();
-  assert.strictEqual(ff.kec, '34.04.01', 'fusionFilter tidak membawa Kec');
-  assert.strictEqual(ff.kotaBanyak, null, 'karesidenan masih dikirim sebagai daftar saat Kec dipilih');
-  // Dealer terdaftar di SATU kota tapi kecamatannya secara geografis di kota tetangga
-  // (kasus nyata: ASTRA MOTOR BANTUL, Kab. Bantul, kecamatan Mantrijeron di Kota
-  // Yogyakarta). Hubungan Kota <-> Kec harus mengikuti DEALER TERDAFTAR, bukan geografi;
-  // kalau tidak, dealer ini hilang waktu Kec dipilih (ditemukan di data sungguhan: jumlah
-  // penjualan seluruh Kec 17.781 dari 18.915).
+  assert.strictEqual(ff.kec, null,
+    'Kec layar (lokasi penjualan) tidak boleh dikirim ke server yang membacanya sebagai kecamatan asal dealer');
+  assert.strictEqual(ff.kota, '34.04');
+  assert.strictEqual(ff.kotaBanyak, null);
+
+  // Klik peta ke kecamatan di kabupaten LAIN dari kabupaten terdaftar dealer: dealer dipertahankan
+  // dan tetap muncul di pilihan, Kabupaten mengikuti letak kecamatan.
   const D5 = { code: 'D5', name: 'Dealer Lima', cityCode: '34.02', districtCode: '34.71.08' };
   S.dealers = [...DEALERS, D5];
   S.dealerByCode.D5 = D5;
   S.dealerNames.D5 = 'Dealer Lima';
   S.allDistrictByCode['34.71.08'] = { code: '34.71.08', cityCode: '34.71' }; // geografis: Kota Yogya
+  S.districtByCode['34.71.08'] = { code: '34.71.08', cityCode: '34.71' };
   S.districtNames['34.71.08'] = 'Mantrijeron';
   reset();
-  setScope('kec', '34.71.08');
-  assert.deepStrictEqual(regionDealerCodes(), ['D5'],
-    'dealer yang kecamatannya di kota tetangga hilang waktu Kec dipilih');
-  assert.strictEqual(scopeValue('kota'), '34.02',
-    'Kec mengisi kota GEOGRAFISNYA (34.71), bukan kota tempat dealer-nya terdaftar (34.02)');
-  assert.strictEqual(pageFilters().kares, 'yogyakarta');
-  reset();
-  setScope('kota', '34.02', true);
-  assert.ok(scopeOptions().districts.includes('34.71.08'),
-    'pilihan Kec di kota 34.02 tidak memuat kecamatan tempat dealer-nya terdaftar');
-  setScope('kec', '34.71.08', true);
-  assert.strictEqual(scopeValue('kota'), '34.02', 'memilih Kec membuang kota tempat dealer terdaftar');
-  reset();
   setScope('dealer', 'D5');
-  assert.strictEqual(scopeValue('kec'), '34.71.08');
   assert.strictEqual(scopeValue('kota'), '34.02');
-  // Dua dealer di kecamatan yang sama tapi beda kota terdaftar: tak ada satu kota yang bisa
-  // disebut, jadi Kota dikosongkan (bukan ditebak).
-  const D6 = { code: 'D6', name: 'Dealer Enam', cityCode: '34.71', districtCode: '34.71.08' };
-  S.dealers = [...DEALERS, D5, D6];
-  S.dealerByCode.D6 = D6;
-  reset();
-  setScope('kec', '34.71.08');
-  assert.deepStrictEqual(regionDealerCodes().sort(), ['D5', 'D6']);
-  assert.strictEqual(scopeValue('kota'), 'ALL', 'kota ditebak padahal dealer-dealernya tersebar');
-  // Kota yang sudah dipilih dan salah satu dari keduanya dipertahankan, dan menyempitkan dealer.
-  reset();
-  setScope('kota', '34.71', true);
-  setScope('kec', '34.71.08', true);
-  assert.strictEqual(scopeValue('kota'), '34.71');
-  assert.deepStrictEqual(regionDealerCodes(), ['D6']);
+  applyScope('kecamatan', '34.71.08');
+  assert.strictEqual(scopeValue('kec'), '34.71.08');
+  assert.strictEqual(scopeValue('kota'), '34.71', 'Kabupaten harus mengikuti letak geografis kecamatan');
+  assert.strictEqual(scopeValue('dealer'), 'D5', 'klik peta tidak boleh membuang dealer yang dianalisis');
+  assert.ok(scopeOptions().dealers.has('D5'), 'dealer terpilih hilang dari pilihannya');
+  assert.ok(scopeOptions().cities.includes('34.71'), 'kabupaten hasil klik hilang dari pilihannya');
   // Kembalikan dunia uji.
   S.dealers = DEALERS;
   delete S.dealerByCode.D5;
-  delete S.dealerByCode.D6;
   delete S.allDistrictByCode['34.71.08'];
+  delete S.districtByCode['34.71.08'];
   delete S.districtNames['34.71.08'];
 
   /* ------------------------------------------------------------------

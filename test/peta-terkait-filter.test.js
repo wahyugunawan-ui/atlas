@@ -137,11 +137,11 @@ async function main() {
   g = gambar();
   assert.deepStrictEqual(g.dealer, ['DC', 'DE'], 'filter kota harus memilih dealer yang TERDAFTAR di kota itu');
   assert.deepStrictEqual(g.pos, ['POS-A', 'POS-B', 'POS-Z']);
+  // Kec. = lokasi penjualan sejak 2026-11-04: tidak menyempitkan dealer/pos yang digambar.
   reset();
   f.districtCode = '33.01.01';
   g = gambar();
-  assert.deepStrictEqual(g.dealer, ['DD']);
-  assert.deepStrictEqual(g.pos, ['POS-X', 'POS-Y']);
+  assert.deepStrictEqual(g.dealer, ['DC', 'DD', 'DE'], 'Kec. tidak boleh menyaring dealer');
 
   /* 5. tidak cocok dengan dealer mana pun */
   reset();

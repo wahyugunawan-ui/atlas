@@ -39,7 +39,7 @@ export function drawMarkers() {
 
     const el = document.createElement('div');
     el.className = 'marker-outlet pos' + (medium ? ' sedang' : '') + (selected ? ' terpilih' : '');
-    el.style.background = dealerColor(S.registry, outlet.dealerCode);
+    el.style.background = '#0b2f6b';
     el.innerHTML = '<i class="ph-fill ph-storefront"></i>';
 
     el.addEventListener('mouseenter', (e) =>
@@ -83,7 +83,7 @@ export function drawDealerMarkers() {
 
     const el = document.createElement('div');
     el.className = 'marker-outlet dealer' + (selected ? ' terpilih' : '');
-    el.style.background = dealerColor(S.registry, dealer.code);
+    el.style.background = '#0b2f6b';
     el.innerHTML = '<i class="ph-fill ph-buildings"></i>';
 
     el.addEventListener('mouseenter', (e) =>

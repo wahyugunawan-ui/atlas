@@ -11,6 +11,7 @@ import {
 import { fetchDistrictCustomers, fetchTitikPeta } from './api.js';
 import {
   activeRows, focusDealerSet, fusionFilterPeta, hasScopeFilter, pageFilters, scopeValue,
+  mapViewDistricts, rememberNavigation,
 } from './filters.js';
 import { circle, EMPTY_COLLECTION } from './geo.js';
 import {
@@ -1000,6 +1001,7 @@ export function setGroupPaint(draft, colors) {
   if (!kecamatanSiap) return;
   // Mode edit hidup/mati mengubah apakah garis kecamatan di luar yang terkait ditampilkan.
   terapkanBatasKecamatan();
+  applyMapViewFilter();
 
   S.map.setLayoutProperty('kec-isi', 'visibility', draft ? 'visible' : 'none');
   if (!draft) return;
@@ -1092,6 +1094,10 @@ export function paintGroupView() {
  * @param {string[]} tombolIds  id tombol yang perlu diperbarui gayanya
  */
 function setGroupView(mode, value, tombolIds) {
+  rememberNavigation();
+  pageFilters().districtCode = 'ALL';
+  S.selectedDistrict = null;
+  if (S.panelView && S.panelView.kind === 'district') S.panelView = null;
   const sama = S.ringView && S.ringView.mode === mode && S.ringView.value === value;
   S.ringView = sama ? { mode: null, value: null } : { mode, value };
 
@@ -1103,7 +1109,7 @@ function setGroupView(mode, value, tombolIds) {
     tombol.classList.add(...(aktif ? ['bg-white', 'text-slate-800', 'shadow-sm'] : ['text-slate-500']));
   });
 
-  paintGroupView();
+  window.renderAll();
 }
 
 /** Cocokkan id tombol ("rv-1", "rv-lokasi", "cv-8", ...) dengan value yang aktif. */
@@ -1149,19 +1155,18 @@ export function syncGroupControls() {
   if (ringBlok) ringBlok.classList.toggle('hidden', !dealerAktif);
   if (coverBlok) coverBlok.classList.toggle('hidden', !posAktif);
 
-  const sebelum = S.ringView.mode;
   if (S.ringView.mode === 'dealer-ring' && !dealerAktif) S.ringView = { mode: null, value: null };
   if (S.ringView.mode === 'pos-coverage' && !posAktif) S.ringView = { mode: null, value: null };
   // Gaya tombol ikut dibersihkan waktu sorotan dimatikan lewat jalur ini (setGroupView()
   // hanya memperbarui gayanya waktu tombolnya sendiri diklik).
-  if (sebelum && !S.ringView.mode) {
-    ['rv-lokasi', 'rv-1', 'rv-2', 'rv-3', 'cv-lokasi', 'cv-1', 'cv-2'].forEach((id) => {
+  ['rv-lokasi', 'rv-1', 'rv-2', 'rv-3', 'cv-lokasi', 'cv-1', 'cv-2'].forEach((id) => {
       const tombol = $(id);
       if (!tombol) return;
-      tombol.classList.remove('bg-white', 'text-slate-800', 'shadow-sm');
-      tombol.classList.add('text-slate-500');
+      const mode = id.startsWith('rv-') ? 'dealer-ring' : 'pos-coverage';
+      const active = S.ringView.mode === mode && tombolMatches(id, S.ringView.value);
+      tombol.classList.remove('bg-white', 'text-slate-800', 'shadow-sm', 'text-slate-500');
+      tombol.classList.add(...(active ? ['bg-white', 'text-slate-800', 'shadow-sm'] : ['text-slate-500']));
     });
-  }
   paintGroupView();
 }
 /**
@@ -1225,6 +1230,30 @@ export function paintChoropleth(rows) {
  * @type {Set<string>|null}
  */
 let kecTerkait = null;
+
+/** Filter lapisan analisis, termasuk titik; ring terpilih tidak sekadar disorot. */
+export function applyMapViewFilter() {
+  const editing = Boolean(window.anyGroupEditing && window.anyGroupEditing());
+  const codes = editing ? null : mapViewDistricts();
+  const expression = (values, property) => values
+    ? (values.size ? ['in', ['get', property], ['literal', [...values]]]
+      : ['==', ['get', property], '']) : null;
+  ['kec-warna', 'kec-isi'].forEach((id) => {
+    if (S.map.getLayer(id)) S.map.setFilter(id, expression(codes, 'kode'));
+  });
+  let borders = editing ? null : kecTerkait;
+  if (codes) borders = new Set([...codes].filter((code) => !borders || borders.has(code)));
+  ['kec-garis', 'kec-garis-kosong', 'kec-nama'].forEach((id) => {
+    if (S.map.getLayer(id)) S.map.setFilter(id, expression(borders, 'kode'));
+  });
+  ['ktp-titik', 'servis-titik', 'kirim-titik'].forEach((id) => {
+    if (S.map.getLayer(id)) S.map.setFilter(id, expression(codes, 'district'));
+  });
+  if (S.map.getLayer('kec-terpilih')) {
+    const code = S.selectedDistrict && (!codes || codes.has(S.selectedDistrict)) ? S.selectedDistrict : '';
+    S.map.setFilter('kec-terpilih', ['==', ['get', 'kode'], code]);
+  }
+}
 
 /**
  * Kecamatan yang terkait dengan filter aktif: yang BERPENJUALAN pada filter itu (yang
@@ -1339,6 +1368,7 @@ export function refreshMapVisual() {
 export function redrawMap() {
   if (!S.layersReady) return;
   const on = (id) => ($(id) ? $(id).checked : false);
+  applyMapViewFilter();
 
   // "Batas dan Nama Desa" — satu toggle, dua lapisan. Mati bawaan sejak 2026-10-10:
   // desa tinggal referensi orientasi, bukan satuan analisis.
@@ -1396,9 +1426,15 @@ export function redrawMap() {
   // "Titik Dealer" dan "Titik Pos" — dua sakelar terpisah sejak 2026-08-31 (permintaan
   // Pakbos; sebelumnya satu sakelar untuk keduanya).
   const showPos = on('opt-titik-pos');
-  S.markers.forEach((m) => { m.getElement().style.display = showPos ? '' : 'none'; });
+  const districts = window.anyGroupEditing && window.anyGroupEditing() ? null : mapViewDistricts();
+  const markerVisible = (marker) => {
+    if (!districts) return true;
+    const point = marker.getLngLat();
+    return districts.has(districtAt(point.lat, point.lng));
+  };
+  S.markers.forEach((m) => { m.getElement().style.display = showPos && markerVisible(m) ? '' : 'none'; });
   const showDealer = on('opt-titik-dealer');
-  S.dealerMarkers.forEach((m) => { m.getElement().style.display = showDealer ? '' : 'none'; });
+  S.dealerMarkers.forEach((m) => { m.getElement().style.display = showDealer && markerVisible(m) ? '' : 'none'; });
 }
 
 /* ==========================================================================
@@ -1487,8 +1523,10 @@ export function toggleFullscreen(force) {
  */
 export function fitToScope(auto) {
   const points = [];
+  const view = mapViewDistricts();
   const perDistrict = sumBy(activeRows(), 'district');
   Object.keys(perDistrict).forEach((code) => {
+    if (view && !view.has(code)) return;
     const district = S.districtByCode[code];
     if (district && district.lat != null) points.push([district.lng, district.lat]);
   });
@@ -1500,7 +1538,7 @@ export function fitToScope(auto) {
   // memang ditampilkan, dan peta yang hanya mendekat ke satu pos menyembunyikannya di luar
   // layar. Tanpa filter ruang lingkup (focus null) tidak ada titik tambahan.
   const focus = focusDealerSet();
-  if (focus) {
+  if (focus && !view) {
     S.outlets.forEach((o) => {
       if (o.lat != null && focus.has(o.dealerCode)) points.push([o.lng, o.lat]);
     });

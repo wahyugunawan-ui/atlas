@@ -53,6 +53,44 @@ Istilah wilayah memakai terjemahan resmi BPS supaya konsisten:
 
 ## Sedang dikerjakan
 
+**Revisi panel dihentikan atas permintaan pengguna (2026-11-04).** Perubahan
+tersimpan lokal, belum di-commit/push. Sudah diterapkan: panel kecamatan tanpa kode,
+judul kontribusi ke kabupaten, tren kontribusi %, Total Dealer + Detail ring;
+summary kabupaten dengan daftar dealer/persentase dan ring; filter Kecamatan peta
+tersinkron poligon tanpa mengubah arti Kec. Dealer; Undo pilihan/panel/ring;
+Confidence Fusion disembunyikan; analisis wilayah diganti Statistik Ring Dealer;
+ring menyaring lapisan analisis dan warna ikon dealer/pos diseragamkan.
+
+Verifikasi sebelum berhenti: suite penuh **43/58 lolos**, 15 tes PostgreSQL
+terhalang `ECONNREFUSED 127.0.0.1:5433`; browser Chrome dengan data contoh melewati
+klik/dropdown kecamatan, Detail, kembali ke dealer, Undo tombol ring, penyaringan
+ring, dan layar penuh tanpa galat JavaScript. **9/9 mutasi** tertangkap dan sumber
+dipulihkan. Review menemukan tiga bug state, semuanya diperbaiki dan diuji browser.
+Sesudah itu ada koreksi kecil agar ringkasan atas dengan pembagi kosong menampilkan
+"Data belum tersedia", bukan 0%; tes modul panel diperbarui. Browser perlu dijalankan
+ulang terhadap keadaan terakhir, termasuk tambahan skenario summary kabupaten.
+
+Lanjutkan dari `docs/superpowers/plans/2026-11-03-panel-revisions.md`.
+Yang masih perlu: pemeriksaan akhir/rapikan komentar lama, perbarui PRD dan tambah
+DECISIONS untuk perubahan perilaku, jalankan lagi CSS/tes relevan/browser dan
+catat hasil akhir. Definisi region serta integrasi tiga Excel **tetap ditunda**.
+Tidak ada database aplikasi yang diubah. Saat pengguna meminta server dimatikan,
+tidak ditemukan proses Node ATLAS maupun listener port 3000/3001/4000/5432/5433.
+
+**Diskusi revisi panel dan sumber data pusat (2026-11-03).** Pengguna meminta
+diskusi dahulu sebelum implementasi/impor. Pemeriksaan baca-saja terhadap tiga
+Excel di Downloads: Data Ring berisi 2.297 pemetaan untuk 78 dealer (termasuk
+LOKASI dan OTHERS), tanpa duplikat dealer/kabupaten/kecamatan; Focus Area berisi
+642 pemetaan kecamatan untuk 109 pos / 55 dealer; CDB Agustus berisi 19.598 baris,
+3.072 dengan POS Code dan 16.526 tanpa POS Code. Sebanyak 2.994 baris CDB cocok
+ke kode pos Focus Area tanpa bentrok kode dealer; 78 baris dengan 3 kode pos
+berbeda belum ditemukan di Focus Area. Importer KTP saat ini belum memetakan
+kolom POS Code. Belum ada kode aplikasi atau data database yang diubah.
+Perlu disepakati sumber master pos OCEAN yang dimaksud, arti Focus Area terhadap
+jenis Kec. Tercover lama, aturan penjualan tanpa pos, dan definisi region sebelum
+menulis rancangan final. Jangan menjalankan skrip impor master lama begitu saja:
+skrip itu mengosongkan beberapa tabel dan mengharapkan format Excel berbeda.
+
 **Penyatuan tiga sumber data (FUSION).** Rancangan lengkap ada di
 `docs/FUSION.md`. Tahap A (fondasi), B (resolver nama desa → koordinat),
 C (impor Data KTP & Data Servis, plus rute ping pengiriman), D (mesin
@@ -310,6 +348,97 @@ cuma perluasan ke Sulawesi ke timur.
 ---
 
 ## Selesai
+
+### Tiga perbaikan tata letak dari screenshot pengguna (2026-11-04)
+
+1. Mode biasa: kartu Analisis Performa hanya 70% lebar karena 3 kolom kanan (panel Statistik
+   Ring, tersembunyi sampai dealer/pos dipilih) tetap dicadangkan; sekarang selebar baris dan
+   menyisakan 3 kolom hanya saat panel itu tampil.
+2. Layar penuh tanpa dealer terpilih: baris grid 100px untuk kartu dealer tetap dicadangkan
+   walau kartunya tersembunyi, jadi kartu putih ringkasan berhenti 100px di atas dasar panel
+   kiri; baris itu sekarang dibuang saat kartunya tersembunyi.
+3. Layar penuh: popup "Ring Dealer" menutupi dropdown filter (sama-sama z-index 20, popup
+   muncul belakangan); bilah filter dinaikkan ke z-index 300.
+
+Dijaga `test/layout-layar.test.js` (4 mutasi, semuanya tertangkap). **58 berkas tes + 1 baru
+lolos**; diukur di Chrome 1920x1080 dengan data sungguhan. Pita putih di tepi atas/bawah peta
+pada tangkapan layar uji bukan masalah tata letak (kanvas = kontainer); itu tile citra satelit
+yang belum termuat di browser uji. Belum dicoba di layar fisik pengguna.
+
+### Filter "Kecamatan peta" dihapus; klik peta mengisi Kec. + Kabupaten (2026-11-04)
+
+Klik kecamatan di peta mengisi filter Kec. dan Kabupaten (dari letak geografis kecamatan),
+dropdown "Kecamatan peta" dihapus. Kec. sekarang berarti kecamatan tempat penjualan; daftar
+Kec. mengikuti Kabupaten terpilih (semua kecamatan berpenjualan bila Semua). Pilih dealer/pos
+tidak lagi mengisi Kec. Alasan dan batasnya di DECISIONS 2026-11-04.
+
+Diverifikasi: **58/58 berkas tes** (DB hidup); 12 mutasi pada perilaku baru, semuanya tertangkap
+(dua celah ditemukan dan ditutup: penyebut ringkasan atas, dan aturan kota di luar karesidenan);
+Chrome headless dengan data sungguhan: klik Somagede → Kec. Somagede, Kabupaten Banyumas,
+dropdown Kec. 444 → 28, kontribusi 1,85%, Undo mengembalikan, tanpa galat JS.
+
+**Belum:** kecamatan di kabupaten tanpa dealer terdaftar menampilkan angka peta kosong (lihat
+DECISIONS); verifikasi manual klik poligon sungguhan di peta (yang diuji memanggil
+`openDistrictDetail()`, jalur yang sama dengan klik); `npm run export-geo` belum dijalankan.
+
+### Data server laptop diganti dari NewData/ (2026-11-04)
+
+Backup dulu: `pg_dump -Fc` database `astra` dan `astra_customers` ke
+`C:\astra-data\backup\sebelum-newdata-2026-11-04\`, lolos `pg_restore --list`.
+Sebelumnya: 52 dealer, 79 pos, ring/coverage 0, penjualan 9.949 baris.
+
+Sekarang: **78 dealer, 109 pos + 78 proxy (187), ring 1.361 baris, kec. tercover 210,
+penjualan 10.371 baris / 19.580 unit, customer_ktp 19.598.** CDB: 19.598 dibaca, 19.580
+terpakai, 18 baris wilayah tak cocok (daftar di hasil impor). 7 kecamatan coverage dari
+sheet POS tak dikenal (typo sumber). 936 baris ring LOKASI/OTHERS dilewati (bukan ring).
+
+**Belum / temuan:**
+- Focus Area (642 pemetaan) BELUM diimpor: jenis Kec. Tercover tujuan belum diputuskan.
+- Jangkauan 0% di `seed-coverage`: penjualan menempel ke outlet proxy tanpa koordinat.
+  Kolom `POS Code` CDB (3.072 baris terisi) belum dipakai untuk menyambung ke pos fisik.
+- `import-cli.js` salah untuk berkas CDB; sempat membuat 8 pos + 3 dealer sampah dan satu
+  baris audit `imports` kosong (id 22). Pos/dealer sudah dihapus, baris audit dibiarkan.
+- Backup harian `astra-2026-10-17.dump` sampai `astra-2026-11-02.dump` berukuran 0 byte:
+  tugas terjadwal gagal diam-diam sejak 17 Oktober. Belum diselidiki.
+- Tes DB penuh dan tampilan browser belum dijalankan ulang terhadap data baru.
+
+### Pemeriksaan daftar revisi terhadap pembaruan Wahyu (2026-11-03)
+
+Pemeriksaan kode pada `13436ff`: daftar revisi pengguna **belum tuntas**. Panel
+kecamatan masih menampilkan kode, judul Kontribusi Penjualan, tren dalam unit,
+Rata-rata Kota (rata-rata kontribusi kecamatan, bukan kontribusi kabupaten ke
+region), dan Penjualan per Pos. Belum ada dropdown Detail ring per dealer di
+panel kecamatan. Ringkasan kota masih menampilkan kode dan rata-rata kontribusi;
+belum memuat kontribusi kabupaten ke region, rincian dealer beserta persentase
+ke kabupaten, maupun ring/pelanggaran dalam panel itu.
+
+Confidence Fusion dan Analisis Penjualan Wilayah masih ada. Panel kiri layar
+penuh saat filter dealer masih menampilkan analisis wilayah; belum diganti
+statistik ring. Pemilihan ring masih menyorot isian, belum menyembunyikan semua
+data di luar ring terpilih. Tombol panah memutar mereset filter, bukan undo satu
+langkah. Klik poligon kecamatan membuka panel tanpa mengisi filter kecamatan;
+sinkronisasi marker dealer/pos sudah melalui filter. Warna marker dealer dan
+pos miliknya memakai warna dealer yang sama, tetapi tiap dealer berbeda warna.
+Ringkasan atas sudah berbeda untuk scope dealer/pos, sementara kota dan Semua
+masih memakai ringkasan yang sama. Maksud butir "state" dan "tiap panel beda atas"
+belum cukup spesifik untuk dinyatakan terpenuhi.
+
+Fondasi lima kategori Ring 1/2/3, Others, Pelanggaran Wilayah sudah ada pada
+ringkasan dealer. Tes `filters`, `sales-stats`, `peta-terkait-filter`, dan `page`
+dijalankan ulang dan lolos. Pemeriksaan ini tidak mengubah kode aplikasi; belum
+dicoba di browser, dan tes database masih terbatas seperti catatan sesi pull.
+
+### Pembaruan dari GitHub Wahyu ditarik ke laptop (2026-11-03)
+
+Branch lokal `security-hardening` diperbarui dengan fast-forward dari `wahyu/main`
+(`https://github.com/wahyugunawan-ui/atlas.git`): 8 commit dari `df4aa85` sampai
+`13436ff`, tanpa konflik. Berkas lokal yang belum dilacak Git tetap dipertahankan.
+CSS dibangun ulang lewat `npm run css`; dependensi tidak berubah.
+
+Verifikasi lokal: `npm test` meloloskan **40/55 berkas tes**. Sebanyak 15 berkas
+yang membutuhkan PostgreSQL gagal karena koneksi `127.0.0.1:5433` ditolak
+(`ECONNREFUSED`), sehingga hasil tes database belum terverifikasi. Tampilan belum
+dicoba di browser dan migrasi database aplikasi belum dijalankan dalam sesi ini.
 
 ### Tooltip ikon biru muda; garis kecamatan dan titik pos/dealer tak terkait filter dihilangkan (2026-10-11, putaran keempat)
 
