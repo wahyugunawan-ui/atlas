@@ -14,10 +14,16 @@ const path = require('node:path');
 
 const html = fs.readFileSync(path.join(__dirname, '../frontend/index.html'), 'utf8');
 const css = html.slice(html.indexOf('<style'), html.indexOf('</style>'));
+// Semua aturan dengan selector PERSIS itu, digabung (satu selector bisa punya beberapa aturan).
 const rule = (selector) => {
-  const at = css.indexOf(selector + ' {');
-  assert.ok(at >= 0, `aturan CSS tidak ada: ${selector}`);
-  return css.slice(at, css.indexOf('}', at));
+  const parts = [];
+  for (let at = css.indexOf(selector + ' {'); at >= 0; at = css.indexOf(selector + ' {', at + 1)) {
+    const before = css[at - 1];
+    if (before && !/\s/.test(before)) continue; // bagian dari selector yang lebih panjang
+    parts.push(css.slice(at, css.indexOf('}', at)));
+  }
+  assert.ok(parts.length, `aturan CSS tidak ada: ${selector}`);
+  return parts.join('\n');
 };
 
 // 1. Kartu performa
@@ -40,5 +46,20 @@ assert.ok(z('#map-shell.penuh #fs-filter-host') > 30 &&
   /position:\s*relative/.test(rule('#map-shell.penuh #fs-filter-host')),
   'bilah filter layar penuh tidak di atas kontrol peta');
 assert.match(html, /id="konteks-peta" class="absolute z-20/, 'z-index kontrol peta berubah: tinjau ulang tes ini');
+
+// 4. Panel kiri layar penuh hanya summary Kab./Kec.: tanpa panel, kolom kiri dibuang.
+assert.match(rule('#map-shell.penuh #fs-kiri-panel'), /display:\s*none/, 'panel performa masih di kolom kiri');
+assert.match(rule('#map-shell.penuh:not(.panel-terbuka)'), /grid-template-columns:\s*1fr;/,
+  'kolom kiri tetap dicadangkan tanpa panel');
+assert.doesNotMatch(rule('#map-shell.penuh:not(.panel-terbuka)'), /left/);
+assert.doesNotMatch(rule('#map-shell.penuh:not(.panel-terbuka):has(#fs-kartu.hidden)'), /left|bottom/);
+
+// 5. Tombol Kembali: teks, di LUAR bilah filter (sesudah penutup #filter-bar), latar putih.
+const bar = html.indexOf('id="filter-bar"');
+const kembali = html.indexOf('id="btn-undo"');
+const penutupBar = html.indexOf('<span class="text-[10px]">Reset</span></button>\n  </div>', bar);
+assert.ok(bar > 0 && penutupBar > 0 && kembali > penutupBar, 'tombol Kembali masih di dalam bilah filter');
+assert.match(html.slice(kembali, html.indexOf('</button>', kembali)), />Kembali$/, 'tombol undo bukan tulisan "Kembali"');
+assert.match(rule('.btn-kembali'), /background:\s*#fff/, 'tombol Kembali tidak berlatar putih');
 
 console.log('OK layout-layar — kartu performa selebar baris, baris bawah layar penuh tidak dicadangkan, bilah filter di atas kontrol peta');

@@ -129,16 +129,10 @@ const namaKec = (k) => S.districtNames[k] || k;
  * openCitySummary() otomatis). window.*, bukan import langsung: tables.js sudah
  * meng-import dari berkas ini.
  */
+// Panel kiri tidak dibuka dari sini: renderAll() menurunkannya dari filter (2026-11-04).
 const pilihLingkup = (kind) => (value) => {
   setScope(kind, value, true);
   repaint(false);
-  if (S.filterPage === 'peta' && !S.fullscreen && value !== 'ALL') {
-    if (kind === 'dealer' && window.openDealerDetail) window.openDealerDetail(value);
-    else if (kind === 'pos' && window.openDealerDetail) {
-      const outlet = S.outletByCode[value];
-      if (outlet) window.openDealerDetail(outlet.dealerCode);
-    }
-  }
 };
 
 /**
@@ -161,13 +155,7 @@ function isiComboBerjenjang(paksa) {
     .sort((a, b) => namaKota(a).localeCompare(namaKota(b)))
     .map((c) => [c, namaKota(c)]), 'Semua', (value) => {
       setScope('kota', value, true);
-      repaint(false);
-      // Kota dipilih TANPA kecamatan spesifik yang sedang aktif -> buka ringkasan
-      // kota langsung. Lewat window: tables.js sudah meng-import berkas ini untuk
-      // switchTab(), meng-import baliknya akan membuat lingkaran.
-      if (value !== 'ALL' && !S.selectedDistrict && window.openCitySummary) {
-        window.openCitySummary(value);
-      }
+      repaint(false); // summary kabupaten dibuka renderAll() dari filter
     });
 
   // Kec = kecamatan ASAL dealer (dealers.district_code), bukan kecamatan pelanggan.
@@ -276,7 +264,6 @@ export function onPeriodChange(which, el) {
 export function resetFilters() {
   closeCombo();
   setKares('ALL');
-  if (window.closeDistrictDetail) window.closeDistrictDetail(false);
   repaint(false);
 }
 
@@ -284,6 +271,5 @@ export function undoFilters() {
   closeCombo();
   if (window.anyGroupEditing && window.anyGroupEditing()) return;
   if (!undoNavigation()) return;
-  if (!S.panelView && window.closeDistrictDetail) window.closeDistrictDetail(false);
   repaint(false);
 }

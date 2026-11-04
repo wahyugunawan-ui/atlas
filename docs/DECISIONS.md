@@ -4812,3 +4812,25 @@ dan 2026-11-03 ("pilihan geografis tersendiri"). Akibatnya:
 **Batas yang diketahui:** klik kecamatan di kabupaten yang tidak punya dealer terdaftar
 mengisi Kabupaten itu, dan karena Kabupaten menyaring dealer terdaftar, angka peta bisa kosong
 untuk kombinasi itu sementara panel kecamatan (penyebut netral) tetap berisi.
+
+## [2026-11-04] Panel kiri diturunkan dari filter; region = karesidenan
+
+**Keputusan.** Panel kiri hanya dua jenis dan dibuka oleh `renderAll()` dari bilah filter,
+bukan oleh aksi klik masing-masing: Kecamatan terpilih -> panel kecamatan, Kabupaten terpilih ->
+summary kabupaten, selain itu kosong. Panel rincian dealer tidak lagi dibuka (fungsinya tetap
+ada, tanpa pemanggil). Dengan satu sumber, panel dan filter tidak bisa menyimpang — sebelumnya
+tiap jalur (dropdown, marker, kartu) membuka panelnya sendiri dan reset/undo harus menutupnya.
+
+**Region = karesidenan** (pilihan pengguna, menutup definisi region yang ditunda sejak
+2026-11-03). "Kontribusi Penjualan ke Karesidenan" = penjualan dealer terdaftar di kabupaten ÷
+penjualan dealer terdaftar di semua kabupaten karesidenan itu, pada periode aktif TANPA saringan
+wilayah (`periodRows()`): filter Kabupaten yang sedang aktif tidak boleh mengecilkan penyebut.
+Kabupaten di luar ketiga karesidenan mendapat "—", bukan 0%.
+
+**Satu aturan kategori ring.** `ringCategoryOf()` (sales-stats.js) dipakai persentase
+(`dealerRingSplit()`), sorotan peta (`districtsInRingCategory()`), dan komposisi per dealer
+(`dealersByRingCategory()`). Menulis ulang aturan Others/Pelanggaran di tempat kedua akan
+membuat kecamatan yang disorot tidak cocok dengan angkanya.
+
+**Aksi klik di panel lewat `data-*`** dan satu pendengar terdelegasi (tables.js), bukan
+`onclick` dengan string JS dari data. Lihat temuan keamanan di ROADMAP 2026-11-04.

@@ -10,7 +10,7 @@ import {
 } from './api.js';
 import { dealerColor, percentileBreaks } from './colors.js';
 import {
-  PROVINCE_NAMES, SHOW_ENGINE_NUMBER, SHOW_HOUSE_PHOTO,
+  KARESIDENAN, PROVINCE_NAMES, SHOW_ENGINE_NUMBER, SHOW_HOUSE_PHOTO,
   TABLE_ROW_LIMIT,
 } from './config.js';
 import {
@@ -18,8 +18,9 @@ import {
 } from './dom.js';
 import { syncFilterBar } from './filter-bar.js';
 import {
-  activeRows, clearScope, dealerBreakdown, dealerCityOf, pageFilters, regionCityCodes,
-  scopeValue, setScope, selectDistrictFromMap, rememberNavigation,
+  activeRows, applyScope, clearScope, dealerBreakdown, dealerCityOf, focusDealerRing, karesOfCity,
+  pageFilters, periodRows, regionCityCodes, scopeValue, setScope, selectDistrictFromMap,
+  rememberNavigation,
 } from './filters.js';
 // hentikanLiveFusion IKUT di-import. Sampai 2026-09-18 tidak — switchTab()
 // memanggilnya tanpa pernah mengimpornya, jadi SETIAP pindah ke halaman non-Fusion
@@ -36,7 +37,7 @@ import { dealerCardHtml, dealerWideRows, renderTopSummary, ringStatisticsHtml } 
 import { fitToScope, kembalikanPeta, pinjamPetaKeFusion, refreshMapVisual } from './map.js';
 import {
   contributionPercent, contributionsForRows, groupByCity, posContributionInDealer,
-  relativePosition, districtContributionTrend, dealerSalesBreakdown,
+  relativePosition, districtContributionTrend, dealerSalesBreakdown, cityContributionToRegion,
 } from './sales-stats.js';
 import { S } from './state.js';
 
@@ -84,6 +85,36 @@ function sectionHeader(icon, title, count) {
 let hideTimer = null;
 
 /** Tampilkan panel geser, sekaligus batalkan jadwal sembunyi yang masih menggantung. */
+/**
+ * Kepala panel kiri: label jenis kecil (KECAMATAN/KABUPATEN) di atas nama besar tebal, dan
+ * garis warna tebal di atas panel yang berbeda per jenis (CSS .blok-*), supaya dua jenis
+ * panel bisa dibedakan sekali lihat.
+ */
+function setPanelHead(kind, title, meta) {
+  const panel = $('kelurahanDetailPanel');
+  ['blok-kab', 'blok-kec', 'blok-dealer'].forEach((c) => panel.classList.remove(c));
+  panel.classList.add({ city: 'blok-kab', district: 'blok-kec', dealer: 'blok-dealer' }[kind]);
+  if ($('kelurahanDetailJenis')) {
+    $('kelurahanDetailJenis').textContent = { city: 'Kabupaten', district: 'Kecamatan', dealer: 'Dealer' }[kind];
+  }
+  $('kelurahanDetailTitle').textContent = title;
+  $('kelurahanDetailMeta').textContent = meta || '';
+}
+
+/*
+ * Klik di dalam panel kiri lewat atribut data-*, bukan string JS di onclick: kode dealer dan
+ * kategori ring tidak pernah ditafsirkan sebagai kode. Satu pendengar untuk seluruh dokumen,
+ * karena isi panel ditulis ulang tiap render.
+ */
+if (typeof document !== 'undefined' && document.addEventListener) {
+  document.addEventListener('click', (event) => {
+    const el = event.target && event.target.closest && event.target.closest('[data-aksi]');
+    if (!el) return;
+    if (el.dataset.aksi === 'dealer') applyScope('dealer', el.dataset.dealer);
+    else if (el.dataset.aksi === 'ring') focusDealerRing(el.dataset.dealer, el.dataset.kategori);
+  });
+}
+
 function showPanel() {
   clearTimeout(hideTimer);
   // Legenda kiri bawah bergeser ke kanan panel (CSS: #map-shell.panel-terbuka).
@@ -150,9 +181,8 @@ export function openDealerDetail(dealerCode) {
   // kembali antar-kabupaten) — dealerCardHtml() membaca scope aktif, bukan
   // parameter ini, tapi keduanya selalu selaras.
   $('kelurahanDetailSummary').innerHTML = dealerCardHtml(true);
-  $('kelurahanDetailTitle').textContent = name;
-  $('kelurahanDetailMeta').textContent =
-    `${formatNumber(cities.length)} kabupaten · ${formatNumber(districtCount)} kecamatan`;
+  setPanelHead('dealer', name,
+    `${formatNumber(cities.length)} kabupaten · ${formatNumber(districtCount)} kecamatan`);
 
   $('kelurahanDetailList').innerHTML =
     `<div class="grid grid-cols-2 gap-2 pb-3 border-b border-slate-200">` +
@@ -229,65 +259,44 @@ export function openCitySummary(cityCode) {
 
   // Ringkasan KUMPULAN DEALER yang terdaftar di kota ini: seluruh penjualan mereka,
   // di kecamatan mana pun pelanggannya berada (bukan hanya yang di dalam kota ini).
-  // Karena itu tidak lewat groupByCity(), yang mengelompokkan menurut kota pelanggan.
   const rows = activeRows().filter((r) => dealerCityOf(r.dealer) === cityCode);
-  const kota = { total: 0, districts: new Map() };
-  const dealerAda = new Set();
-  rows.forEach((r) => {
-    kota.total += r.units;
-    kota.districts.set(r.district, (kota.districts.get(r.district) || 0) + r.units);
-    dealerAda.add(r.dealer);
-  });
+  const total = rows.reduce((sum, r) => sum + r.units, 0);
+  const districtCount = new Set(rows.map((r) => r.district)).size;
+  const dealerAda = new Set(rows.map((r) => r.dealer));
   const dealerTerdaftar = S.dealers.filter((d) => d.cityCode === cityCode).length;
-  const districtCount = kota.districts.size;
-  const avgContribution = districtCount
-    ? [...kota.districts.entries()]
-      .reduce((sum, [, units]) => sum + contributionPercent(units, kota.total), 0) / districtCount
-    : null;
 
-  // Posisi Relatif dihitung dari SELURUH filter aktif (semua kota kalau tidak ada
-  // filter kota lain yang menyempitkan) — definisi yang sama dengan panel kecamatan,
-  // supaya label "Terbawah"/"Teratas" berarti hal yang sama di mana pun dilihat.
-  const kontribusiAktif = contributionsForRows(activeRows(), S.districtByCode);
-  const breaks = percentileBreaks([...kontribusiAktif.values()]);
-  const distribusi = { Terbawah: 0, Bawah: 0, Tengah: 0, Atas: 0, Teratas: 0 };
-  kota.districts.forEach((units) => {
-    const pct = contributionPercent(units, kota.total);
-    const label = pct == null ? null : relativePosition(pct, breaks);
-    if (label) distribusi[label]++;
-  });
+  // Region = karesidenan (keputusan 2026-11-04). Penyebutnya baris periode aktif TANPA
+  // saringan wilayah: filter Kabupaten yang sedang aktif tidak boleh mengecilkannya.
+  const kares = karesOfCity(cityCode);
+  const region = kares ? KARESIDENAN[kares] : null;
+  const keRegion = cityContributionToRegion(periodRows(), cityCode,
+    region ? region.cities : null, dealerCityOf);
 
+  // Sisa kartu dealer dari panel sebelumnya (mis. "TUNAS DWIPA ...") tidak boleh ikut tampil
+  // di atas nama kabupaten.
+  $('kelurahanDetailSummary').innerHTML = '';
   $('kelurahanDetailBack').innerHTML = '';
-  $('kelurahanDetailTitle').textContent = S.cityNames[cityCode] || cityCode;
-  $('kelurahanDetailMeta').textContent =
-    `${formatNumber(dealerTerdaftar)} dealer terdaftar · ${formatNumber(dealerAda.size)} berpenjualan · ` +
-    `${formatNumber(districtCount)} kecamatan`;
+  setPanelHead('city', S.cityNames[cityCode] || cityCode, region ? region.label : '');
 
+  const judulRegion = region
+    ? `Penjualan dealer kabupaten ini dibagi penjualan dealer seluruh ${region.label} pada periode aktif.`
+    : 'Kabupaten ini tidak termasuk karesidenan mana pun.';
   $('kelurahanDetailList').innerHTML =
     `<div class="grid grid-cols-2 gap-2 pb-3 border-b border-slate-200">` +
     `<div><div class="text-[10px] uppercase font-bold text-slate-400" ` +
-    'title="Total penjualan seluruh dealer yang terdaftar di kota ini, di mana pun pelanggannya tinggal.">Total Penjualan Dealer</div>' +
-    `<div class="text-lg font-extrabold text-slate-900 mono">${esc(formatNumber(kota.total))}</div></div>` +
+    'title="Total penjualan seluruh dealer yang terdaftar di kabupaten ini, di mana pun pelanggannya tinggal.">Total Penjualan Dealer</div>' +
+    `<div class="text-lg font-extrabold text-slate-900 mono">${esc(formatNumber(total))}</div></div>` +
     `<div><div class="text-[10px] uppercase font-bold text-slate-400">Jumlah Kecamatan</div>` +
     `<div class="text-lg font-extrabold text-slate-900 mono">${esc(formatNumber(districtCount))}</div></div>` +
-    `<div><div class="text-[10px] uppercase font-bold text-slate-400" ` +
-    'title="Rata-rata Kontribusi Penjualan seluruh kecamatan berpenjualan di kota ini.">Rata-rata Kontribusi</div>' +
-    `<div class="text-lg font-extrabold text-slate-900 mono">${esc(formatPercent(avgContribution))}</div></div>` +
-    '</div>' +
-
-    `<div class="pb-3">` +
-    `<div class="text-[11px] uppercase font-bold text-slate-400 mb-2">Distribusi Posisi Relatif</div>` +
-    (districtCount
-      ? Object.entries(distribusi).map(([label, n]) =>
-        `<div class="flex items-center justify-between text-xs py-1.5">` +
-        `<span>${posisiBadgeHtml(label)}</span>` +
-        `<span class="mono font-bold text-slate-800">${esc(formatNumber(n))} wilayah</span></div>`).join('')
-      : '<p class="text-xs text-slate-400">Data belum tersedia.</p>') +
+    `<div class="col-span-2"><div class="text-[10px] uppercase font-bold text-slate-400" title="${esc(judulRegion)}">` +
+    `Kontribusi Penjualan ke ${esc(region ? region.label : 'Region')}</div>` +
+    `<div class="text-lg font-extrabold text-slate-900 mono">${esc(formatPercent(keRegion))}</div></div>` +
     '</div>' +
     sectionHeader('chart-pie', 'Komposisi Ring Dealer', dealerAda.size) +
-    ringStatisticsHtml(rows) +
+    '<p class="text-[10px] text-slate-400 mb-1">Klik satu baris untuk melihat dealernya.</p>' +
+    ringStatisticsHtml(rows, { perDealer: true }) +
     sectionHeader('buildings', 'Dealer dan Kontribusi ke Kabupaten', dealerTerdaftar) +
-    dealerListHtml(rows, rows, S.dealers.filter((d) => d.cityCode === cityCode).map((d) => d.code));
+    dealerListHtml(rows, rows, S.dealers.filter((d) => d.cityCode === cityCode).map((d) => d.code), 'kabupaten');
 
   showPanel();
   syncFilterBar();
@@ -295,23 +304,34 @@ export function openCitySummary(cityCode) {
   if (releasedDistrict && S.layersReady) refreshMapVisual();
 }
 
-/** Jumlah/% mengikuti wilayah panel; Detail menjelaskan komposisi ring dealer. */
-function dealerListHtml(rows, ringRows = rows, includeCodes = []) {
+/**
+ * Daftar dealer panel kiri. Nama = tombol berwarna sama dengan titik dealer di peta (klik
+ * memilih dealer), unit besar-tebal di kanannya; baris kedua: toggle Detail sebaris dengan
+ * persentase kontribusi. Jumlah/% mengikuti wilayah panel (`basis`); Detail menjelaskan
+ * komposisi ring dealer dan barisnya bisa diklik untuk menyorot kategori itu di peta.
+ */
+function dealerListHtml(rows, ringRows = rows, includeCodes = [], basis = 'kecamatan') {
   const list = dealerSalesBreakdown(rows);
   includeCodes.forEach((code) => {
     if (!list.some((item) => item.code === code)) list.push({ code, units: 0, contribution: 0 });
   });
   return list.length ? list.map((item) => {
     const dealerRows = ringRows.filter((r) => r.dealer === item.code);
-    return `<div class="border-b border-slate-100 py-2">` +
-      `<button class="flex items-start justify-between gap-2 w-full text-left" ` +
-      `onclick="applyScope('dealer','${esc(item.code)}')">` +
-      `<span class="text-xs font-semibold text-slate-800">${esc(S.dealerNames[item.code] || item.code)}</span>` +
-      `<span class="text-right shrink-0 mono text-xs"><b>${esc(formatNumber(item.units))}</b><br>` +
-      `${esc(formatPercent(item.contribution))}</span></button>` +
-      `<details class="mt-2 text-xs"><summary class="cursor-pointer text-slate-500">Detail</summary>` +
-      '<p class="text-[10px] text-slate-400 my-2">Komposisi penjualan dealer pada periode dan filter aktif, seluruh kecamatan.</p>' +
-      ringStatisticsHtml(dealerRows) + '</details></div>';
+    const warna = dealerColor(S.registry, item.code);
+    return '<div class="dealer-baris border-b border-slate-100 py-2.5">' +
+      '<div class="flex items-start justify-between gap-2">' +
+      `<button type="button" data-aksi="dealer" data-dealer="${esc(item.code)}" title="Pilih dealer ini" ` +
+      'class="dealer-nama text-left text-[13px] font-extrabold leading-snug underline-offset-2 hover:underline" ' +
+      `style="color:${esc(warna)}">${esc(S.dealerNames[item.code] || item.code)}</button>` +
+      `<span class="shrink-0 mono text-sm font-extrabold text-slate-900" title="Total penjualan">${esc(formatNumber(item.units))}</span>` +
+      '</div>' +
+      '<details class="dealer-detail text-xs mt-1">' +
+      '<summary class="flex items-center justify-between gap-2 cursor-pointer list-none">' +
+      '<span class="text-slate-500 font-semibold">Detail <i class="ph ph-caret-down"></i></span>' +
+      `<span class="mono text-xs font-bold text-slate-600" title="Persentase kontribusi dealer ke ${esc(basis)}">${esc(formatPercent(item.contribution))}</span>` +
+      '</summary>' +
+      '<p class="text-[10px] text-slate-400 my-2">Komposisi penjualan dealer pada periode dan filter aktif, seluruh kecamatan. Klik satu baris untuk menyorotnya di peta.</p>' +
+      ringStatisticsHtml(dealerRows, { dealer: item.code }) + '</details></div>';
   }).join('') : '<p class="text-xs text-slate-400 py-3">Tidak ada penjualan pada filter ini.</p>';
 }
 
@@ -496,8 +516,7 @@ export function openDistrictDetail(code, fromDealer) {
   // Drill-down kecamatan biasa bicara soal SATU kecamatan, bukan dealer — ringkasan
   // dealer (diisi openDealerDetail()) dikosongkan supaya tidak nyasar tampil di sini.
   $('kelurahanDetailSummary').innerHTML = '';
-  $('kelurahanDetailTitle').textContent = district.name || code;
-  $('kelurahanDetailMeta').textContent = `Kecamatan · ${district.cityName || ''}`;
+  setPanelHead('district', district.name || code, district.cityName || '');
 
   $('kelurahanDetailList').innerHTML =
     // --- Blok 1: OVERVIEW ---
@@ -531,7 +550,7 @@ export function openDistrictDetail(code, fromDealer) {
 
     sectionHeader('buildings', 'Total Dealer', new Set(rows.map((r) => r.dealer)).size) +
     '<p class="text-[10px] text-slate-400">Persentase terhadap total penjualan kecamatan.</p>' +
-    dealerListHtml(rows, semuaAktif);
+    dealerListHtml(rows, semuaAktif, [], 'kecamatan');
 
   renderDistrictTrend(trend);
   showPanel();
@@ -553,16 +572,27 @@ export function hideDetailPanel() {
   hideTimer = setTimeout(() => panel.classList.add('hidden'), 300);
 }
 
-export function closeDistrictDetail(record = true) {
-  if (record && S.panelView) rememberNavigation();
-  hideDetailPanel();
-  S.selectedDistrict = null;
-  S.panelView = null;
-  pageFilters().districtCode = 'ALL';
-  syncFilterBar();
-  if (S.layersReady) refreshMapVisual();
-  renderTopSummary(activeRows());
+/**
+ * Tombol X panel kiri. Panel diturunkan dari filter (renderAll(), app.js): Kecamatan terpilih
+ * -> panel kecamatan, Kabupaten terpilih -> summary kabupaten. Menutup panel karena itu
+ * melepas tingkat yang sedang diringkas: kecamatan dulu (summary kabupaten tetap), lalu
+ * kabupaten. Undo mengembalikannya.
+ */
+export function closeDistrictDetail() {
+  const f = pageFilters();
+  if (f.districtCode !== 'ALL') {
+    rememberNavigation();
+    f.districtCode = 'ALL';
+    S.selectedDistrict = null;
+    S.panelView = null;
+  } else if (f.cityCode !== 'ALL') {
+    setScope('kota', 'ALL', true);
+  } else {
+    hideDetailPanel();
+    return;
+  }
   if (S.layersReady) S.map.setFilter('kec-terpilih', ['==', ['get', 'kode'], '']);
+  if (window.renderAll) window.renderAll();
 }
 
 /* ==========================================================================

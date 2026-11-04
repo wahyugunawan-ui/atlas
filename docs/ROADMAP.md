@@ -349,6 +349,49 @@ cuma perluasan ke Sulawesi ke timur.
 
 ## Selesai
 
+### Panel kiri hanya Kabupaten/Kecamatan, daftar dealer berwarna, Detail ring bisa diklik, tombol Kembali (2026-11-04)
+
+- **Panel kiri diturunkan dari filter** (`renderAll()`, app.js): Kecamatan terpilih -> panel
+  kecamatan, Kabupaten terpilih -> summary kabupaten, selain itu tidak ada panel. Dealer/pos
+  tidak lagi membuka panel rincian dealer (dealer tetap mengisi Kabupaten, jadi summary
+  kabupatennya yang tampil). Layar penuh: Analisis Performa Pos/Statistik Ring keluar dari
+  kolom kiri; tanpa panel, kolom kiri dibuang dan peta melebar. Tombol X melepas kecamatan
+  dulu (kembali ke summary kabupaten), lalu kabupaten.
+- **Kepala panel**: label kecil KABUPATEN/KECAMATAN + nama besar tebal; meta = karesidenan
+  (kabupaten) atau kabupaten (kecamatan).
+- **Summary kabupaten**: sisa kartu dealer (mis. "TUNAS DWIPA ...") yang ikut tampil di atas
+  nama kabupaten dibersihkan; meta "... dealer terdaftar · ... berpenjualan" dan section
+  Distribusi Posisi Relatif dihapus; Rata-rata Kontribusi diganti **Kontribusi Penjualan ke
+  Karesidenan** (region = karesidenan, keputusan pengguna; DECISIONS 2026-11-04).
+  Komposisi Ring Dealer: tiap baris membuka daftar dealer + unit di kategori itu, urut tertinggi.
+- **Daftar dealer** (kedua panel): nama berwarna titik dealer, tebal dan lebih besar, garis
+  bawah saat hover; unit tebal di kanan; Detail sebaris dengan persentase; tooltip "Total
+  penjualan" dan "Persentase kontribusi dealer ke kabupaten/kecamatan".
+- **Detail ring bisa diklik** (Ring 1/2/3, Others, Pelanggaran Wilayah): dealer dipilih dan
+  kecamatan kategori itu disorot di peta. Others/Pelanggaran memakai `ringCategoryOf()`
+  (sales-stats.js), aturan yang SAMA dengan persentasenya.
+- **Garis warna tebal** di atas tiap block: kabupaten navy, kecamatan teal, ringkasan oranye,
+  kartu dealer merah, performa biru, Statistik Ring ungu.
+- **Tombol Kembali**: ikon undo jadi tombol teks putih di luar bilah filter, di sampingnya
+  (ikut pindah ke layar penuh).
+
+Diverifikasi: **60/60 berkas tes** (baru `test/panel-kiri.test.js`, `layout-layar` diperluas);
+14 mutasi perilaku tertangkap, 1 mutasi kosmetik kontrol lolos seperti seharusnya; Chrome
+1920x1080 dengan data sungguhan (Sleman: kontribusi ke Kares Yogyakarta 47,91%; Pelanggaran
+Wilayah membuka 241/104/83/...; klik baris Pelanggaran menyorot merah; X bertahap; layar penuh
+tanpa kabupaten peta 1896 px, dengan Banyumas panel kiri 320 px), tanpa galat JS.
+
+**Temuan, belum diperbaiki:** tinjauan keamanan otomatis menandai pola `onclick="f('${esc(x)}')"`
+— `esc()` adalah escape HTML, dan browser men-decode entitas sebelum JS membacanya, jadi nilai
+berisi tanda kutip bisa keluar dari string JS. Baris yang ditandai (kode dealer) saat ini tidak
+bisa dieksploitasi: `toDealerCode()` membuang semua selain A-Z0-9. Kode yang ditulis ulang di
+sesi ini sudah memakai `data-*` + pendengar terdelegasi; masih tersisa sekitar 24 tempat dengan
+pola lama (tables.js, render.js, import.js, fusion.js, combobox.js), sebagian memakai kode dari
+Excel (kode pos). Perlu dipindah ke `data-*` satu per satu.
+
+**Batas:** daftar dealer summary kabupaten menampilkan dealer terdaftar berpenjualan 0 saat
+dealer lain dipilih (perilaku lama). Belum dicoba di layar fisik pengguna.
+
 ### Tiga perbaikan tata letak dari screenshot pengguna (2026-11-04)
 
 1. Mode biasa: kartu Analisis Performa hanya 70% lebar karena 3 kolom kanan (panel Statistik

@@ -5,7 +5,7 @@ const { pathToFileURL } = require('node:url');
 const url = (name) => pathToFileURL(path.join(__dirname, '../frontend/js', name)).href;
 const elements = {};
 for (const id of ['map-shell', 'kelurahanDetailPanel', 'kelurahanDetailBack',
-  'kelurahanDetailTitle', 'kelurahanDetailMeta', 'kelurahanDetailList',
+  'kelurahanDetailTitle', 'kelurahanDetailMeta', 'kelurahanDetailJenis', 'kelurahanDetailList',
   'kelurahanDetailSummary', 'ringkas-utama', 'fs-ringkas-utama', 'fs-ring-stats', 'district-trend-chart']) {
   elements[id] = { innerHTML: '', textContent: '', classList: { add() {}, remove() {}, toggle() {} } };
 }
@@ -41,12 +41,13 @@ global.ApexCharts = class { constructor(el, options) { chart = options; } render
   });
   tables.openDistrictDetail('A');
   const html = elements.kelurahanDetailList.innerHTML;
-  assert.equal(elements.kelurahanDetailMeta.textContent, 'Kecamatan · Kabupaten X');
+  assert.equal(elements.kelurahanDetailJenis.textContent, 'Kecamatan', 'label jenis panel hilang');
+  assert.equal(elements.kelurahanDetailMeta.textContent, 'Kabupaten X');
   assert.match(html, /Kontribusi Kecamatan ke Kabupaten/);
   assert.match(html, /Tren Kontribusi Bulanan/);
   assert.match(html, /Total Dealer/);
   assert.doesNotMatch(html, /Penjualan per Pos/);
-  assert.match(html, /<summary[^>]*>Detail/);
+  assert.match(html, /<summary[^>]*>[\s\S]*?Detail/);
   assert.match(html, /Dealer &lt;img/);
   assert.doesNotMatch(html, /<img/);
   assert.match(html, /Ring 1/);

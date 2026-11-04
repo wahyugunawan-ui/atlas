@@ -6,11 +6,12 @@ import {
 } from './colors.js';
 import { $, esc, formatNumber, formatPercent, sumBy } from './dom.js';
 import {
-  activeRows, applyScope, clearScope, dealerCityOf, dealerDistrictOf, pageFilters, scopeLabel,
+  activeRows, applyScope, clearScope, dealerCityOf, dealerRegionInfo, pageFilters, scopeLabel,
   scopeValue,
 } from './filters.js';
+export { dealerRegionInfo };
 import {
-  contributionsByOutlet, contributionsByDistrict, dealerRingSplit, groupSplit, POSISI_LABEL,
+  contributionsByOutlet, contributionsByDistrict, dealerRingSplit, dealersByRingCategory, groupSplit, POSISI_LABEL,
   posContributionInDealer, relativePosition, ringCells, contributionPercent,
 } from './sales-stats.js';
 import { posisiBadgeHtml } from './tables.js';
@@ -393,23 +394,20 @@ export function dealerWideRows(code) {
   });
 }
 
-/**
- * Bahan klasifikasi Others / Pelanggaran Wilayah untuk satu dealer (lihat
- * dealerRingSplit() di sales-stats.js): kota terdaftarnya, pencari kota sebuah
- * kecamatan, dan kecamatan yang ditoleransi — kecamatan tempat dealer berada beserta yang
- * berbatasan langsung dengannya (S.dealerBorder, dihitung server dari poligon kecamatan).
- */
-export function dealerRegionInfo(code) {
-  return {
-    cityCode: dealerCityOf(code),
-    cityOfDistrict: (district) => (S.districtByCode[district] || {}).cityCode || null,
-    // Kecamatan dealer sendiri selalu ikut, walau server belum punya poligonnya.
-    tolerated: new Set([...(S.dealerBorder[code] || []), dealerDistrictOf(code)].filter(Boolean)),
-  };
-}
 
-/** Gabungkan kategori tiap dealer tanpa menerapkan ring dealer lain kepadanya. */
-export function ringStatisticsHtml(rows) {
+/** Urutan kategori ring, sama dengan urutan ringCells(). */
+const RING_KATEGORI = [1, 2, 3, 'others', 'violation'];
+
+/**
+ * Gabungkan kategori tiap dealer tanpa menerapkan ring dealer lain kepadanya.
+ *
+ * opsi.dealer  -> baris bisa diklik: peta pindah ke dealer itu dan menyorot kecamatan
+ *                 kategori tersebut (focusDealerRing(), lewat data-aksi="ring").
+ * opsi.perDealer -> tiap baris jadi <details> berisi dealer + unitnya di kategori itu,
+ *                 urut tertinggi (Komposisi Ring Dealer di summary kabupaten).
+ * Nilai data masuk lewat atribut data-*, bukan string JS di onclick.
+ */
+export function ringStatisticsHtml(rows, opsi = {}) {
   const grouped = new Map();
   rows.forEach((row) => {
     if (!grouped.has(row.dealer)) grouped.set(row.dealer, []);
@@ -427,11 +425,32 @@ export function ringStatisticsHtml(rows) {
   const pct = (key) => contributionPercent(units[key], total) || 0;
   const split = { total, percent1: pct(1), percent2: pct(2), percent3: pct(3),
     percentOthers: pct('others'), percentViolation: pct('violation') };
-  return '<div class="space-y-2">' + ringCells(split).map((cell, i) => {
-    const count = Object.values(units)[i];
-    return '<div class="flex justify-between gap-2 text-xs">' +
-      `<span class="text-slate-500">${esc(cell.label)}</span>` +
-      `<span class="mono text-slate-800"><b>${esc(cell.value)}</b> · ${esc(formatNumber(count))} unit</span></div>`;
+  const perDealer = opsi.perDealer ? dealersByRingCategory(grouped,
+    (code) => ({ ringMap: S.dealerRings[code], info: dealerRegionInfo(code) })) : null;
+  const isiBaris = (cell, count) =>
+    `<span class="text-slate-500">${esc(cell.label)}</span>` +
+    `<span class="mono text-slate-800"><b>${esc(cell.value)}</b> · ${esc(formatNumber(count))} unit</span>`;
+  return '<div class="space-y-1">' + ringCells(split).map((cell, i) => {
+    const key = RING_KATEGORI[i];
+    const count = units[key];
+    if (perDealer) {
+      const daftar = perDealer[key];
+      return '<details class="ring-baris text-xs">' +
+        `<summary class="flex justify-between gap-2 cursor-pointer rounded-md px-1.5 py-1 hover:bg-slate-100">${isiBaris(cell, count)}</summary>` +
+        (daftar.length
+          ? '<div class="pl-3 pr-1 pb-1">' + daftar.map((d) =>
+            '<div class="flex justify-between gap-2 py-0.5 text-[11px]">' +
+            `<span class="truncate" style="color:${esc(dealerColor(S.registry, d.code))}">${esc(S.dealerNames[d.code] || d.code)}</span>` +
+            `<span class="mono font-bold text-slate-700 shrink-0">${esc(formatNumber(d.units))}</span></div>`).join('') + '</div>'
+          : '<p class="pl-3 text-[11px] text-slate-400 pb-1">Tidak ada dealer di kategori ini.</p>') +
+        '</details>';
+    }
+    if (opsi.dealer) {
+      return `<button type="button" data-aksi="ring" data-dealer="${esc(opsi.dealer)}" data-kategori="${esc(key)}" ` +
+        'title="Tampilkan di peta" class="ring-baris flex justify-between gap-2 w-full text-xs rounded-md px-1.5 py-1 hover:bg-slate-100 text-left">' +
+        isiBaris(cell, count) + '</button>';
+    }
+    return `<div class="flex justify-between gap-2 text-xs px-1.5 py-1">${isiBaris(cell, count)}</div>`;
   }).join('') + '</div>' +
     (unknown ? '<p class="text-[10px] text-amber-700 mt-2">Kabupaten dealer belum tercatat; bagian di luar ring dikelompokkan sebagai Others.</p>' : '');
 }
@@ -759,7 +778,7 @@ export function renderRingStatistics() {
   const rows = active ? dealerWideRows(code) : [];
   const body = `<div class="font-bold text-sm mb-2">${esc(S.dealerNames[code] || '')}</div>` +
     '<p class="text-[10px] text-slate-400 mb-3">Seluruh penjualan dealer pada periode aktif; tidak dipersempit oleh ring atau kecamatan peta.</p>' +
-    ringStatisticsHtml(rows);
+    ringStatisticsHtml(rows, { dealer: code });
   ['panel-ring-stats', 'fs-ring-stats'].forEach((id) => {
     if ($(id)) $(id).innerHTML = active ? body : '';
   });

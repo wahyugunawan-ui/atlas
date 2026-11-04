@@ -830,7 +830,7 @@ function test() {
     assert.ok(html.includes(`id="${id}"`), `elemen ${id} hilang`);
   });
   assert.ok(!html.includes('id="panel-wilayah"'), "analisis wilayah lama masih tampil");
-  assert.ok(renderSource.includes("ringStatisticsHtml(rows)"), "statistik ring tidak dihitung");
+  assert.ok(/ringStatisticsHtml\(rows\b/.test(renderSource), "statistik ring tidak dihitung");
   assert.ok(!renderSource.includes("setInterval(() => {\n    const panel = panelWilayahAktif"), "timer wilayah lama tertinggal");
 
   // Tombol urut membalik urutan, tidak cuma mengganti tulisannya.

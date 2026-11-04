@@ -92,16 +92,7 @@ export function drawDealerMarkers() {
     el.addEventListener('mouseleave', () => $('tooltip').classList.remove('show'));
     el.addEventListener('click', (e) => {
       e.stopPropagation();
-      applyScope('dealer', dealer.code);
-      // Mode biasa (bukan layar penuh): langsung buka panel rincian per kelurahan
-      // bersama ringkasan dealer di dalamnya — permintaan user, supaya tidak perlu
-      // klik dua kali (dulu: klik marker → cuma kartu ringkas, klik lagi "Rincian
-      // per kelurahan" baru panelnya muncul). Layar penuh TIDAK disentuh — sudah
-      // ada kartu ringkas + panel kiri Performa/Wilayah sendiri di sana.
-      // window.openDealerDetail, bukan import langsung dari tables.js: tables.js
-      // sendiri meng-import dari modul ini (selectOutlet), impor balik akan
-      // membuat lingkaran modul.
-      if (!S.fullscreen) window.openDealerDetail(dealer.code);
+      applyScope('dealer', dealer.code); // panel kiri: lihat renderAll()
     });
 
     S.dealerMarkers.push(new maplibregl.Marker({ element: el })
@@ -164,10 +155,6 @@ export function moveTooltip(event) {
  */
 export function selectOutlet(code) {
   applyScope('pos', code);
-  if (!S.fullscreen) {
-    const outlet = S.outletByCode[code];
-    if (outlet) window.openDealerDetail(outlet.dealerCode);
-  }
 }
 
 export function closeSelectionInfo() {

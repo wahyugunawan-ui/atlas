@@ -10,6 +10,7 @@
  * filter sendiri tanpa trik simpan-muat, dan aturannya bisa diuji tanpa browser.
  */
 import { KARESIDENAN } from './config.js';
+import { districtsInRingCategory } from './sales-stats.js';
 import { S } from './state.js';
 
 /** Nilai filter halaman yang sedang aktif, atau halaman yang disebut. */
@@ -85,6 +86,45 @@ export function selectDistrictFromMap(code) {
   S.panelView = value === 'ALL' ? null : { kind: 'district', code: value };
 }
 
+/**
+ * Bahan klasifikasi Others / Pelanggaran Wilayah untuk satu dealer (lihat
+ * dealerRingSplit() di sales-stats.js): kota terdaftarnya, pencari kota sebuah
+ * kecamatan, dan kecamatan yang ditoleransi — kecamatan tempat dealer berada beserta yang
+ * berbatasan langsung dengannya (S.dealerBorder, dihitung server dari poligon kecamatan).
+ */
+export function dealerRegionInfo(code) {
+  return {
+    cityCode: dealerCityOf(code),
+    cityOfDistrict: (district) => (S.districtByCode[district] || {}).cityCode || null,
+    // Kecamatan dealer sendiri selalu ikut, walau server belum punya poligonnya.
+    tolerated: new Set([...(S.dealerBorder[code] || []), dealerDistrictOf(code)].filter(Boolean)),
+  };
+}
+
+/**
+ * Baris pada periode aktif saja, tanpa saringan wilayah/dealer/pos. Penyebut angka yang
+ * membandingkan satu wilayah dengan wilayah di atasnya (kontribusi kabupaten ke karesidenan):
+ * filter Kabupaten yang sedang aktif tidak boleh ikut mengecilkan penyebutnya.
+ */
+export function periodRows(page) {
+  const f = pageFilters(page);
+  return S.sales.filter((row) => (f.from === 'ALL' || row.period >= f.from)
+    && (f.to === 'ALL' || row.period <= f.to) && Boolean(S.districtByCode[row.district]));
+}
+
+/**
+ * Klik baris Detail ring (Ring 1/2/3, Others, Pelanggaran Wilayah): pilih dealer itu dan
+ * sorot kecamatan kategori tersebut di peta. Kategori lain dari luar daftar diabaikan.
+ */
+export function focusDealerRing(dealerCode, category) {
+  const value = ['1', '2', '3'].includes(String(category)) ? Number(category) : category;
+  if (![1, 2, 3, 'others', 'violation'].includes(value) || !S.dealerByCode[dealerCode]) return;
+  setScope('dealer', dealerCode, true);
+  S.ringView = { mode: 'dealer-ring', value };
+  if (window.syncGroupControls) window.syncGroupControls();
+  if (window.renderAll) window.renderAll();
+}
+
 /** null = seluruh peta, himpunan kosong = tidak ada wilayah yang lolos. */
 export function mapViewDistricts() {
   const f = pageFilters();
@@ -93,6 +133,12 @@ export function mapViewDistricts() {
   if (mode === 'dealer-ring' && f.dealerCode !== 'ALL' && typeof value === 'number') {
     const rings = S.dealerRings[f.dealerCode] || {};
     codes = new Set(Object.keys(rings).filter((code) => rings[code] === value));
+  }
+  // Others / Pelanggaran Wilayah (klik baris Detail ring): kecamatan berpenjualan yang jatuh
+  // ke kategori itu bagi dealer terpilih — aturan yang sama dengan persentasenya.
+  if (mode === 'dealer-ring' && f.dealerCode !== 'ALL' && (value === 'others' || value === 'violation')) {
+    codes = districtsInRingCategory(Object.keys(S.districtByCode), value,
+      S.dealerRings[f.dealerCode] || {}, dealerRegionInfo(f.dealerCode));
   }
   // Kec. terpilih (dari dropdown maupun klik peta) = satu-satunya kecamatan yang tampil.
   if (f.districtCode && f.districtCode !== 'ALL') {

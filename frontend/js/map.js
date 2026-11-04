@@ -1060,6 +1060,10 @@ export function paintGroupView() {
       const ringMap = S.dealerRings[scopeValue('dealer')] || {};
       kodeCocok = Object.keys(ringMap).filter((k) => ringMap[k] === value);
       warna = RING_WARNA[value] || '#94a3b8';
+    } else if (value === 'others' || value === 'violation') {
+      // Dari klik baris Detail ring di panel: kecamatan yang sama dengan mapViewDistricts().
+      kodeCocok = [...(mapViewDistricts() || [])];
+      warna = value === 'violation' ? '#dc2626' : '#64748b';
     }
   } else if (mode === 'pos-coverage' && scopeValue('pos') !== 'ALL') {
     const outlet = S.outletByCode[scopeValue('pos')] || {};
@@ -1477,6 +1481,9 @@ function moveFilterBar() {
   const bar = $('filter-bar');
   const host = S.fullscreen ? $('fs-filter-host') : $('filter-bar-slot');
   if (bar && host && bar.parentElement !== host) host.appendChild(bar);
+  // Tombol Kembali ada DI SAMPING bilah, bukan di dalamnya: ikut dipindah sesudahnya.
+  const kembali = $('btn-undo');
+  if (kembali && host && kembali.previousElementSibling !== bar) host.appendChild(kembali);
 }
 
 // Sama seperti moveFilterBar() di atas: tombol dipindah, bukan dicerminkan.

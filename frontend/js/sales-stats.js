@@ -240,6 +240,48 @@ export function balancedPercents(values, decimals = 1) {
  * @return {{total, units: {1,2,3,others,violation}, percent1, percent2, percent3,
  *   percentOthers, percentViolation, kotaTakDikenal: boolean}}
  */
+/**
+ * Kategori satu kecamatan bagi satu dealer: 1 | 2 | 3 | 'others' | 'violation'. SATU-SATUNYA
+ * tempat aturan kategori ditulis; dealerRingSplit() (persentase) dan
+ * districtsInRingCategory() (sorotan peta) sama-sama memakainya, jadi angka di panel dan
+ * kecamatan yang disorot tidak bisa berbeda.
+ */
+export function ringCategoryOf(district, ringMap, dealer) {
+  const info = dealer || {};
+  const ring = district && ringMap ? ringMap[district] : undefined;
+  if (ring === 1 || ring === 2 || ring === 3) return ring;
+  const diKotaDealer = info.cityCode && info.cityOfDistrict
+    && info.cityOfDistrict(district) === info.cityCode;
+  const ditoleransi = Boolean(info.tolerated && info.tolerated.has(district));
+  return (!info.cityCode || diKotaDealer || ditoleransi) ? 'others' : 'violation';
+}
+
+/** Kecamatan (dari `districts`) yang jatuh ke `category` bagi satu dealer. */
+export function districtsInRingCategory(districts, category, ringMap, dealer) {
+  return new Set([...districts].filter((code) => ringCategoryOf(code, ringMap, dealer) === category));
+}
+
+/**
+ * Per kategori ring: dealer dan unitnya di kategori itu, urut tertinggi. Dealer tanpa unit
+ * di suatu kategori tidak ikut daftarnya.
+ * @param {Map<string, Array>} rowsByDealer  kode dealer -> baris dealer itu
+ * @param {function(string): {ringMap, info}} dealerInfo
+ * @return {{1: Array, 2: Array, 3: Array, others: Array, violation: Array}}
+ */
+export function dealersByRingCategory(rowsByDealer, dealerInfo) {
+  const out = { 1: [], 2: [], 3: [], others: [], violation: [] };
+  rowsByDealer.forEach((rows, code) => {
+    const { ringMap, info } = dealerInfo(code);
+    const split = dealerRingSplit(rows, ringMap, info);
+    Object.keys(out).forEach((key) => {
+      if (split.units[key] > 0) out[key].push({ code, units: split.units[key] });
+    });
+  });
+  Object.values(out).forEach((list) => list.sort((a, b) => b.units - a.units
+    || String(a.code).localeCompare(String(b.code))));
+  return out;
+}
+
 /** Tren kontribusi kecamatan terhadap kabupatennya, dengan pembagi tiap bulan. */
 export function districtContributionTrend(rows, districtCode, districts) {
   const cityCode = (districts[districtCode] || {}).cityCode;
@@ -255,6 +297,28 @@ export function districtContributionTrend(rows, districtCode, districts) {
   return [...periods].sort(([a], [b]) => a.localeCompare(b)).map(([period, item]) => ({
     period, contribution: contributionPercent(item.units, item.total),
   }));
+}
+
+/**
+ * Kontribusi satu kabupaten terhadap region-nya (karesidenan, 2026-11-04): penjualan dealer
+ * yang terdaftar di kabupaten itu ÷ penjualan dealer yang terdaftar di salah satu kabupaten
+ * region. null bila kabupaten bukan anggota region atau penyebutnya nol — bukan 0%.
+ * @param {Array<{dealer, units}>} rows  baris pada periode aktif, TANPA saringan wilayah
+ * @param {string} cityCode
+ * @param {string[]|null} regionCities  kabupaten anggota region
+ * @param {function(string): (string|null)} cityOfDealer
+ */
+export function cityContributionToRegion(rows, cityCode, regionCities, cityOfDealer) {
+  if (!regionCities || !regionCities.includes(cityCode)) return null;
+  let kota = 0;
+  let region = 0;
+  rows.forEach((row) => {
+    const city = cityOfDealer(row.dealer);
+    if (!city || !regionCities.includes(city)) return;
+    region += row.units;
+    if (city === cityCode) kota += row.units;
+  });
+  return contributionPercent(kota, region);
 }
 
 /** Daftar dealer dan bagiannya terhadap seluruh baris yang diberikan. */
@@ -276,17 +340,7 @@ export function dealerRingSplit(rows, ringMap, dealer) {
   let total = 0;
   (rows || []).forEach((row) => {
     total += row.units;
-    const district = row.district;
-    const ring = district && ringMap ? ringMap[district] : undefined;
-    if (ring === 1 || ring === 2 || ring === 3) {
-      units[ring] += row.units;
-      return;
-    }
-    const diKotaDealer = info.cityCode && info.cityOfDistrict
-      && info.cityOfDistrict(district) === info.cityCode;
-    const ditoleransi = Boolean(info.tolerated && info.tolerated.has(district));
-    if (!info.cityCode || diKotaDealer || ditoleransi) units.others += row.units;
-    else units.violation += row.units;
+    units[ringCategoryOf(row.district, ringMap, info)] += row.units;
   });
   const pct = (n) => contributionPercent(n, total) || 0;
   return {

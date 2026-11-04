@@ -16,7 +16,7 @@ import {
   startCoverageEdit, startGroupEdit,
 } from './rings.js';
 import { fillFilterBar, onPeriodChange, resetFilters, syncFilterBar, undoFilters } from './filter-bar.js';
-import { activeRows, applyScope, scopeValue } from './filters.js';
+import { activeRows, applyScope, pageFilters, scopeValue } from './filters.js';
 import {
   addLayers, fitToScope, redrawMap, refreshMapVisual, setBasemap,
   setCoverageViewPos, setRingViewDealer, setStatusRelatif, syncGroupControls,
@@ -200,16 +200,18 @@ export function renderAll() {
   // Dealer dan kota memakai S.panelView; keduanya cuma dibuka lewat aksi eksplisit
   // (tombol/dropdown), jadi menutupnya tetap "nempel" — tidak ada baris di sini yang
   // membuka ulang panel yang sengaja ditutup pengguna.
-  if (S.panelView && S.panelView.kind === 'dealer') {
-    openDealerDetail(S.panelView.code);
-  } else if (S.panelView && S.panelView.kind === 'city') {
-    openCitySummary(S.panelView.code);
-  } else if (S.selectedDistrict) {
-    // Dulu, kalau kecamatan yang sedang dibuka berada di luar kota aktif, panelnya
-    // diganti ringkasan kota. Sejak 2026-10-11 itu SALAH: filter Kota memilih DEALER
-    // terdaftar di kota itu, dan pelanggan mereka sah berada di kecamatan kota lain.
-    openDistrictDetail(S.selectedDistrict);
+  // Sejak 2026-11-04 panel kiri hanya dua jenis dan DITURUNKAN DARI FILTER, jadi selalu
+  // cocok dengan bilah filter: Kecamatan terpilih -> panel kecamatan, Kabupaten terpilih ->
+  // summary kabupaten, selain itu tidak ada panel (dealer saja tidak membuka panel; ringnya
+  // terbaca di kartu bawah peta).
+  const fp = pageFilters();
+  if (fp.districtCode !== 'ALL' && S.districtByCode[fp.districtCode]) {
+    openDistrictDetail(fp.districtCode);
+  } else if (fp.cityCode !== 'ALL') {
+    openCitySummary(fp.cityCode);
   } else {
+    S.panelView = null;
+    S.selectedDistrict = null;
     hideDetailPanel();
   }
 

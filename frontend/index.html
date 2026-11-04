@@ -229,7 +229,8 @@
      elemen ini CUMA pernah tampil di dalam grid `.penuh` (dijaga
      `hanya-penuh`), jadi kelas posisi lama itu memang sudah sepenuhnya
      mati, bukan sekadar kebetulan tidak kepakai. */
-  #map-shell.penuh #fs-filter-host { grid-area: topbar; justify-self: center; position: relative; z-index: 300; }
+  #map-shell.penuh #fs-filter-host { grid-area: topbar; justify-self: center; position: relative; z-index: 300;
+    display: flex; align-items: center; gap: 8px; } /* flex: tombol Kembali sebaris di samping bilah */
   /* Tombol Keluar dipindah ke sini waktu layar penuh (moveExitButton() di
      map.js, pola sama dengan moveFilterBar()) — grid-area "topbar" yang sama
      dengan bilah filter, tapi rata kiri, jadi "di samping" bilah filter,
@@ -263,6 +264,25 @@
   #map-shell.penuh #kelurahanDetailPanel { grid-area: left; top: 0; left: 0; bottom: 0; width: 100%; }
   #map-shell.penuh .map-panel { max-height: none; overflow-y: auto; }
   .hanya-penuh { display: none; }
+  /* Panel kiri layar penuh hanya summary Kabupaten/Kecamatan (2026-11-04). Analisis Performa
+     Pos / Statistik Ring tidak lagi di kolom kiri; tanpa panel, kolom kiri dibuang dan peta
+     melebar. Spesifisitas sengaja lebih tinggi dari aturan :has(#fs-kartu.hidden) di atas. */
+  #map-shell.penuh #fs-kiri-panel { display: none; }
+  #map-shell.penuh:not(.panel-terbuka) { grid-template-columns: 1fr;
+    grid-template-areas: "topbar" "map" "ringkas" "bottom"; }
+  #map-shell.penuh:not(.panel-terbuka):has(#fs-kartu.hidden) { grid-template-columns: 1fr;
+    grid-template-areas: "topbar" "map" "ringkas"; }
+  /* Garis warna tebal di atas tiap block panel kiri dan bawah peta: tiap jenis punya warna
+     sendiri supaya block mudah dibedakan sekali lihat. */
+  #kelurahanDetailPanel.blok-kab { border-top: 5px solid #0b2f6b; }
+  #kelurahanDetailPanel.blok-kec { border-top: 5px solid #0d9488; }
+  #kelurahanDetailPanel.blok-dealer { border-top: 5px solid #7c3aed; }
+  #kartu-ringkas-utama, #fs-ringkas-utama { border-top: 5px solid #d97706; }
+  #fs-kartu { border-top: 5px solid #e11d48 !important; }
+  [id="kartu-performa"] { border-top: 5px solid #2563eb; }
+  #panel-ring-stats-group { border-top: 5px solid #9333ea; }
+  .dealer-detail > summary::-webkit-details-marker, .ring-baris > summary::-webkit-details-marker { display: none; }
+  .dealer-detail > summary, .ring-baris > summary { list-style: none; }
   /* Kartu Analisis Performa selebar baris. Panel Statistik Ring (3 kolom di kanannya)
      hanya muncul saat dealer/pos dipilih; tanpa aturan ini tiga kolom itu tetap kosong
      dan kartunya cuma 70% lebar. */
@@ -309,8 +329,13 @@
   #filter-bar { background: linear-gradient(135deg, rgba(59,130,246,0.28), rgba(29,78,216,0.22));
     border: 1px solid rgba(59,130,246,0.45); border-radius: 16px;
     box-shadow: 0 16px 40px rgba(11,47,107,0.25); }
-  #filter-bar-slot { padding: 8px 12px 0; }
-  #fs-filter-host { width: max-content; max-width: calc(100vw - 3rem); }
+  #filter-bar-slot { padding: 8px 12px 0; display: flex; align-items: center; gap: 8px; }
+  #filter-bar-slot > #filter-bar { flex: 1 1 auto; min-width: 0; }
+  #fs-filter-host { width: max-content; max-width: calc(100vw - 3rem); display: flex; align-items: center; gap: 8px; }
+  .btn-kembali { background: #fff; color: var(--astra-navy); border: 1px solid #dbe3ef; border-radius: 12px;
+    padding: 7px 16px; font-size: 12px; font-weight: 800; box-shadow: 0 6px 16px rgba(11,47,107,.14); }
+  .btn-kembali:hover:not(:disabled) { background: #f1f5f9; }
+  .btn-kembali:disabled { opacity: .45; cursor: not-allowed; }
   .bar-pisah { width: 1px; height: 18px; background: #dfe5ef; }
 
   .pilih { position: relative; }
@@ -546,9 +571,10 @@
               class="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50"><i class="ph-fill ph-play"></i>LIVE</button>
       <button id="fx-cakupan-btn" onclick="toggleCakupanPanel()" class="px-2 py-1 rounded-lg text-[11px] font-bold border border-slate-200 text-slate-600 hover:bg-slate-50">Cakupan Sumber</button>
     </div>
-    <button id="btn-undo" onclick="undoFilters()" title="Batalkan pilihan terakhir" aria-label="Undo pilihan terakhir" disabled class="shrink-0 text-slate-400 hover:text-slate-700 px-2 disabled:opacity-30"><i class="ph ph-arrow-counter-clockwise text-lg"></i></button>
     <button onclick="resetFilters()" title="Kembali ke seluruh penjualan" class="shrink-0 text-slate-400 hover:text-slate-700 px-2"><i class="ph ph-arrows-counter-clockwise text-lg"></i><span class="text-[10px]">Reset</span></button>
   </div>
+  <!-- Di LUAR bilah filter (permintaan tim 2026-11-04), di sampingnya: tombol teks, latar putih. -->
+  <button id="btn-undo" type="button" onclick="undoFilters()" title="Batalkan pilihan terakhir" disabled class="btn-kembali shrink-0">Kembali</button>
 </div>
 
 <main class="flex-1 overflow-y-auto">
@@ -559,7 +585,7 @@
        filternya. Isinya dirender renderTopSummary() di render.js, satu baris grid,
        sama seperti ringkas-jangkauan di panel Performa (field-nya beda: scope
        dealer di sini TANPA pecahan jangkauan, rinciannya cukup di satu tempat). -->
-  <div class="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
+  <div id="kartu-ringkas-utama" class="bg-white rounded-2xl p-3 shadow-sm border border-slate-100">
     <div id="ringkas-utama"></div>
   </div>
 
@@ -779,7 +805,8 @@
            tampil di konteks yang salah. Sejak 2026-09-14: klik marker dealer di
            mode biasa langsung mengisi ini + kelurahanDetailList sekaligus. -->
       <div id="kelurahanDetailSummary" class="mb-3 pb-3 border-b border-slate-100"></div>
-      <div id="kelurahanDetailTitle" class="text-base font-extrabold text-slate-900 pr-8 leading-tight"></div>
+      <div id="kelurahanDetailJenis" class="text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-400 pr-8"></div>
+      <div id="kelurahanDetailTitle" class="text-xl font-extrabold text-slate-900 pr-8 leading-tight"></div>
       <div id="kelurahanDetailMeta" class="text-[10px] mono text-slate-400 mb-2"></div>
       <div id="kelurahanDetailList"></div>
     </div>
