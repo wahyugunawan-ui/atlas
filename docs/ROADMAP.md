@@ -441,7 +441,7 @@ DECISIONS); verifikasi manual klik poligon sungguhan di peta (yang diuji memangg
 ### Data server laptop diganti dari NewData/ (2026-11-04)
 
 Backup dulu: `pg_dump -Fc` database `astra` dan `astra_customers` ke
-`C:\astra-data\backup\sebelum-newdata-2026-11-04`, lolos `pg_restore --list`.
+`C:\astra-data\backup\sebelum-newdata-2026-11-04\`, lolos `pg_restore --list`.
 Sebelumnya: 52 dealer, 79 pos, ring/coverage 0, penjualan 9.949 baris.
 
 Sekarang: **78 dealer, 109 pos + 78 proxy (187), ring 1.361 baris, kec. tercover 210,
@@ -621,7 +621,7 @@ Kec. Tercover tampil dan hilang menurut pilihan, Opsi Peta tersembunyi bawaan.
   peta Satelit, jadi tidak terlihat.
 - Master Dealer belum punya isian kota/kecamatan di layar (hanya lewat API atau backfill).
 - Membaca Excel Dealer & POS asli (21 MB) dengan `exceljs` kehabisan memori (dicatat di
-  entri sebelumnya, belum diperbaiki); dipakai salinan ringan di `C:\astra-data\sumber`.
+  entri sebelumnya, belum diperbaiki); dipakai salinan ringan di `C:\astra-data\sumber\`.
 
 ### Filter Kota/Karesidenan = kumpulan dealer terdaftar; filter berjenjang (2026-10-11)
 
@@ -659,7 +659,7 @@ Alasan, alternatif, dan batas keputusan ada di DECISIONS 2026-10-11.
 - **Ditemukan, belum diperbaiki:** membaca Excel Dealer & POS ASLI (21 MB, semua sheet)
   dengan `exceljs` kehabisan memori di Node bawaan (`heap out of memory` setelah ~60 dtk)
   — berlaku juga untuk `import-dealer-pos-rings.js`. Jalan keluar yang dipakai di sini:
-  salinan ringan di `C:\astra-data\sumber`. Alternatif: `node --max-old-space-size=6144`.
+  salinan ringan di `C:\astra-data\sumber\`. Alternatif: `node --max-old-space-size=6144`.
 - Master Dealer belum punya kolom/isian kota di layar (hanya lewat API atau impor ulang).
 - Tabel Lokasi Servis dan Pengiriman tetap menyaring menurut lokasi (tidak punya
   hubungan ke dealer). Kontribusi % di panel kecamatan tetap relatif terhadap total
