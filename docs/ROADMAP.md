@@ -349,6 +349,20 @@ cuma perluasan ke Sulawesi ke timur.
 
 ## Selesai
 
+### Push ke GitHub atlas dan deploy ke VPS (2026-11-04)
+
+\`e802f0e\` dan \`b3a5615\` di-push fast-forward ke \`wahyugunawan-ui/atlas\` main
+(\`13436ff..b3a5615\`); \`ssh atlas atlas-deploy\` + \`npm run css\` di VPS, VPS kini di
+\`b3a5615\`. Dari luar: login 200, \`/api\` tanpa login 401. Remote \`origin\`
+(\`Pqri/Project-Astra\`) tidak di-push.
+
+**Belum: data VPS masih lama** (52 dealer, 79 pos, 0 ring, 38.495 unit). Data baru
+dari \`NewData/\` (78 dealer, 109 pos, 1.361 ring) hanya ada di laptop; tanpa ring,
+Detail ring di VPS jatuh ke Others/Pelanggaran. Menyalin data ke VPS (dump/restore
+termasuk \`astra_customers\`) menunggu persetujuan pengguna. Tampilan sesudah login di
+VPS belum dicek (sandi hanya diketahui pemilik). Pesan "berjalan tanpa HTTPS" di log
+VPS adalah pesan bawaan Node; HTTPS ditangani Caddy, \`COOKIE_SECURE=1\`.
+
 ### Panel kiri hanya Kabupaten/Kecamatan, daftar dealer berwarna, Detail ring bisa diklik, tombol Kembali (2026-11-04)
 
 - **Panel kiri diturunkan dari filter** (`renderAll()`, app.js): Kecamatan terpilih -> panel
