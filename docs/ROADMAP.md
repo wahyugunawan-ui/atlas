@@ -349,6 +349,24 @@ cuma perluasan ke Sulawesi ke timur.
 
 ## Selesai
 
+### Data laptop (NewData) disalin ke VPS (2026-11-05)
+
+Atas persetujuan pengguna. Sebelum ditimpa, kedua database VPS di-dump ke
+`/root/backup-sebelum-newdata-2026-11-05/` (root saja; sengaja TIDAK di
+`/var/lib/atlas/backup/`, karena folder milik root di sana membuat `find` di
+`atlas-backup` gagal — sempat terjadi sekali, lalu foldernya dipindah). Dump laptop
+(`C:\astra-data\backup\ke-vps-2026-11-05\`) dikirim lewat scp, sha256 cocok, lalu
+`dropdb`/`createdb -O` + `CREATE EXTENSION postgis` sebagai postgres dan `pg_restore
+--no-owner`. Galat yang diabaikan: komentar extension dan `spatial_ref_sys`, keduanya
+bawaan PostGIS. Hasilnya sama persis dengan laptop: 78 dealer, 187 pos, 1.361 ring,
+19.580 unit, 3.650 coverage, 210 pos-kecamatan, 8.999 poligon, 19.598 konsumen. Dump
+yang diunggah sudah dihapus dari VPS. `atlas-backup` jalan lagi: OK, 22 MB.
+
+Catatan: Postgres laptop mati tak bersih sebelum sesi ini (crash recovery saat
+dinyalakan, tanpa kehilangan data). `kelurahan.geojson` di VPS berbeda byte dengan
+laptop (berkas lama 10 Okt, poligon DB sama); dibiarkan. Tampilan sesudah login di
+VPS masih belum dicek.
+
 ### Push ke GitHub atlas dan deploy ke VPS (2026-11-04)
 
 `e802f0e` dan `b3a5615` di-push fast-forward ke `wahyugunawan-ui/atlas` main
